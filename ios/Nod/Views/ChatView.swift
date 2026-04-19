@@ -52,6 +52,24 @@ struct ChatView: View {
             }
             .navigationTitle("Nod")
             .navigationBarTitleDisplayMode(.inline)
+            // Swipe gestures to manage the keyboard without reaching for the
+            // input field: swipe up anywhere to open, swipe down to close.
+            // Uses simultaneousGesture so it doesn't steal events from the
+            // scroll view's own drag.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30)
+                    .onEnded { value in
+                        let dy = value.translation.height
+                        let dx = abs(value.translation.width)
+                        // Only react to primarily-vertical swipes
+                        guard abs(dy) > dx else { return }
+                        if dy > 40 {
+                            inputFocused = false    // swipe down → dismiss keyboard
+                        } else if dy < -40 {
+                            inputFocused = true     // swipe up → open keyboard
+                        }
+                    }
+            )
         }
     }
 
@@ -67,6 +85,9 @@ struct ChatView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
             }
+            // Interactive keyboard dismiss: dragging down on messages pulls
+            // the keyboard down with the finger, iOS-native feel.
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.messages.count) { _, _ in
                 if let last = store.messages.last {
                     withAnimation(.easeOut(duration: 0.2)) {
