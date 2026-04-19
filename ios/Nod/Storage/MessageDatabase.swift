@@ -188,6 +188,19 @@ final class MessageDatabase {
         }
     }
 
+    // MARK: - Destructive
+
+    /// Clears every message and the running summary. Used by
+    /// ConversationStore when the user taps "Start fresh" in the sidebar.
+    /// Wrapped in a single transaction so there's no in-between state
+    /// where messages are gone but summary remains (or vice versa).
+    func clearAll() throws {
+        try queue.write { db in
+            try db.execute(sql: "DELETE FROM messages")
+            try db.execute(sql: "DELETE FROM summary")
+        }
+    }
+
     // MARK: - Helpers
 
     private func messageFromRow(_ row: Row) -> Message? {

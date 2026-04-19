@@ -176,6 +176,36 @@ final class ConversationStore: ObservableObject {
             print("ConversationStore: compression failed: \(error)")
         }
     }
+
+    // MARK: - Start fresh
+
+    /// Clears the entire conversation (messages and running summary) from
+    /// both memory and disk. The user opts into this explicitly via the
+    /// sidebar's "Start fresh" action.
+    ///
+    /// Waits for any in-flight compression to fully cancel before wiping
+    /// the database — otherwise a late-finishing compression task could
+    /// write a new summary into the just-cleared table.
+    func clear() async {
+        // Stop any pending compression and wait for it to actually exit.
+        compressionTask?.cancel()
+        if let task = compressionTask {
+            _ = await task.value
+        }
+        compressionTask = nil
+
+        // Wipe disk in one transaction.
+        do {
+            try database.clearAll()
+        } catch {
+            print("ConversationStore: clear failed: \(error)")
+            return
+        }
+
+        // Reset in-memory state so the UI flips to the empty state.
+        messages.removeAll()
+        summary = ""
+    }
 }
 
 /// What a summarizer has to be able to do. FoundationModelsClient (and later

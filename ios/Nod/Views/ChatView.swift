@@ -24,6 +24,7 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
+    @State private var showingSidebar: Bool = false
     @FocusState private var inputFocused: Bool
 
     // FoundationModelsClient throws from init only if a prompt file is
@@ -81,12 +82,19 @@ struct ChatView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        openSidebar()
+                        showingSidebar = true
                     } label: {
                         MiniNodFace()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open menu")
+                }
+            }
+            .sheet(isPresented: $showingSidebar) {
+                SidebarView(store: store) {
+                    // User tapped "Start fresh" and confirmed. Reset any
+                    // local in-flight state that isn't owned by the store.
+                    isInferring = false
                 }
             }
             // Swipe gestures to manage the keyboard without reaching for the
@@ -181,12 +189,6 @@ struct ChatView: View {
         nodTrigger &+= 1
         let haptic = UIImpactFeedbackGenerator(style: .light)
         haptic.impactOccurred()
-    }
-
-    /// Reserved for a future sidebar (settings, history, etc.). No-op today —
-    /// tapping the mini face in the nav bar doesn't do anything yet.
-    private func openSidebar() {
-        // TODO: present sidebar sheet or navigation destination.
     }
 
     private func respond(to text: String) {
