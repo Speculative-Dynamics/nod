@@ -2,8 +2,8 @@
 // Qwen 3.5 4B via MLX Swift — the listening-loop model from day 3-4 onward.
 //
 // This is a STUB. Day 1-2 uses FoundationModelsClient; day 3 is when you
-// integrate mlx-swift and mlx-swift-lm via Swift Package Manager, set up
-// Background Assets for the ~2.5GB model download, and fill in this class.
+// integrate mlx-swift-lm via Swift Package Manager, set up Background
+// Assets for the ~2.5GB model download, and fill in this class.
 //
 // Kept as a stub so the InferenceEngine protocol is exercised from day 1.
 
@@ -29,10 +29,10 @@ actor QwenClient: InferenceEngine {
 
     func respond(
         to userMessage: String,
-        context: [Message]
+        context: String
     ) async throws -> AsyncStream<String> {
-        // Day 3: replace with real MLX inference. Until then, throw to make
-        // sure we never silently fall through to this stub in production.
+        // Day 3: replace with real MLX inference. Until then, throw so the
+        // stub can never silently fall through to production.
         throw InferenceError.modelNotReady
     }
 }

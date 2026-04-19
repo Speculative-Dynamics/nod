@@ -19,17 +19,39 @@ import SwiftUI
 
 struct ChatView: View {
 
-    @StateObject private var store = ConversationStore()
+    @StateObject private var store: ConversationStore
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     @FocusState private var inputFocused: Bool
 
-    // FoundationModelsClient throws from init only if the listening-mode
-    // prompt file is missing from the bundle, which means the build pipeline
-    // is broken (the prompts/ resource reference isn't copying). We surface
-    // that clearly in the UI rather than silently degrading.
-    private let engine: InferenceEngine? = try? FoundationModelsClient()
+    // FoundationModelsClient throws from init only if a prompt file is
+    // missing from the bundle (build pipeline broken). Surfaced clearly in
+    // the UI rather than silently degrading.
+    //
+    // The same engine instance handles BOTH listening responses (respond)
+    // AND compression summarization (summarize). ConversationStore captures
+    // it in its summarizer closure.
+    private let engine: FoundationModelsClient?
+
+    init() {
+        let engine = try? FoundationModelsClient()
+        self.engine = engine
+
+        // Opening the DB should never fail on a healthy device. If it does,
+        // crash with a clear message — this is not a user-recoverable state.
+        let db: MessageDatabase
+        do {
+            db = try MessageDatabase()
+        } catch {
+            fatalError("Nod: could not open conversation database: \(error)")
+        }
+
+        self._store = StateObject(wrappedValue: ConversationStore(
+            database: db,
+            summarizer: { engine }
+        ))
+    }
 
     var body: some View {
         NavigationStack {
@@ -185,16 +207,18 @@ struct ChatView: View {
 
     private func respond(to text: String) {
         guard let engine else {
-            // Build bug: the prompts/ directory isn't being copied into the
-            // app bundle. Developer-facing message — this should never reach
-            // a real user in a release build.
-            store.append(Message(role: .assistant, text: "Build error: prompts/listening_mode.md not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))
+            // Build bug: a prompt file isn't being copied into the bundle.
+            // Developer-facing message — this should never reach a real user
+            // in a release build.
+            store.append(Message(role: .assistant, text: "Build error: prompts/ not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))
             return
         }
         isInferring = true
         // Insert an empty assistant message we'll fill as tokens stream in.
+        // The empty placeholder is filtered out of the context we build for
+        // the model (see ConversationStore.contextForInference).
         store.append(Message(role: .assistant, text: ""))
-        let context = store.contextWindow
+        let context = store.contextForInference()
 
         Task {
             do {

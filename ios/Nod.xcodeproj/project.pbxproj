@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FD58A9CC136146214D82403C /* GRDB */; };
 		24D408F3CA747F829DE44292 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */; };
 		25BAFB93063B4B6B623D96DD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7353A5B91242F165EFCD7D68 /* Assets.xcassets */; };
 		26FB0074AE17C845461190DB /* NodApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420B40291D1B3DE220552641 /* NodApp.swift */; };
@@ -42,6 +43,17 @@
 		C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8AE686D8DEFB8D7A713C2CDA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		049ABFB8B4B979484ADA0C3D /* Views */ = {
@@ -140,6 +152,7 @@
 			buildPhases = (
 				FDFF5A63D590AF4AE52380C1 /* Sources */,
 				6C8A778669B440CB7E785C72 /* Resources */,
+				8AE686D8DEFB8D7A713C2CDA /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -147,6 +160,7 @@
 			);
 			name = Nod;
 			packageProductDependencies = (
+				FD58A9CC136146214D82403C /* GRDB */,
 			);
 			productName = Nod;
 			productReference = 4940AE0F466E23E8BD4994BD /* Nod.app */;
@@ -176,6 +190,9 @@
 			);
 			mainGroup = 84359F757DDBC745C733240B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DEFF421EAA78615B580C1942 /* Products */;
 			projectDirPath = "";
@@ -423,6 +440,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FD58A9CC136146214D82403C /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8A39E54C66475CC01D3A6543 /* Project object */;
 }

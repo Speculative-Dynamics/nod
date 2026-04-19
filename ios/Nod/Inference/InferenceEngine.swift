@@ -1,22 +1,30 @@
 // InferenceEngine.swift
-// Protocol that both FoundationModelsClient and QwenClient conform to.
+// Contract every inference backend (AFM, Qwen via MLX, etc.) conforms to.
 //
-// Lets us swap which engine runs the listening loop at runtime (e.g., via
-// a feature flag for A/B comparison on real transcripts). Both return a
-// streaming AsyncStream<String> so the UI can show tokens as they arrive
-// rather than waiting for the full response.
+// Takes the user's new message plus a pre-built conversation context string
+// (built by ConversationStore — already contains the running summary plus
+// recent un-summarized turns). Returns a streaming response.
+//
+// The context is built once by ConversationStore and handed over as a ready
+// string, so the engine doesn't need to understand message roles, history
+// compression, or any of that. It just prepends the context to its system
+// prompt and responds.
 
 import Foundation
 
 protocol InferenceEngine: Sendable {
-    /// Generate a listening-mode response to the user's latest message,
-    /// given the prior conversation as context.
+    /// Generate a listening-mode response to the user's latest message.
     ///
-    /// Returns an AsyncStream of tokens. Consumer is expected to call this
-    /// from a Task (not the main thread).
+    /// - Parameters:
+    ///   - userMessage: the text the user just sent
+    ///   - context: pre-built context string from ConversationStore.
+    ///              Includes the running summary (if any) and recent turns.
+    ///              May be empty for the very first message.
+    /// - Returns: an AsyncStream of response tokens. Consumer runs it from
+    ///            a Task (not the main thread).
     func respond(
         to userMessage: String,
-        context: [Message]
+        context: String
     ) async throws -> AsyncStream<String>
 }
 

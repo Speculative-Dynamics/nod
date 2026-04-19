@@ -1,40 +1,28 @@
 // FoundationModelsClient.swift
-// Apple's on-device LLM via the FoundationModels framework (iOS 18.2+).
+// Apple's on-device LLM via the FoundationModels framework (iOS 26+).
+// Single source of inference for Phase 1: both the listening loop AND
+// the summarization pass run through here.
 //
-// Day 1: use this as the primary inference engine. It's free, instant (no
-// model download), ANE-accelerated, and works immediately on any Apple
-// Intelligence-capable device (iPhone 15 Pro or later with AI enabled).
-//
-// Day 3-4: Qwen 3.5 4B joins as an alternative engine. Keep both conforming
-// to InferenceEngine so we can compare on real transcripts.
-//
-// NOTE: this file assumes iOS 18.2's FoundationModels API shape. API names
-// may shift slightly between beta and GA. Verify against Xcode's
-// autocomplete on first compile:
-//   import FoundationModels
-//   let session = LanguageModelSession(instructions: "...")
-//   try await session.respond(to: "...")
+// Prompts live in prompts/ at the repo root. Never inline. If either
+// prompt file is missing from the bundle, init throws — a missing prompt
+// means the build pipeline is broken and that must be visible.
 
 import Foundation
-
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
-actor FoundationModelsClient: InferenceEngine {
+actor FoundationModelsClient: InferenceEngine, ConversationSummarizer {
 
-    // The listening-mode system prompt lives in prompts/listening_mode.md at
-    // the repo root (single source of truth for all LLM prompts across
-    // platforms). XcodeGen copies the prompts/ folder into the app bundle
-    // as a folder reference, so resources retain their directory structure.
-    //
-    // If the file is missing, init throws. No inline fallback — a missing
-    // prompt means the build pipeline is broken and that must be visible.
-    private let systemPrompt: String
+    private let listeningPrompt: String
+    private let summaryPrompt: String
 
     init() throws {
+        self.listeningPrompt = try Self.loadPrompt(named: "listening_mode")
+        self.summaryPrompt   = try Self.loadPrompt(named: "summary")
+    }
+
+    private static func loadPrompt(named name: String) throws -> String {
         guard let url = Bundle.main.url(
-                forResource: "listening_mode",
+                forResource: name,
                 withExtension: "md",
                 subdirectory: "prompts"
               ),
@@ -42,38 +30,38 @@ actor FoundationModelsClient: InferenceEngine {
               !text.isEmpty else {
             throw InferenceError.promptNotFound
         }
-        self.systemPrompt = text
+        return text
     }
+
+    // MARK: - InferenceEngine
 
     func respond(
         to userMessage: String,
-        context: [Message]
+        context: String
     ) async throws -> AsyncStream<String> {
 
-        #if canImport(FoundationModels)
-        // Check AFM availability before calling. Returns early with a clear
-        // error if Apple Intelligence isn't enabled or the system model isn't
-        // downloaded yet.
         guard SystemLanguageModel.default.availability == .available else {
             throw InferenceError.modelNotReady
         }
 
-        let session = LanguageModelSession(instructions: systemPrompt)
-
-        // Replay prior context as messages so AFM has conversation history.
-        for msg in context.dropLast() {
-            if msg.role == .user {
-                _ = try await session.respond(to: msg.text)
-            }
+        // Build instructions: listening-mode prompt + the compressed context
+        // from ConversationStore. This is one inference call per turn — no
+        // replay loop, no repeated tokenization of history. The session is
+        // throwaway; we build a fresh one each call because the context is
+        // already embedded in the instructions.
+        let instructions: String
+        if context.isEmpty {
+            instructions = listeningPrompt
+        } else {
+            instructions = listeningPrompt + "\n\n---\n\n" + context
         }
 
-        // Stream the current response.
+        let session = LanguageModelSession(instructions: instructions)
+
         let (stream, continuation) = AsyncStream<String>.makeStream()
         Task.detached(priority: .userInitiated) {
             do {
                 let response = try await session.respond(to: userMessage)
-                // If AFM returns the full string at once, yield it as one chunk.
-                // Day 3: upgrade to token-streaming when the API supports it.
                 continuation.yield(response.content)
                 continuation.finish()
             } catch {
@@ -81,14 +69,51 @@ actor FoundationModelsClient: InferenceEngine {
             }
         }
         return stream
-        #else
-        // Build-time fallback for when FoundationModels isn't available
-        // (older SDK, Simulator without AI support, etc.). Returns a clear
-        // placeholder response so the app doesn't silently fail.
-        let (stream, continuation) = AsyncStream<String>.makeStream()
-        continuation.yield("(FoundationModels isn't available on this build.)")
-        continuation.finish()
-        return stream
-        #endif
+    }
+
+    // MARK: - ConversationSummarizer
+
+    func summarize(messages: [Message], existingSummary: String) async throws -> String {
+        guard SystemLanguageModel.default.availability == .available else {
+            throw InferenceError.modelNotReady
+        }
+
+        let transcript = messages.map { m -> String in
+            switch m.role {
+            case .user:      return "User: \(m.text)"
+            case .assistant: return "Nod: \(m.text)"
+            case .nod:       return "(Nod nodded silently.)"
+            }
+        }.joined(separator: "\n")
+
+        let instructionInput: String
+        if existingSummary.isEmpty {
+            instructionInput = """
+            \(summaryPrompt)
+
+            ---
+
+            EXISTING SUMMARY: (none yet — this is the first compression pass)
+
+            NEW EXCHANGES TO INCORPORATE:
+            \(transcript)
+            """
+        } else {
+            instructionInput = """
+            \(summaryPrompt)
+
+            ---
+
+            EXISTING SUMMARY:
+            \(existingSummary)
+
+            NEW EXCHANGES TO INCORPORATE:
+            \(transcript)
+            """
+        }
+
+        let session = LanguageModelSession(instructions: instructionInput)
+        let response = try await session.respond(to: "Produce the updated summary now.")
+        return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
