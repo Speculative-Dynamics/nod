@@ -25,15 +25,10 @@ struct ChatView: View {
     @State private var isInferring: Bool = false
     @FocusState private var inputFocused: Bool
 
-    private let engine: InferenceEngine? = {
-        do {
-            return try FoundationModelsClient()
-        } catch {
-            // If the prompt file is missing at launch, engine is nil and we
-            // show a clear error rather than crashing.
-            return nil
-        }
-    }()
+    // FoundationModelsClient never fails to init anymore — it has an embedded
+    // fallback prompt if the resource file isn't found. Kept optional for the
+    // future when we swap to Qwen and init can legitimately fail.
+    private let engine: InferenceEngine = FoundationModelsClient()
 
     var body: some View {
         NavigationStack {
@@ -147,11 +142,6 @@ struct ChatView: View {
     }
 
     private func respond(to text: String) {
-        guard let engine else {
-            store.append(Message(role: .assistant, text: "I'm not ready yet — the listening prompt didn't load. Try restarting Nod."))
-            return
-        }
-
         isInferring = true
         // Insert an empty assistant message we'll fill as tokens stream in.
         store.append(Message(role: .assistant, text: ""))
