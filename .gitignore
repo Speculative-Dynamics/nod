@@ -1,0 +1,55 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Xcode archives and exports
+*.xcarchive
+*.ipa
+
+# iOS CocoaPods (if ever used)
+Pods/
+Podfile.lock
+
+# Fastlane (if adopted)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Secrets
+*.xcconfig.local
+.env
+.env.*
+!.env.example
+
+# Node (for future website)
+node_modules/
+.next/
+out/
+dist/
+.cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model assets (too big for git; downloaded via Background Assets at runtime)
+*.gguf
+*.mlx
+*.safetensors
+ios/Nod/Resources/Models/
