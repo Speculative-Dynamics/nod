@@ -244,6 +244,12 @@ actor QwenClient: ListeningEngine {
                 context: context
             ) { (_: [Int]) -> GenerateDisposition in .more }
 
+            // Drain the GPU queue before returning — releases KV cache
+            // fragments and any lazy MLXArrays the iterator allocated.
+            // Matches what MLX's own ChatSession.Generator does. Without
+            // this, long-running sessions accumulate pressure until the
+            // allocator reaps them lazily.
+            Stream.gpu.synchronize()
             return result.output
         }
     }

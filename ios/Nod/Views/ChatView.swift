@@ -265,7 +265,13 @@ struct ChatView: View {
             do {
                 reply = try await engine.respond(to: text, context: context)
             } catch InferenceError.modelNotReady {
-                reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
+                // Engine-specific: AFM is settings-gated; Qwen is download-gated.
+                switch EnginePreferenceStore.current {
+                case .apple:
+                    reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
+                case .qwen:
+                    reply = "Qwen isn't ready yet. The model still needs to finish downloading."
+                }
                 wasError = true
             } catch InferenceError.guardrailViolation {
                 reply = "I'd rather not respond to that."
