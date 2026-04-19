@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <meta
+            name="theme-color"
+            content="#0E0C0A"
+            media="(prefers-color-scheme: dark)"
+        />
+        <meta
+            name="theme-color"
+            content="#F2E9D7"
+            media="(prefers-color-scheme: light)"
+        />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="format-detection" content="telephone=no" />
+
+        <!-- Primary SEO -->
+        <title>Nod — For when you just need to be heard.</title>
+        <meta
+            name="description"
+            content="A small on-device AI that listens without fixing. Runs entirely on your iPhone. No servers, no accounts, no tracking. Open source. Listed on the App Store as Just Nod."
+        />
+        <meta
+            name="keywords"
+            content="nod, just nod, mental health app, on-device AI, private journal, iOS, Apple Intelligence, Qwen, MLX, local AI, open source, listening app, no tracking"
+        />
+        <meta name="author" content="Speculative Dynamics Private Limited" />
+        <meta name="application-name" content="Nod" />
+        <link rel="canonical" href="https://usenod.app/" />
+
+        <!-- Open Graph (Facebook, LinkedIn, iMessage, etc.) -->
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Nod" />
+        <meta property="og:locale" content="en_US" />
+        <meta property="og:url" content="https://usenod.app/" />
+        <meta
+            property="og:title"
+            content="Nod — For when you just need to be heard."
+        />
+        <meta
+            property="og:description"
+            content="A small on-device AI that listens without fixing. Runs entirely on your iPhone. No servers, no accounts, no tracking."
+        />
+        <meta
+            property="og:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta
+            property="og:image:alt"
+            content="A young man sits under a tree at sunset, a small glowing orange cube spirit floating beside him — painted in watercolor."
+        />
+
+        <!-- Twitter / X -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+            name="twitter:title"
+            content="Nod — For when you just need to be heard."
+        />
+        <meta
+            name="twitter:description"
+            content="A small on-device AI that listens without fixing. Runs entirely on your iPhone. Open source. No servers, no accounts."
+        />
+        <meta
+            name="twitter:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+        <meta
+            name="twitter:image:alt"
+            content="A young man sits under a tree at sunset with a small orange cube spirit floating beside him."
+        />
+
+        <!-- Favicons -->
+        <link rel="icon" href="/assets/favicon.ico" sizes="any" />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/assets/icon-16.png"
+        />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/assets/icon-32.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/assets/icon-180.png"
+        />
+        <link rel="manifest" href="/manifest.webmanifest" />
+
+        <!-- Performance hints -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            rel="preload"
+            as="video"
+            href="/assets/hero/desktop.mp4"
+            type="video/mp4"
+            media="(min-aspect-ratio: 1/1)"
+        />
+        <link
+            rel="preload"
+            as="video"
+            href="/assets/hero/mobile.mp4"
+            type="video/mp4"
+            media="(max-aspect-ratio: 1/1)"
+        />
+
+        <!-- Fonts -->
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;500;600&display=swap"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="/styles.css" />
+
+        <!-- Structured data: Organization + iOS app + Website -->
+        <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@graph": [
+                    {
+                        "@type": "Organization",
+                        "@id": "https://usenod.app/#organization",
+                        "name": "Speculative Dynamics Private Limited",
+                        "url": "https://usenod.app/",
+                        "logo": "https://usenod.app/assets/icon-512.png",
+                        "sameAs": [
+                            "https://github.com/Speculative-Dynamics/nod"
+                        ]
+                    },
+                    {
+                        "@type": "WebSite",
+                        "@id": "https://usenod.app/#website",
+                        "url": "https://usenod.app/",
+                        "name": "Nod",
+                        "description": "A small on-device AI that listens without fixing.",
+                        "publisher": {
+                            "@id": "https://usenod.app/#organization"
+                        },
+                        "inLanguage": "en-US"
+                    },
+                    {
+                        "@type": "MobileApplication",
+                        "@id": "https://usenod.app/#app",
+                        "name": "Just Nod",
+                        "alternateName": "Nod",
+                        "description": "A small on-device AI that listens without fixing. Runs entirely on your iPhone via Apple Intelligence and Qwen 3.5 4B through MLX Swift. No servers, no accounts, no tracking.",
+                        "applicationCategory": "HealthApplication",
+                        "operatingSystem": "iOS 26.0",
+                        "url": "https://usenod.app/",
+                        "downloadUrl": "https://apps.apple.com/us/app/",
+                        "image": "https://usenod.app/assets/og-image.jpg",
+                        "author": { "@id": "https://usenod.app/#organization" },
+                        "offers": {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "USD"
+                        }
+                    }
+                ]
+            }
+        </script>
+    </head>
+
+    <body>
+        <!-- Noise overlay for painterly warmth -->
+        <div class="noise" aria-hidden="true"></div>
+
+        <!-- ============ HERO ============ -->
+        <section class="hero" id="hero">
+            <div class="hero__video-wrap">
+                <video
+                    class="hero__video"
+                    autoplay
+                    muted
+                    loop
+                    playsinline
+                    preload="metadata"
+                    poster="/assets/hero/desktop.png"
+                >
+                    <source
+                        src="/assets/hero/mobile.mp4"
+                        type="video/mp4"
+                        media="(max-aspect-ratio: 1/1)"
+                    />
+                    <source src="/assets/hero/desktop.mp4" type="video/mp4" />
+                </video>
+                <!-- Gradient wash for text legibility -->
+                <div class="hero__wash" aria-hidden="true"></div>
+            </div>
+
+            <div class="hero__content">
+                <h1 class="hero__title">
+                    For when you just<br />
+                    need to be <em>heard.</em>
+                </h1>
+                <p class="hero__sub">
+                    A small on-device listener. No servers. No accounts. No one
+                    watching.
+                </p>
+                <div class="hero__cta">
+                    <a href="#download" class="btn btn--primary">Get Nod</a>
+                    <a href="#listening" class="btn btn--ghost">How it works</a>
+                </div>
+            </div>
+
+            <div class="hero__scroll" aria-hidden="true">
+                <span>scroll</span>
+                <div class="hero__scroll-line"></div>
+            </div>
+        </section>
+
+        <!-- Soft transition from dark hero into warm paper -->
+        <div class="paper-transition" aria-hidden="true"></div>
+
+        <!-- Everything below hero sits on a warm paper sheet -->
+        <div class="paper-sheet">
+            <!-- ============ LISTENING PHILOSOPHY ============ -->
+            <section
+                class="section section--listening"
+                id="listening"
+                data-reveal
+            >
+                <div class="container">
+                    <p class="eyebrow">I'm listening.</p>
+                    <h2 class="display">
+                        Nod doesn't<br />
+                        fix. It <em>listens.</em>
+                    </h2>
+                    <div class="split">
+                        <div class="split__body">
+                            <p>
+                                Most apps try to do something with you. Nod just
+                                sits with you. Type what's on your mind — or tap
+                                the mic and speak. A small model reads what you
+                                wrote, and writes back the way a careful friend
+                                would.
+                            </p>
+                            <p>
+                                No advice. No cheerleading. No productivity
+                                journey. Real presence doesn't announce itself.
+                            </p>
+                        </div>
+                        <div class="split__aside">
+                            <blockquote class="pull">
+                                <p>
+                                    "Your job is not to solve problems.<br />
+                                    Speak like a real person who cares."
+                                </p>
+                                <cite>— from Nod's listening prompt</cite>
+                            </blockquote>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ ON-DEVICE ============ -->
+            <section class="section section--ondevice" id="privacy" data-reveal>
+                <div class="container">
+                    <p class="eyebrow">Privacy is architecture.</p>
+                    <h2 class="display">
+                        Runs entirely<br />
+                        <em>on your phone.</em>
+                    </h2>
+                    <div class="body">
+                        <p>
+                            Nod has no backend. There's no server to leak, no
+                            account to delete, no API key to revoke. Every word
+                            you type stays on the device, in a local database,
+                            read only by a model running on the same chip.
+                        </p>
+                        <p>
+                            We can't see what you write. Nobody can. Not because
+                            we promise — because there is no pipe to send it
+                            through.
+                        </p>
+                    </div>
+
+                    <ul class="facts">
+                        <li>
+                            <span class="facts__key">Listening model</span>
+                            <span class="facts__val">Qwen 3.5 4B</span>
+                            <span class="facts__note"
+                                >Running on-device via MLX Swift. Downloaded
+                                once, stays on your phone.</span
+                            >
+                        </li>
+                        <li>
+                            <span class="facts__key"
+                                >Memory &amp; summaries</span
+                            >
+                            <span class="facts__val"
+                                >Apple FoundationModels</span
+                            >
+                            <span class="facts__note"
+                                >Apple Intelligence's on-device LLM. Never sees
+                                a network.</span
+                            >
+                        </li>
+                        <li>
+                            <span class="facts__key">Storage</span>
+                            <span class="facts__val">Local SQLite</span>
+                            <span class="facts__note"
+                                >GRDB.swift, encrypted at rest by iOS. Tap
+                                "Start fresh" and it's gone.</span
+                            >
+                        </li>
+                        <li>
+                            <span class="facts__key">Analytics</span>
+                            <span class="facts__val">None</span>
+                            <span class="facts__note"
+                                >No telemetry, no tracking pixels, no
+                                third-party SDKs.</span
+                            >
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- ============ OPEN SOURCE ============ -->
+            <section class="section section--source" id="source" data-reveal>
+                <div class="container">
+                    <p class="eyebrow">Open source.</p>
+                    <h2 class="display">
+                        Read the code.<br />
+                        <em>Build it yourself</em> if you want.
+                    </h2>
+                    <div class="body">
+                        <p>
+                            Nod is MIT-licensed. Every line of Swift, every
+                            system prompt, every database migration — all of it
+                            is on GitHub. The App Store build is signed from the
+                            maintainer's account; the code it's built from is
+                            the code in the repo.
+                        </p>
+                        <p>If "trust us" bothers you, verify us.</p>
+                    </div>
+                    <div class="cta-row">
+                        <a
+                            class="btn btn--ghost"
+                            href="https://github.com/Speculative-Dynamics/nod"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            <span class="btn__arrow">→</span> View on GitHub
+                        </a>
+                        <a
+                            class="btn btn--ghost"
+                            href="https://github.com/Speculative-Dynamics/nod/blob/main/LICENSE"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            <span class="btn__arrow">→</span> Read the license
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ EMPTY STATE ============ -->
+            <section class="section section--nod" id="empty-state" data-reveal>
+                <div class="container container--narrow">
+                    <p class="eyebrow">The first moment.</p>
+                    <h2 class="display">
+                        When you open Nod,<br />
+                        it blinks. And <em>waits.</em>
+                    </h2>
+                    <div class="body">
+                        <p>
+                            No onboarding flow. No "how can I help you today?"
+                            No suggested prompts, no tutorial, no sign-in. Just
+                            a quiet orange face with slow eyes that blink every
+                            few seconds, and two words underneath —
+                            <em>I'm listening.</em>
+                        </p>
+                        <p>
+                            Start typing when you're ready. Or don't. Nod is in
+                            no rush.
+                        </p>
+                    </div>
+                    <div class="nod-demo" aria-hidden="true">
+                        <div class="nod-face">
+                            <div class="nod-face__eye"></div>
+                            <div class="nod-face__eye"></div>
+                        </div>
+                        <p class="nod-demo__caption">I'm listening.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ DOWNLOAD ============ -->
+            <section
+                class="section section--download"
+                id="download"
+                data-reveal
+            >
+                <div class="container">
+                    <p class="eyebrow">It's free.</p>
+                    <h2 class="display">
+                        Listed as <em>Just Nod</em><br />
+                        on the App Store.
+                    </h2>
+                    <div class="body">
+                        <p>
+                            Nod was taken. Just Nod was available. The in-app
+                            button is still called "just nod."
+                        </p>
+                    </div>
+
+                    <div class="download-box">
+                        <a
+                            href="https://apps.apple.com/us/app/"
+                            target="_blank"
+                            rel="noopener"
+                            class="appstore-btn"
+                            data-appstore
+                        >
+                            <svg
+                                viewBox="0 0 40 40"
+                                width="34"
+                                height="34"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    fill="currentColor"
+                                    d="M27.2 21.1c0-3.5 2.8-5.1 3-5.2-1.6-2.4-4.2-2.7-5.1-2.8-2.2-.2-4.2 1.3-5.3 1.3-1.1 0-2.8-1.3-4.6-1.2-2.4 0-4.6 1.4-5.8 3.5-2.5 4.3-.6 10.6 1.8 14.1 1.2 1.7 2.5 3.6 4.3 3.6 1.7-.1 2.4-1.1 4.5-1.1 2.1 0 2.7 1.1 4.6 1.1 1.9 0 3.1-1.7 4.3-3.5 1.4-2 1.9-3.9 1.9-4 0 0-3.6-1.4-3.6-5.6zM23.7 11c1-1.2 1.6-2.8 1.4-4.5-1.4.1-3.1 1-4.1 2.1-.9 1-1.7 2.7-1.5 4.3 1.5.2 3.1-.7 4.2-1.9z"
+                                />
+                            </svg>
+                            <span class="appstore-btn__text">
+                                <small>Download on the</small>
+                                <strong>App Store</strong>
+                            </span>
+                        </a>
+                        <p class="download-box__meta">
+                            Requires iPhone with Apple Intelligence — iOS 26.0
+                            or later.<br />
+                            Roughly 2.5 GB for the on-device model, downloaded
+                            once on first launch.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ FOOTER ============ -->
+            <footer class="footer">
+                <div class="container">
+                    <div class="footer__row">
+                        <div class="footer__brand">
+                            <img
+                                src="/assets/icon.png"
+                                alt="Nod"
+                                class="footer__icon"
+                            />
+                            <p class="footer__tag">
+                                For when you just need to be heard.
+                            </p>
+                        </div>
+                        <nav class="footer__links" aria-label="Footer">
+                            <a
+                                href="https://github.com/Speculative-Dynamics/nod"
+                                target="_blank"
+                                rel="noopener"
+                                >GitHub</a
+                            >
+                            <a
+                                href="https://github.com/Speculative-Dynamics/nod/blob/main/LICENSE"
+                                target="_blank"
+                                rel="noopener"
+                                >MIT License</a
+                            >
+                            <a href="/terms/">Terms</a>
+                            <a href="/privacy/">Privacy</a>
+                        </nav>
+                    </div>
+                    <p class="footer__fine">
+                        © 2026 Speculative Dynamics Private Limited. Built with
+                        care. Runs on your phone. Shipped open.
+                    </p>
+                </div>
+            </footer>
+        </div>
+        <!-- /.paper-sheet -->
+
+        <script src="/script.js" defer></script>
+    </body>
+</html>

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <meta name="theme-color" content="#F2E9D7" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="robots" content="index, follow" />
+
+        <title>Privacy Policy — Nod</title>
+        <meta
+            name="description"
+            content="Nod's privacy policy. The app runs entirely on your iPhone — no servers, no accounts, no tracking. This page explains exactly what that means."
+        />
+        <link rel="canonical" href="https://usenod.app/privacy/" />
+
+        <meta property="og:type" content="article" />
+        <meta property="og:site_name" content="Nod" />
+        <meta property="og:url" content="https://usenod.app/privacy/" />
+        <meta property="og:title" content="Privacy Policy — Nod" />
+        <meta
+            property="og:description"
+            content="Nod runs entirely on your iPhone. No servers, no accounts, no tracking."
+        />
+        <meta
+            property="og:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Privacy Policy — Nod" />
+        <meta
+            name="twitter:description"
+            content="Nod runs entirely on your iPhone. No servers, no accounts, no tracking."
+        />
+        <meta
+            name="twitter:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+
+        <link rel="icon" href="/assets/favicon.ico" sizes="any" />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/assets/icon-16.png"
+        />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/assets/icon-32.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/assets/icon-180.png"
+        />
+        <link rel="manifest" href="/manifest.webmanifest" />
+
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;500;600&display=swap"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body class="legal-page">
+        <div class="noise" aria-hidden="true"></div>
+
+        <div class="paper-sheet">
+            <header class="page-header">
+                <div class="container container--narrow">
+                    <a href="/" class="back-link"
+                        ><span aria-hidden="true">←</span> Back to Nod</a
+                    >
+                    <h1>Privacy Policy</h1>
+                    <p class="meta">
+                        Last updated: 20 April 2026 · Effective immediately.
+                    </p>
+                </div>
+            </header>
+
+            <main class="prose">
+                <div class="container container--narrow">
+                    <h2>The short version</h2>
+                    <p>
+                        <strong>Nod runs entirely on your iPhone.</strong> We
+                        don't have a server that sees what you write. We don't
+                        have accounts. We don't track you, profile you, or
+                        analyse you. There is no pipe to send your conversation
+                        through — so there is nothing for us (or anyone else) to
+                        collect.
+                    </p>
+
+                    <div class="callout">
+                        <p>
+                            This isn't a promise we ask you to trust — it's an
+                            architecture choice you can verify. The app's source
+                            is public at
+                            <a
+                                href="https://github.com/Speculative-Dynamics/nod"
+                                target="_blank"
+                                rel="noopener"
+                                >github.com/Speculative-Dynamics/nod</a
+                            >.
+                        </p>
+                    </div>
+
+                    <h2>Who we are</h2>
+                    <p>
+                        Nod (listed on the App Store as <em>Just Nod</em>) is
+                        built and published by
+                        <strong>Speculative Dynamics Private Limited</strong>, a
+                        company incorporated in India ("Speculative Dynamics",
+                        "we", "us", or "our"). This policy applies to the Nod
+                        iOS app and the marketing website at
+                        <a href="https://usenod.app">usenod.app</a>.
+                    </p>
+
+                    <h2>What we process, and where</h2>
+
+                    <h3>The Nod iOS app</h3>
+                    <p>
+                        Every part of the Nod experience — the text you type,
+                        the voice input you dictate, the model responses, the
+                        memory summaries, the conversation history — is
+                        processed and stored
+                        <strong>on your device only</strong>. Specifically:
+                    </p>
+                    <ul>
+                        <li>
+                            The <strong>listening model</strong> (Qwen 3.5 4B)
+                            runs on-device via MLX Swift. Your prompts never
+                            leave the phone.
+                        </li>
+                        <li>
+                            The <strong>memory and summaries</strong> feature
+                            uses Apple's on-device
+                            <code>FoundationModels</code> framework (part of
+                            Apple Intelligence). It runs on the same chip; it
+                            does not make network requests.
+                        </li>
+                        <li>
+                            Your <strong>conversation history</strong> is stored
+                            in a local SQLite database on your device, encrypted
+                            at rest by iOS. We never see it.
+                        </li>
+                        <li>
+                            Tapping <strong>"Start fresh"</strong> permanently
+                            deletes your local conversation on that device. This
+                            is irreversible.
+                        </li>
+                    </ul>
+                    <p>
+                        The app ships with the model prompts bundled inside the
+                        binary. Nothing about your use is transmitted to
+                        Speculative Dynamics, to Apple (beyond standard
+                        iOS-level telemetry you've already configured for your
+                        device), or to any third party.
+                    </p>
+
+                    <h3>Required network activity</h3>
+                    <p>
+                        There is one unavoidable network event: on first launch,
+                        the app downloads the Qwen model weights (~2.5 GB) using
+                        Apple's Background Assets framework. This is a one-time
+                        download from Apple's CDN. After that, the app functions
+                        fully offline. We don't see or log this download.
+                    </p>
+
+                    <h3>The marketing website (usenod.app)</h3>
+                    <p>
+                        This website is served as static files. It has no forms,
+                        no login, and no analytics. Your visit is recorded only
+                        in the standard access logs of our static hosting
+                        provider (IP address, user agent, requested URL,
+                        timestamp) — used solely to ensure the site is reachable
+                        and to debug outages. These logs are not tied to any
+                        identity, are retained for no longer than 30 days, and
+                        are not shared or sold.
+                    </p>
+
+                    <h2>What we don't do</h2>
+                    <ul>
+                        <li>We don't create user accounts.</li>
+                        <li>
+                            We don't collect or process your message content.
+                        </li>
+                        <li>
+                            We don't use analytics, telemetry, or tracking
+                            pixels.
+                        </li>
+                        <li>
+                            We don't embed third-party SDKs in the app for ads,
+                            attribution, or A/B testing.
+                        </li>
+                        <li>
+                            We don't sell, rent, or share any personal data —
+                            because we don't have any to share.
+                        </li>
+                        <li>We don't train models on your data.</li>
+                    </ul>
+
+                    <h2>Your rights</h2>
+                    <p>
+                        Under India's Digital Personal Data Protection Act, 2023
+                        (DPDPA) — and analogous laws including the EU GDPR and
+                        the California CCPA — you have rights of access,
+                        correction, erasure, and portability over your personal
+                        data. Because we don't collect personal data, most of
+                        these rights are moot: there is nothing on our systems
+                        to access, correct, export, or delete.
+                    </p>
+                    <p>
+                        For the data <strong>on your own device</strong>, you
+                        exercise these rights yourself by using the app's "Start
+                        fresh" button (to erase) or by deleting the app (to
+                        remove everything).
+                    </p>
+                    <p>
+                        If you believe we hold personal data about you — or you
+                        have a question about this policy — you can reach us at
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a>
+                        and we'll respond within a reasonable period (typically
+                        under 30 days).
+                    </p>
+
+                    <h2>Children</h2>
+                    <p>
+                        Nod is not directed at children under 13, and we do not
+                        knowingly collect personal data from them. Because the
+                        app operates entirely on-device and does not require an
+                        account, age is not verified at the app level.
+                    </p>
+
+                    <h2>Changes to this policy</h2>
+                    <p>
+                        If this policy changes materially, we'll update the
+                        "Last updated" date above and, for significant changes,
+                        note it in the app's release notes and on the website
+                        homepage.
+                    </p>
+
+                    <h2>Contact</h2>
+                    <p>
+                        Speculative Dynamics Private Limited<br />
+                        Email:
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a
+                        ><br />
+                        Source code:
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod"
+                            target="_blank"
+                            rel="noopener"
+                            >github.com/Speculative-Dynamics/nod</a
+                        >
+                    </p>
+                </div>
+            </main>
+
+            <footer class="footer">
+                <div class="container">
+                    <div class="footer__row">
+                        <div class="footer__brand">
+                            <img
+                                src="/assets/icon.png"
+                                alt="Nod"
+                                class="footer__icon"
+                            />
+                            <p class="footer__tag">
+                                For when you just need to be heard.
+                            </p>
+                        </div>
+                        <nav class="footer__links" aria-label="Footer">
+                            <a href="/">Home</a>
+                            <a
+                                href="https://github.com/Speculative-Dynamics/nod"
+                                target="_blank"
+                                rel="noopener"
+                                >GitHub</a
+                            >
+                            <a href="/terms/">Terms</a>
+                            <a href="/privacy/">Privacy</a>
+                        </nav>
+                    </div>
+                    <p class="footer__fine">
+                        © 2026 Speculative Dynamics Private Limited. Built with
+                        care. Runs on your phone. Shipped open.
+                    </p>
+                </div>
+            </footer>
+        </div>
+    </body>
+</html>
