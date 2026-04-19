@@ -32,25 +32,15 @@ struct ChatView: View {
     @State private var scrollAnchorId: UUID?
     @FocusState private var inputFocused: Bool
 
-    // The listening engine. Pick depends on EnginePreferenceStore — either
-    // Apple FoundationModels or Qwen via MLX. Throws from init only if a
-    // prompt file is missing from the bundle (build pipeline broken).
-    // Surfaced clearly in the UI rather than silently degrading.
-    //
-    // The same engine instance handles BOTH listening responses (respond)
-    // AND compression summarization (summarize). ConversationStore captures
-    // it in its summarizer closure.
-    private let engine: (any ListeningEngine)?
+    // EngineHolder owns the live engine. Holding it as @StateObject means
+    // sidebar-driven engine switches propagate here automatically. The
+    // same engine instance it hands out serves BOTH listening responses
+    // (respond) AND compression summaries (summarize).
+    @StateObject private var engineHolder: EngineHolder
 
     init() {
-        let engine: (any ListeningEngine)?
-        switch EnginePreferenceStore.current {
-        case .apple:
-            engine = try? FoundationModelsClient()
-        case .qwen:
-            engine = try? QwenClient()
-        }
-        self.engine = engine
+        let holder = EngineHolder()
+        self._engineHolder = StateObject(wrappedValue: holder)
 
         // Opening the DB should never fail on a healthy device. If it does,
         // crash with a clear message — this is not a user-recoverable state.
@@ -61,9 +51,12 @@ struct ChatView: View {
             fatalError("Nod: could not open conversation database: \(error)")
         }
 
+        // Capture the holder (not a specific engine) so compression always
+        // uses whichever engine is current when it fires — even if the user
+        // switched between append and the compression task starting.
         self._store = StateObject(wrappedValue: ConversationStore(
             database: db,
-            summarizer: { engine }
+            summarizer: { [holder] in holder.engine }
         ))
     }
 
@@ -103,7 +96,7 @@ struct ChatView: View {
                 }
             }
             .sheet(isPresented: $showingSidebar) {
-                SidebarView(store: store) {
+                SidebarView(store: store, engineHolder: engineHolder) {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
                     isInferring = false
@@ -247,7 +240,7 @@ struct ChatView: View {
     }
 
     private func respond(to text: String) {
-        guard let engine else {
+        guard let engine = engineHolder.engine else {
             // Build bug: a prompt file isn't being copied into the bundle.
             // Developer-facing message — should never reach a real user.
             store.append(Message(role: .assistant, text: "Build error: prompts/ not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))

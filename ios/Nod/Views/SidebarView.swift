@@ -14,6 +14,7 @@ import SwiftUI
 struct SidebarView: View {
 
     @ObservedObject var store: ConversationStore
+    @ObservedObject var engineHolder: EngineHolder
     @Environment(\.dismiss) private var dismiss
 
     /// Called after the user confirms "Start fresh." ChatView uses this to
@@ -36,6 +37,36 @@ struct SidebarView: View {
                     }
                 } header: {
                     Text("Your conversation")
+                }
+
+                Section {
+                    ForEach(EnginePreference.allCases, id: \.self) { pref in
+                        Button {
+                            engineHolder.setPreference(pref)
+                        } label: {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(pref.displayName)
+                                        .foregroundStyle(.primary)
+                                    Text(pref.tagline)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if engineHolder.preference == pref {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color("NodAccent"))
+                                        .font(.body.bold())
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Listening model")
+                } footer: {
+                    Text("Nod runs the AI on your device — nothing is sent to a server. Switching keeps your conversation intact.")
                 }
 
                 Section {
@@ -89,7 +120,8 @@ struct SidebarView: View {
 
 #Preview {
     let db = try! MessageDatabase()
-    let store = ConversationStore(database: db, summarizer: { nil })
-    return SidebarView(store: store, onCleared: {})
+    let holder = EngineHolder()
+    let store = ConversationStore(database: db, summarizer: { [holder] in holder.engine })
+    return SidebarView(store: store, engineHolder: holder, onCleared: {})
         .preferredColorScheme(.dark)
 }

@@ -15,6 +15,7 @@
 		33CED9B1CEDD2F8FFFA5625B /* QwenClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7170DBAA233CDB335396B05B /* QwenClient.swift */; };
 		36209BB2C752B19E2900045C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E7655A16D7F32F90AD7401 /* ChatView.swift */; };
 		3CFF54759908C1830B9F54E3 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D5DAEB03E40D203EEAD3708 /* Message.swift */; };
+		83C2ABE4AEE200497871E44A /* EngineHolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED36CC1C656ED723BB5222FE /* EngineHolder.swift */; };
 		84B43B6993235D12CCED23BE /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114CF100E130E7C854FBB3BD /* EmptyStateView.swift */; };
 		869D621D2D080A416C7516FB /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 10A96E3292AD8ABF6FD9B811 /* MLXLMCommon */; };
 		89331638D0D309292F560723 /* NodAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E9E17AF4055789FC092B5E /* NodAnimation.swift */; };
@@ -48,6 +49,7 @@
 		C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDatabase.swift; sourceTree = "<group>"; };
 		C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		ED36CC1C656ED723BB5222FE /* EngineHolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineHolder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +95,7 @@
 		41C8C3B2952D77AA18801C9E /* Inference */ = {
 			isa = PBXGroup;
 			children = (
+				ED36CC1C656ED723BB5222FE /* EngineHolder.swift */,
 				4AFBE124324D42CE1B70ADFB /* EnginePreference.swift */,
 				2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */,
 				A7B129F4799D29E72530A088 /* InferenceEngine.swift */,
@@ -229,6 +232,7 @@
 				36209BB2C752B19E2900045C /* ChatView.swift in Sources */,
 				AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */,
 				84B43B6993235D12CCED23BE /* EmptyStateView.swift in Sources */,
+				83C2ABE4AEE200497871E44A /* EngineHolder.swift in Sources */,
 				A10CAB99472BD44C096ED243 /* EnginePreference.swift in Sources */,
 				D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */,
 				2C884D7C63A57E9026C13381 /* InferenceEngine.swift in Sources */,
