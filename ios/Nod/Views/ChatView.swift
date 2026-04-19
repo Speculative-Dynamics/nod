@@ -152,13 +152,23 @@ struct ChatView: View {
                 let prevLastId = msgs.count >= 2 ? msgs[msgs.count - 2].id : nil
 
                 // Follow the new message IF the user was at the bottom, or
-                // if this is the very first message ever. If they scrolled
-                // up to read history, leave them alone.
-                let wasAtBottom = scrollAnchorId == prevLastId || prevLastId == nil
+                // if this is the very first message ever, or if the
+                // scrollPosition binding hasn't had a chance to sync yet
+                // (scrollAnchorId == nil). If they scrolled up to read
+                // history, leave them alone.
+                let wasAtBottom = scrollAnchorId == prevLastId
+                    || prevLastId == nil
+                    || scrollAnchorId == nil
                 if wasAtBottom, let newLastId {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(newLastId, anchor: .bottom)
                     }
+                    // Belt-and-suspenders: scrollPosition binding SHOULD
+                    // update after proxy.scrollTo, but we've seen enough
+                    // SwiftUI scroll quirks to not trust it implicitly.
+                    // Explicit sync keeps subsequent was-at-bottom checks
+                    // correct.
+                    scrollAnchorId = newLastId
                 }
             }
             // When the in-flight assistant message's text fills in, also
@@ -167,12 +177,15 @@ struct ChatView: View {
             .onChange(of: store.messages.last?.text) { _, _ in
                 guard let newLastId = store.messages.last?.id else { return }
                 // Was-at-bottom check: scrollAnchor still points at the
-                // last message (since count hasn't changed), so if it
-                // matches, we're at bottom.
-                if scrollAnchorId == newLastId {
+                // last message (since count hasn't changed). If it matches,
+                // we're at bottom. Also accept nil anchor as "at bottom"
+                // because scrollPosition may not have settled yet for the
+                // fresh message.
+                if scrollAnchorId == newLastId || scrollAnchorId == nil {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(newLastId, anchor: .bottom)
                     }
+                    scrollAnchorId = newLastId
                 }
             }
         }
