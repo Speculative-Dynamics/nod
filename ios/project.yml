@@ -23,9 +23,11 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_STRICT_CONCURRENCY: complete
     CLANG_ENABLE_MODULES: YES
-    # No code signing identity set — Xcode picks Automatic with your team
-    # on first open. Sign in once; Xcode remembers for every future build.
+    # Automatic signing with the Nod Apple Developer team pinned.
+    # Team ID matches the existing App ID registered at
+    # app.usenod.nod (see developer.apple.com/account/resources/identifiers).
     CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: Z8AYP4GMZ5
 
 targets:
   Nod:
@@ -38,7 +40,7 @@ targets:
           - "Info.plist"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.usenod.Nod
+        PRODUCT_BUNDLE_IDENTIFIER: app.usenod.nod
         PRODUCT_NAME: Nod
         INFOPLIST_FILE: Nod/Info.plist
         TARGETED_DEVICE_FAMILY: "1"                    # iPhone only
