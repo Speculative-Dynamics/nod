@@ -5,7 +5,7 @@
 // Seamless with iOS's own launch screen (Info.plist → UILaunchScreen uses
 // the same NodAccent color), so there's no flash when SwiftUI takes over.
 //
-// Total duration: ~2.4s. Plays on every cold launch. Warm launches skip
+// Total duration: ~3.9s. Plays on every cold launch. Warm launches skip
 // this (the view only mounts when isLaunching resets to true, which only
 // happens on app process start).
 

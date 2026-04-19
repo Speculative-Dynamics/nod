@@ -90,8 +90,10 @@ final class ConversationStore: ObservableObject {
     /// for each LLM call. Shape: [running summary if any] + [un-summarized
     /// messages formatted as a transcript].
     ///
-    /// Excludes any in-flight (empty) assistant message so the LLM sees only
-    /// real history, not its own typing placeholder.
+    /// Excludes:
+    ///   - the in-flight empty assistant placeholder (not real history)
+    ///   - the most recent user message (it's being passed as the current
+    ///     query, not as context — sending it twice would confuse the model)
     func contextForInference() -> String {
         var parts: [String] = []
 
@@ -100,11 +102,18 @@ final class ConversationStore: ObservableObject {
         }
 
         do {
-            let recent = try database.fetchUnsummarizedMessages()
-            let formatted = recent
-                .filter { !($0.role == .assistant && $0.text.isEmpty) }
-                .map(formatMessage)
-                .joined(separator: "\n")
+            var recent = try database.fetchUnsummarizedMessages()
+
+            // Drop the empty assistant placeholder (ChatView inserts one
+            // before streaming tokens back into it).
+            recent = recent.filter { !($0.role == .assistant && $0.text.isEmpty) }
+
+            // Drop the most recent user message — it's the current query.
+            if let lastIndex = recent.lastIndex(where: { $0.role == .user }) {
+                recent.remove(at: lastIndex)
+            }
+
+            let formatted = recent.map(formatMessage).joined(separator: "\n")
             if !formatted.isEmpty {
                 parts.append("RECENT EXCHANGES:\n\(formatted)")
             }

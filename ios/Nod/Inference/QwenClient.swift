@@ -30,7 +30,7 @@ actor QwenClient: InferenceEngine {
     func respond(
         to userMessage: String,
         context: String
-    ) async throws -> AsyncStream<String> {
+    ) async throws -> String {
         // Day 3: replace with real MLX inference. Until then, throw so the
         // stub can never silently fall through to production.
         throw InferenceError.modelNotReady

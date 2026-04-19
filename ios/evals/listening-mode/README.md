@@ -38,5 +38,6 @@ Target: 5-10 fixtures before Phase 2. Grow to 20-30 by Phase 3.
 
 ## When to run
 
-Before shipping any change to `Resources/Prompts/listening_mode.md` or swapping
-which inference engine handles listening. Manually for now; scripted later.
+Before shipping any change to `prompts/listening_mode.md` at the repo root, or
+swapping which inference engine handles listening. Manually for now; scripted
+later.

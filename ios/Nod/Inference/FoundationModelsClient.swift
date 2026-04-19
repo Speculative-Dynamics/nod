@@ -38,17 +38,16 @@ actor FoundationModelsClient: InferenceEngine, ConversationSummarizer {
     func respond(
         to userMessage: String,
         context: String
-    ) async throws -> AsyncStream<String> {
+    ) async throws -> String {
 
         guard SystemLanguageModel.default.availability == .available else {
             throw InferenceError.modelNotReady
         }
 
         // Build instructions: listening-mode prompt + the compressed context
-        // from ConversationStore. This is one inference call per turn — no
-        // replay loop, no repeated tokenization of history. The session is
-        // throwaway; we build a fresh one each call because the context is
-        // already embedded in the instructions.
+        // from ConversationStore. One inference call per turn — no replay
+        // loop, no repeated tokenization of history. Session is throwaway;
+        // a fresh one per call because the context is already embedded.
         let instructions: String
         if context.isEmpty {
             instructions = listeningPrompt
@@ -57,18 +56,8 @@ actor FoundationModelsClient: InferenceEngine, ConversationSummarizer {
         }
 
         let session = LanguageModelSession(instructions: instructions)
-
-        let (stream, continuation) = AsyncStream<String>.makeStream()
-        Task.detached(priority: .userInitiated) {
-            do {
-                let response = try await session.respond(to: userMessage)
-                continuation.yield(response.content)
-                continuation.finish()
-            } catch {
-                continuation.finish()
-            }
-        }
-        return stream
+        let response = try await session.respond(to: userMessage)
+        return response.content
     }
 
     // MARK: - ConversationSummarizer

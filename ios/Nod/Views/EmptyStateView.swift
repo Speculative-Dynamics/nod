@@ -10,8 +10,8 @@
 import SwiftUI
 
 struct EmptyStateView: View {
-    @State private var blinkTrigger: Int = 0
     @State private var timer: Timer?
+    @State private var blinkOn = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -39,21 +39,19 @@ struct EmptyStateView: View {
                     .font(.title2.weight(.medium))
                     .foregroundStyle(.primary)
 
-                Text("Type what's on your mind, or tap the mic to speak.")
+                Text("Type what's on your mind.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Nod is listening. Type what's on your mind, or tap the mic to speak.")
+            .accessibilityLabel("Nod is listening. Type what's on your mind.")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { startBlinking() }
         .onDisappear { stopBlinking() }
     }
-
-    @State private var blinkOn = false
 
     private func startBlinking() {
         timer = Timer.scheduledTimer(withTimeInterval: 4.5, repeats: true) { _ in

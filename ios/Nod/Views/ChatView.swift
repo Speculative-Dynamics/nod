@@ -3,15 +3,16 @@
 //
 // Layout:
 //   ┌─────────────────────────────────┐
-//   │ ◀ Nod              ⚙           │  nav bar
+//   │ 🟠                              │  nav bar: MiniNodFace (leading),
+//   │                                 │           no title text
 //   ├─────────────────────────────────┤
 //   │   AI bubble (left-aligned)      │
 //   │        User bubble (right)      │  scrolling message list
 //   │   AI bubble                     │
 //   │                                 │
 //   ├─────────────────────────────────┤
-//   │ ┌───────────────┐  🎤  ↑        │
-//   │ │ Type or tap…  │                │  input bar: textfield + mic + send
+//   │ ┌───────────────┐  ⭘  ↑         │  input bar: textfield +
+//   │ │ Type what's … │                │             just-nod + send
 //   │ └───────────────┘                │
 //   └─────────────────────────────────┘
 
@@ -136,7 +137,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Type or tap the mic…", text: $inputText, axis: .vertical)
+            TextField("Type what's on your mind…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
@@ -146,15 +147,18 @@ struct ChatView: View {
                 .focused($inputFocused)
                 .accessibilityLabel("Message")
 
+            // "Just nod" button: lets the user get a silent acknowledgment
+            // without typing. Always enabled — sometimes you don't have
+            // words, you just want Nod to nod. Independent of send so it
+            // works whether the input is empty or not.
             Button {
-                // TODO day 5-6: wire Transcriber here.
+                justNod()
             } label: {
-                Image(systemName: "mic.circle.fill")
+                Image(systemName: "circle.dotted")
                     .font(.title)
                     .foregroundStyle(.secondary)
             }
-            .accessibilityLabel("Dictate with microphone")
-            .disabled(true)  // day 5-6 feature
+            .accessibilityLabel("Just nod — silent acknowledgment")
 
             Button {
                 sendMessage()
@@ -165,11 +169,6 @@ struct ChatView: View {
             }
             .disabled(!sendEnabled)
             .accessibilityLabel("Send message")
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.6).onEnded { _ in
-                    justNod()
-                }
-            )
         }
     }
 
@@ -208,38 +207,31 @@ struct ChatView: View {
     private func respond(to text: String) {
         guard let engine else {
             // Build bug: a prompt file isn't being copied into the bundle.
-            // Developer-facing message — this should never reach a real user
-            // in a release build.
+            // Developer-facing message — should never reach a real user.
             store.append(Message(role: .assistant, text: "Build error: prompts/ not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))
             return
         }
         isInferring = true
-        // Insert an empty assistant message we'll fill as tokens stream in.
-        // The empty placeholder is filtered out of the context we build for
-        // the model (see ConversationStore.contextForInference).
+        // Insert an empty assistant message. Filtered out of context we
+        // build for the model; filled with the reply when it arrives.
         store.append(Message(role: .assistant, text: ""))
         let context = store.contextForInference()
 
         Task {
+            let reply: String
             do {
-                let stream = try await engine.respond(to: text, context: context)
-                var buffer = ""
-                for await token in stream {
-                    buffer += token
-                    await MainActor.run {
-                        store.replaceLastAssistantMessage(with: buffer)
-                    }
-                }
+                reply = try await engine.respond(to: text, context: context)
             } catch InferenceError.modelNotReady {
-                await MainActor.run {
-                    store.replaceLastAssistantMessage(with: "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence.")
-                }
+                reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
+            } catch InferenceError.guardrailViolation {
+                reply = "I'd rather not respond to that."
             } catch {
-                await MainActor.run {
-                    store.replaceLastAssistantMessage(with: "Something went wrong. Try again.")
-                }
+                reply = "Something went wrong. Try again."
             }
-            await MainActor.run { isInferring = false }
+            await MainActor.run {
+                store.replaceLastAssistantMessage(with: reply)
+                isInferring = false
+            }
         }
     }
 }
@@ -248,29 +240,36 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: Message
+    @State private var nodTriggerForThisBubble: Int = 0
 
     var body: some View {
         HStack {
             if message.role == .user {
                 Spacer(minLength: 40)
-                bubble(color: Color(.tertiarySystemFill), alignment: .trailing)
+                bubble(color: Color(.tertiarySystemFill))
             } else if message.role == .assistant {
-                bubble(color: Color(.secondarySystemBackground), alignment: .leading)
+                bubble(color: Color(.secondarySystemBackground))
                 Spacer(minLength: 40)
             } else {
-                // .nod — show only a centered inline blink, no bubble.
+                // .nod — a centered inline blink. Fires once on appear so
+                // scrolling back through history sees the bubble as a static
+                // pair of eyes (correct — it's already happened), but the
+                // fresh arrival animates.
                 Spacer()
-                NodAnimation(trigger: 0)
+                NodAnimation(trigger: nodTriggerForThisBubble)
                     .accessibilityLabel("Nod acknowledged")
+                    .onAppear {
+                        nodTriggerForThisBubble += 1
+                    }
                 Spacer()
             }
         }
     }
 
     @ViewBuilder
-    private func bubble(color: Color, alignment: HorizontalAlignment) -> some View {
+    private func bubble(color: Color) -> some View {
         if message.text.isEmpty && message.role == .assistant {
-            // In-progress: show typing-dots placeholder instead of empty bubble.
+            // In-progress: typing-dots placeholder instead of empty bubble.
             HStack(spacing: 4) {
                 ForEach(0..<3) { _ in
                     Circle()

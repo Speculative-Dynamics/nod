@@ -12,29 +12,45 @@ Native SwiftUI app. iOS 18.2+ deployment target. All inference runs on-device.
 ## Source layout
 
 ```
-ios/
-├── README.md                 # you are here
-├── Nod/                      # Swift source (imported into Xcode project)
-│   ├── NodApp.swift          # @main, SwiftUI App entry point
-│   ├── Views/
-│   │   ├── ChatView.swift    # main chat screen (message list + input bar)
-│   │   ├── NodAnimation.swift # eye-blink brand gesture
-│   │   └── EmptyStateView.swift # first-launch empty chat
-│   ├── Audio/
-│   │   └── Transcriber.swift # SFSpeechRecognizer wrapper for optional dictation
-│   ├── Inference/
-│   │   ├── InferenceEngine.swift      # protocol both clients conform to
-│   │   ├── FoundationModelsClient.swift # Apple on-device LLM (day-1 primary)
-│   │   └── QwenClient.swift  # MLX Swift + Qwen 3.5 4B (added in day 3-4)
-│   ├── Storage/
-│   │   ├── Message.swift     # data model
-│   │   └── ConversationStore.swift  # GRDB.swift SQLite persistence
-│   └── Resources/
-│       └── Prompts/
-│           └── listening_mode.md  # THE listening-mode system prompt
-└── evals/
-    └── listening-mode/       # saved real vent transcripts as regression fixtures
+vent/
+├── prompts/                         # ALL LLM prompts (repo-root — one place)
+│   ├── listening_mode.md            # THE listening-mode system prompt
+│   └── summary.md                   # compression summarization prompt
+│
+└── ios/
+    ├── README.md                    # you are here
+    ├── project.yml                  # XcodeGen source of truth
+    ├── Nod.xcodeproj/               # generated from project.yml (committed)
+    ├── Nod/                         # Swift source
+    │   ├── NodApp.swift             # @main, SwiftUI App entry point
+    │   ├── Info.plist               # launch screen, permissions, dark mode
+    │   ├── Views/
+    │   │   ├── ChatView.swift       # main chat screen + MessageBubble
+    │   │   ├── EmptyStateView.swift # first-launch empty chat
+    │   │   ├── NodAnimation.swift   # eye-blink + thinking-scan gestures
+    │   │   ├── MiniNodFace.swift    # nav-bar brand face, auto-blinking
+    │   │   └── SplashView.swift     # animated launch: orange → condense → eyes
+    │   ├── Audio/
+    │   │   └── Transcriber.swift    # SFSpeechRecognizer wrapper (unused)
+    │   ├── Inference/
+    │   │   ├── InferenceEngine.swift          # protocol + error enum
+    │   │   ├── FoundationModelsClient.swift   # Apple on-device LLM (day-1)
+    │   │   └── QwenClient.swift               # MLX + Qwen 3.5 4B (stub)
+    │   ├── Storage/
+    │   │   ├── Message.swift                  # data model
+    │   │   ├── MessageDatabase.swift          # GRDB.swift SQLite persistence
+    │   │   └── ConversationStore.swift        # store + compression trigger
+    │   ├── Assets.xcassets/
+    │   │   ├── AppIcon.appiconset/            # the orange face
+    │   │   └── NodAccent.colorset/            # #DD6D2C / #E07C40
+    │   └── Preview Content/                   # SwiftUI preview resources
+    └── evals/
+        └── listening-mode/          # saved vent transcripts as regression fixtures
 ```
+
+Note: prompts live at the REPO ROOT (not under `ios/`) so they're reusable
+across iOS, website, and any future platforms. XcodeGen copies them into
+the app bundle as a folder resource (see `project.yml`).
 
 The `.xcodeproj` file is NOT checked in — Xcode generates it when you create the project.
 

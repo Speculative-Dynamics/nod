@@ -3,12 +3,13 @@
 //
 // Takes the user's new message plus a pre-built conversation context string
 // (built by ConversationStore — already contains the running summary plus
-// recent un-summarized turns). Returns a streaming response.
+// recent un-summarized turns). Returns the full response.
 //
-// The context is built once by ConversationStore and handed over as a ready
-// string, so the engine doesn't need to understand message roles, history
-// compression, or any of that. It just prepends the context to its system
-// prompt and responds.
+// We used to return AsyncStream<String> here, but FoundationModels' respond()
+// doesn't actually emit token-by-token — it returns the complete response at
+// once. The stream abstraction added complexity (swallowed errors in a
+// detached task) without benefit. When Qwen via MLX lands and real streaming
+// is available, we can add a separate `respondStreaming` method.
 
 import Foundation
 
@@ -20,12 +21,12 @@ protocol InferenceEngine: Sendable {
     ///   - context: pre-built context string from ConversationStore.
     ///              Includes the running summary (if any) and recent turns.
     ///              May be empty for the very first message.
-    /// - Returns: an AsyncStream of response tokens. Consumer runs it from
-    ///            a Task (not the main thread).
+    /// - Returns: the AI's full response as a string.
+    /// - Throws: an InferenceError if the model isn't ready, refused, etc.
     func respond(
         to userMessage: String,
         context: String
-    ) async throws -> AsyncStream<String>
+    ) async throws -> String
 }
 
 /// Errors any InferenceEngine may throw. Clients should handle these with
