@@ -25,10 +25,11 @@ struct ChatView: View {
     @State private var isInferring: Bool = false
     @FocusState private var inputFocused: Bool
 
-    // FoundationModelsClient never fails to init anymore — it has an embedded
-    // fallback prompt if the resource file isn't found. Kept optional for the
-    // future when we swap to Qwen and init can legitimately fail.
-    private let engine: InferenceEngine = FoundationModelsClient()
+    // FoundationModelsClient throws from init only if the listening-mode
+    // prompt file is missing from the bundle, which means the build pipeline
+    // is broken (the prompts/ resource reference isn't copying). We surface
+    // that clearly in the UI rather than silently degrading.
+    private let engine: InferenceEngine? = try? FoundationModelsClient()
 
     var body: some View {
         NavigationStack {
@@ -142,6 +143,13 @@ struct ChatView: View {
     }
 
     private func respond(to text: String) {
+        guard let engine else {
+            // Build bug: the prompts/ directory isn't being copied into the
+            // app bundle. Developer-facing message — this should never reach
+            // a real user in a release build.
+            store.append(Message(role: .assistant, text: "Build error: prompts/listening_mode.md not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))
+            return
+        }
         isInferring = true
         // Insert an empty assistant message we'll fill as tokens stream in.
         store.append(Message(role: .assistant, text: ""))

@@ -24,6 +24,7 @@ protocol InferenceEngine: Sendable {
 /// user-visible messaging — never silent failures.
 enum InferenceError: Error {
     case modelNotReady
+    case promptNotFound          // system prompt file missing from bundle (build bug)
     case guardrailViolation      // AFM refused emotional content
     case outOfMemory
     case interrupted             // phone call, app suspension, etc.

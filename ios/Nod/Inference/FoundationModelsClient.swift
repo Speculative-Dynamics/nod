@@ -23,54 +23,27 @@ import FoundationModels
 
 actor FoundationModelsClient: InferenceEngine {
 
-    // The listening-mode system prompt is shipped as a resource file so it's
-    // easy to iterate without recompiling. See Resources/Prompts/listening_mode.md.
+    // The listening-mode system prompt lives in prompts/listening_mode.md at
+    // the repo root (single source of truth for all LLM prompts across
+    // platforms). XcodeGen copies the prompts/ folder into the app bundle
+    // as a folder reference, so resources retain their directory structure.
     //
-    // iOS flattens resource paths by default, so look for the file at the
-    // bundle root first, then fall back to a subdirectory lookup. If the
-    // file is missing entirely, fall back to an embedded minimal prompt —
-    // the app should never be unusable just because a resource didn't copy.
+    // If the file is missing, init throws. No inline fallback — a missing
+    // prompt means the build pipeline is broken and that must be visible.
     private let systemPrompt: String
 
-    init() {
-        self.systemPrompt = Self.loadSystemPrompt()
-    }
-
-    private static func loadSystemPrompt() -> String {
-        // Try flat path first (iOS default behavior)
-        if let url = Bundle.main.url(forResource: "listening_mode", withExtension: "md"),
-           let text = try? String(contentsOf: url, encoding: .utf8),
-           !text.isEmpty {
-            return text
+    init() throws {
+        guard let url = Bundle.main.url(
+                forResource: "listening_mode",
+                withExtension: "md",
+                subdirectory: "prompts"
+              ),
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              !text.isEmpty else {
+            throw InferenceError.promptNotFound
         }
-        // Try subdirectory (in case the build copies with structure preserved)
-        if let url = Bundle.main.url(forResource: "listening_mode", withExtension: "md", subdirectory: "Prompts"),
-           let text = try? String(contentsOf: url, encoding: .utf8),
-           !text.isEmpty {
-            return text
-        }
-        // Embedded fallback. App still works. Listening-mode prompt file
-        // takes precedence when present.
-        return embeddedFallbackPrompt
+        self.systemPrompt = text
     }
-
-    private static let embeddedFallbackPrompt = """
-    You are Nod. You listen.
-
-    Your job is not to solve problems. Your job is to be present — the way a \
-    trusted friend is present when someone is venting. You reflect back what \
-    you hear briefly, and you sit with uncomfortable feelings without trying \
-    to fix them.
-
-    Your responses are short. Usually one or two sentences. Rarely more.
-
-    Do not give advice unless explicitly asked. Do not cheerlead. Do not \
-    minimize. Do not perform sympathy with phrases like "that sounds so hard" \
-    or "I'm sorry you're going through this." Do not follow up unsolicited.
-
-    Speak like a real person who cares. Not a therapist, not a coach, not an \
-    assistant.
-    """
 
     func respond(
         to userMessage: String,

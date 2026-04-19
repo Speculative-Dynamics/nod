@@ -38,6 +38,12 @@ targets:
       - path: Nod
         excludes:
           - "Info.plist"
+      # Prompts live at the repo root (../prompts/) — single source of truth
+      # for LLM prompts across iOS and any future platforms (web, android).
+      # Files copied into the iOS app bundle as resources at build time.
+      - path: ../prompts
+        buildPhase: resources
+        type: folder
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.usenod.nod
