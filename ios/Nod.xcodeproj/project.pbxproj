@@ -22,6 +22,7 @@
 		C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */; };
 		D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */; };
 		D152974FF40E7CF801B96C4B /* prompts in Resources */ = {isa = PBXBuildFile; fileRef = 860580835025DBBB5549C017 /* prompts */; };
+		E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */; };
 		E77BBBC0EF3D4BB9AFF8DDF2 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */; };
 /* End PBXBuildFile section */
 
@@ -40,6 +41,7 @@
 		A7B129F4799D29E72530A088 /* InferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceEngine.swift; sourceTree = "<group>"; };
 		B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniNodFace.swift; sourceTree = "<group>"; };
 		BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
+		C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDatabase.swift; sourceTree = "<group>"; };
 		C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -131,6 +133,7 @@
 			children = (
 				75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */,
 				0D5DAEB03E40D203EEAD3708 /* Message.swift */,
+				C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -227,6 +230,7 @@
 				D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */,
 				2C884D7C63A57E9026C13381 /* InferenceEngine.swift in Sources */,
 				3CFF54759908C1830B9F54E3 /* Message.swift in Sources */,
+				E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */,
 				C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */,
 				89331638D0D309292F560723 /* NodAnimation.swift in Sources */,
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,

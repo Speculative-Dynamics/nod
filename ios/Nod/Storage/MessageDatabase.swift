@@ -215,9 +215,11 @@ final class MessageDatabase {
 }
 
 private extension ISO8601DateFormatter {
-    /// Thread-safe shared formatter. ISO8601DateFormatter itself is
-    /// thread-safe for reads after configuration.
-    static let cached: ISO8601DateFormatter = {
+    /// Shared formatter. ISO8601DateFormatter is thread-safe for parsing and
+    /// formatting after configuration per Apple's documentation, even though
+    /// it doesn't conform to Sendable. nonisolated(unsafe) tells the Swift 6
+    /// strict-concurrency checker we've verified this ourselves.
+    nonisolated(unsafe) static let cached: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
