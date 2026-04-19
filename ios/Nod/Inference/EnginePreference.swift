@@ -32,6 +32,44 @@ enum EnginePreference: String, CaseIterable, Sendable {
             return "Open-source. Downloads ~2.3GB on first use."
         }
     }
+
+    /// Whether this engine can run on the current device. AFM is assumed
+    /// available (the runtime check lives in FoundationModelsClient and
+    /// surfaces as a modelNotReady error if Apple Intelligence is off).
+    /// Qwen 3 4B needs ~3GB resident — we gate on total physical memory.
+    var isAvailable: Bool {
+        switch self {
+        case .apple:
+            return true
+        case .qwen:
+            return DeviceCapability.canRunQwen4B
+        }
+    }
+
+    /// One-line reason shown when the engine row is disabled. nil if available.
+    var unavailabilityReason: String? {
+        guard !isAvailable else { return nil }
+        switch self {
+        case .apple:
+            return nil
+        case .qwen:
+            return "Your iPhone doesn't have enough memory (6 GB needed)."
+        }
+    }
+}
+
+/// Runtime device checks for engine availability.
+enum DeviceCapability {
+
+    /// Minimum physical RAM to run Qwen 3 4B (4-bit) comfortably.
+    /// 5.5 GB covers iPhone 14/15 base (6 GB), iPhone 15 Pro+ (8 GB),
+    /// and excludes iPhone 13 / 12 / 11 (4 GB). Threshold set slightly
+    /// under the advertised spec to absorb reporting variance.
+    private static let qwen4BMemoryBytes: UInt64 = 5_500_000_000
+
+    static var canRunQwen4B: Bool {
+        ProcessInfo.processInfo.physicalMemory >= qwen4BMemoryBytes
+    }
 }
 
 /// Tiny read/write shim over UserDefaults. Keeping this out of ChatView

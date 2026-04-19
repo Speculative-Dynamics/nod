@@ -12,9 +12,8 @@
 // right starting point; swapping the ModelConfiguration when 3.5 lands is
 // a one-line change.
 //
-// Model weights (~2.3GB) are downloaded on first use via HubApi. The
-// download UX lives in later commits — this actor exposes `prepare()` and
-// a load-state so the UI can present a progress screen.
+// Model weights (~2.3GB) are downloaded on first use via HubApi. EngineHolder
+// observes `makeStateStream()` to drive the download progress UI.
 //
 // Concurrency shape: QwenClient is an actor. The heavy MLX objects
 // (LanguageModel, Tokenizer, KV cache) aren't Sendable, so we keep them
@@ -31,7 +30,7 @@ import MLXLMCommon
 actor QwenClient: ListeningEngine {
 
     /// What the engine is doing right now, for the UI.
-    enum State: Equatable {
+    enum State: Equatable, Sendable {
         case notLoaded
         case downloading(fractionCompleted: Double)
         case loading
@@ -65,9 +64,17 @@ actor QwenClient: ListeningEngine {
     /// task so we never double-download the 2.3GB weights.
     private var loadingTask: Task<Void, Error>?
 
+    /// State change observer. At most one — replaced on each call.
+    /// EngineHolder attaches this to drive the download UI.
+    private var stateContinuation: AsyncStream<State>.Continuation?
+
     /// Model config pinned at type-level. Swap for qwen3.5 family when
     /// mlx-community publishes a 4-bit build.
     private static let modelConfig = LLMRegistry.qwen3_4b_4bit
+
+    /// Cap generation length. Listening-mode replies are a paragraph at most;
+    /// anything longer is Qwen hallucinating. 500 tokens ~ 350-400 words.
+    private static let maxGenerationTokens = 500
 
     init() throws {
         self.listeningPrompt = try Self.loadPrompt(named: "listening_mode")
@@ -87,14 +94,32 @@ actor QwenClient: ListeningEngine {
         return text
     }
 
+    // MARK: - State observation
+
+    /// Subscribe to state changes. Yields the current state immediately,
+    /// then every subsequent change until the stream is cancelled. Only
+    /// one observer at a time — calling this twice replaces the continuation.
+    func makeStateStream() -> AsyncStream<State> {
+        let (stream, continuation) = AsyncStream.makeStream(of: State.self)
+        stateContinuation = continuation
+        continuation.yield(state)
+        return stream
+    }
+
+    /// Single point of state mutation. Keep all updates going through
+    /// here so observers never miss a transition.
+    private func setState(_ new: State) {
+        state = new
+        stateContinuation?.yield(new)
+    }
+
     // MARK: - Load lifecycle
 
     /// Download (if needed) and load the model into memory. Safe to call
     /// repeatedly and from multiple callers — only does work the first time.
-    /// UI can observe `state` across calls for progress.
     func prepare() async throws {
         if container != nil {
-            state = .ready
+            setState(.ready)
             return
         }
         if let existing = loadingTask {
@@ -102,12 +127,23 @@ actor QwenClient: ListeningEngine {
             return
         }
 
-        state = .loading
+        setState(.loading)
         let task = Task { try await self.performLoad() }
         loadingTask = task
 
         defer { loadingTask = nil }
         try await task.value
+    }
+
+    /// Cancel any in-flight download. URLSession (via HubApi) respects
+    /// Task cancellation at its suspension points, so the actual network
+    /// transfer stops cooperatively. Resets state to .notLoaded so a
+    /// subsequent prepare() starts fresh.
+    func cancelLoading() {
+        loadingTask?.cancel()
+        loadingTask = nil
+        container = nil
+        setState(.notLoaded)
     }
 
     private func performLoad() async throws {
@@ -120,18 +156,51 @@ actor QwenClient: ListeningEngine {
                     Task { await self.updateDownloadProgress(progress.fractionCompleted) }
                 }
             )
+            try Task.checkCancellation()
             self.container = loaded
-            self.state = .ready
+            setState(.ready)
+        } catch is CancellationError {
+            // Swift task-level cancellation (e.g. Task.cancel propagated
+            // before URLSession started).
+            setState(.notLoaded)
+            throw CancellationError()
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // URLSession-level cancellation — fires when our loadingTask
+            // is cancelled mid-download. NOT a failure; treat as notLoaded.
+            setState(.notLoaded)
+            throw CancellationError()
         } catch {
-            self.state = .failed(String(describing: error))
-            throw error
+            let mapped = Self.mapDownloadError(error)
+            setState(.failed(String(describing: mapped)))
+            throw mapped
         }
+    }
+
+    /// Translate URLError / HubApi errors into typed InferenceError cases
+    /// so the UI can show user-friendly copy instead of dumping raw
+    /// `NSURLErrorDomain` strings.
+    private static func mapDownloadError(_ error: Error) -> Error {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .timedOut,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed:
+                return InferenceError.downloadFailedNoNetwork
+            case .cannotWriteToFile, .cannotCreateFile:
+                return InferenceError.downloadFailedDiskFull
+            default:
+                return InferenceError.downloadFailedServer
+            }
+        }
+        return error
     }
 
     private func updateDownloadProgress(_ fraction: Double) {
         switch state {
         case .loading, .downloading, .notLoaded:
-            state = fraction < 1.0 ? .downloading(fractionCompleted: fraction) : .loading
+            setState(fraction < 1.0 ? .downloading(fractionCompleted: fraction) : .loading)
         case .ready, .failed:
             break
         }
@@ -235,20 +304,14 @@ actor QwenClient: ListeningEngine {
             let userInput = UserInput(chat: chat)
             let input = try await context.processor.prepare(input: userInput)
 
-            let parameters = GenerateParameters()
-            // Annotate the closure param so Swift picks the overload that
-            // returns GenerateResult (not GenerateCompletionInfo).
+            var parameters = GenerateParameters()
+            parameters.maxTokens = Self.maxGenerationTokens
             let result: GenerateResult = try MLXLMCommon.generate(
                 input: input,
                 parameters: parameters,
                 context: context
             ) { (_: [Int]) -> GenerateDisposition in .more }
 
-            // Drain the GPU queue before returning — releases KV cache
-            // fragments and any lazy MLXArrays the iterator allocated.
-            // Matches what MLX's own ChatSession.Generator does. Without
-            // this, long-running sessions accumulate pressure until the
-            // allocator reaps them lazily.
             Stream.gpu.synchronize()
             return result.output
         }

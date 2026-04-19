@@ -78,6 +78,16 @@ struct ChatView: View {
                         .transition(.opacity)
                 }
 
+                // Qwen is the only engine that has a pre-send readiness
+                // step. AFM is ready as soon as it exists.
+                if engineHolder.preference == .qwen {
+                    qwenReadinessBar
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .animation(.easeInOut(duration: 0.25), value: engineHolder.qwenLoadState)
+                }
+
                 inputBar
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
@@ -221,7 +231,109 @@ struct ChatView: View {
     }
 
     private var sendEnabled: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isInferring
+        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard !isInferring else { return false }
+        if engineHolder.preference == .qwen {
+            if case .ready = engineHolder.qwenLoadState { return true }
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Qwen readiness bar
+
+    @ViewBuilder
+    private var qwenReadinessBar: some View {
+        switch engineHolder.qwenLoadState {
+        case .notLoaded, .ready:
+            EmptyView()
+
+        case .downloading(let fraction):
+            readinessCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Downloading Qwen…")
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Text("\(Int(fraction * 100))%")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    ProgressView(value: fraction)
+                        .tint(Color("NodAccent"))
+                    Text("Nod runs the AI on your device. This one-time download is ~2.3 GB.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+        case .loading:
+            readinessCard {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading Qwen into memory…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+
+        case .failed:
+            readinessCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(qwenFailureTitle)
+                        .font(.subheadline.weight(.medium))
+                    Text(qwenFailureBody)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Try again") {
+                        engineHolder.retryQwenLoad()
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color("NodAccent"))
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    /// Shared card chrome for the readiness states so we only edit one place
+    /// when the look changes.
+    @ViewBuilder
+    private func readinessCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// Pull apart the `.failed(String)` payload to decide what to show.
+    /// We match on the raw description rather than re-typing because
+    /// QwenClient stores the error's description in the state, not the
+    /// original Error. Crude but serviceable.
+    private var qwenFailureTitle: String {
+        guard case .failed(let msg) = engineHolder.qwenLoadState else { return "Qwen failed to load" }
+        if msg.contains("downloadFailedNoNetwork") {
+            return "Can't reach the download server"
+        }
+        if msg.contains("downloadFailedDiskFull") {
+            return "Not enough space for Qwen"
+        }
+        return "Qwen failed to load"
+    }
+
+    private var qwenFailureBody: String {
+        guard case .failed(let msg) = engineHolder.qwenLoadState else { return "Tap Try again below." }
+        if msg.contains("downloadFailedNoNetwork") {
+            return "Connect to Wi-Fi and try again. The download is ~2.3 GB."
+        }
+        if msg.contains("downloadFailedDiskFull") {
+            return "Free up ~3 GB on your device, then try again."
+        }
+        return "Something went wrong. Try again, or switch back to Apple Intelligence in the menu."
     }
 
     private func sendMessage() {

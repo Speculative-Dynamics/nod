@@ -41,27 +41,7 @@ struct SidebarView: View {
 
                 Section {
                     ForEach(EnginePreference.allCases, id: \.self) { pref in
-                        Button {
-                            engineHolder.setPreference(pref)
-                        } label: {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(pref.displayName)
-                                        .foregroundStyle(.primary)
-                                    Text(pref.tagline)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if engineHolder.preference == pref {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Color("NodAccent"))
-                                        .font(.body.bold())
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        engineRow(pref)
                     }
                 } header: {
                     Text("Listening model")
@@ -115,6 +95,41 @@ struct SidebarView: View {
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         return version
+    }
+
+    // MARK: - Engine row
+
+    /// One row for an engine option. Unavailable engines (e.g. Qwen on a
+    /// 4GB-RAM iPhone) render dimmed and don't respond to taps, with a
+    /// reason line in place of the tagline.
+    @ViewBuilder
+    private func engineRow(_ pref: EnginePreference) -> some View {
+        let available = pref.isAvailable
+
+        Button {
+            guard available else { return }
+            engineHolder.setPreference(pref)
+        } label: {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pref.displayName)
+                        .foregroundStyle(available ? .primary : .secondary)
+                    Text(pref.unavailabilityReason ?? pref.tagline)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if engineHolder.preference == pref {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Color("NodAccent"))
+                        .font(.body.bold())
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!available)
+        .opacity(available ? 1 : 0.5)
     }
 }
 
