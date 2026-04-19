@@ -20,6 +20,12 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
+  # MLX Swift — Apple's array/ML framework + LLM runners. Provides
+  # MLXLLM and MLXLMCommon products used by QwenClient to load and
+  # run Qwen 3.5 4B on-device.
+  MLXSwiftExamples:
+    url: https://github.com/ml-explore/mlx-swift-examples
+    from: "2.29.1"
 
 settings:
   base:
@@ -72,3 +78,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: GRDB
+      - package: MLXSwiftExamples
+        product: MLXLLM
+      - package: MLXSwiftExamples
+        product: MLXLMCommon

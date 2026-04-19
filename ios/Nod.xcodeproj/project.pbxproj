@@ -16,10 +16,13 @@
 		36209BB2C752B19E2900045C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E7655A16D7F32F90AD7401 /* ChatView.swift */; };
 		3CFF54759908C1830B9F54E3 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D5DAEB03E40D203EEAD3708 /* Message.swift */; };
 		84B43B6993235D12CCED23BE /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114CF100E130E7C854FBB3BD /* EmptyStateView.swift */; };
+		869D621D2D080A416C7516FB /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 10A96E3292AD8ABF6FD9B811 /* MLXLMCommon */; };
 		89331638D0D309292F560723 /* NodAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E9E17AF4055789FC092B5E /* NodAnimation.swift */; };
+		A10CAB99472BD44C096ED243 /* EnginePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFBE124324D42CE1B70ADFB /* EnginePreference.swift */; };
 		A484A82A83997D60C288E522 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */; };
 		AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */; };
 		AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0517337BBD8316AD61402BEF /* SidebarView.swift */; };
+		AFEE441085ADE17C5D17D3B5 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 7A8C846974EACAA6C64B06B8 /* MLXLLM */; };
 		C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */; };
 		D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */; };
 		D152974FF40E7CF801B96C4B /* prompts in Resources */ = {isa = PBXBuildFile; fileRef = 860580835025DBBB5549C017 /* prompts */; };
@@ -33,6 +36,7 @@
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
 		420B40291D1B3DE220552641 /* NodApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodApp.swift; sourceTree = "<group>"; };
 		4940AE0F466E23E8BD4994BD /* Nod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Nod.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4AFBE124324D42CE1B70ADFB /* EnginePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginePreference.swift; sourceTree = "<group>"; };
 		7170DBAA233CDB335396B05B /* QwenClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenClient.swift; sourceTree = "<group>"; };
 		7353A5B91242F165EFCD7D68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
@@ -52,6 +56,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */,
+				AFEE441085ADE17C5D17D3B5 /* MLXLLM in Frameworks */,
+				869D621D2D080A416C7516FB /* MLXLMCommon in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,6 +93,7 @@
 		41C8C3B2952D77AA18801C9E /* Inference */ = {
 			isa = PBXGroup;
 			children = (
+				4AFBE124324D42CE1B70ADFB /* EnginePreference.swift */,
 				2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */,
 				A7B129F4799D29E72530A088 /* InferenceEngine.swift */,
 				7170DBAA233CDB335396B05B /* QwenClient.swift */,
@@ -156,6 +163,8 @@
 			name = Nod;
 			packageProductDependencies = (
 				FD58A9CC136146214D82403C /* GRDB */,
+				7A8C846974EACAA6C64B06B8 /* MLXLLM */,
+				10A96E3292AD8ABF6FD9B811 /* MLXLMCommon */,
 			);
 			productName = Nod;
 			productReference = 4940AE0F466E23E8BD4994BD /* Nod.app */;
@@ -187,6 +196,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				15F71401DD88F0B4B9636A49 /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DEFF421EAA78615B580C1942 /* Products */;
@@ -219,6 +229,7 @@
 				36209BB2C752B19E2900045C /* ChatView.swift in Sources */,
 				AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */,
 				84B43B6993235D12CCED23BE /* EmptyStateView.swift in Sources */,
+				A10CAB99472BD44C096ED243 /* EnginePreference.swift in Sources */,
 				D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */,
 				2C884D7C63A57E9026C13381 /* InferenceEngine.swift in Sources */,
 				3CFF54759908C1830B9F54E3 /* Message.swift in Sources */,
@@ -440,6 +451,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		15F71401DD88F0B4B9636A49 /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.29.1;
+			};
+		};
 		A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift";
@@ -451,6 +470,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		10A96E3292AD8ABF6FD9B811 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 15F71401DD88F0B4B9636A49 /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLMCommon;
+		};
+		7A8C846974EACAA6C64B06B8 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 15F71401DD88F0B4B9636A49 /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLLM;
+		};
 		FD58A9CC136146214D82403C /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A7BD56C2446314906BB635B1 /* XCRemoteSwiftPackageReference "GRDB.swift" */;

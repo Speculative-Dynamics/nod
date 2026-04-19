@@ -10,7 +10,7 @@
 import Foundation
 import FoundationModels
 
-actor FoundationModelsClient: InferenceEngine, ConversationSummarizer {
+actor FoundationModelsClient: ListeningEngine {
 
     private let listeningPrompt: String
     private let summaryPrompt: String

@@ -32,17 +32,24 @@ struct ChatView: View {
     @State private var scrollAnchorId: UUID?
     @FocusState private var inputFocused: Bool
 
-    // FoundationModelsClient throws from init only if a prompt file is
-    // missing from the bundle (build pipeline broken). Surfaced clearly in
-    // the UI rather than silently degrading.
+    // The listening engine. Pick depends on EnginePreferenceStore — either
+    // Apple FoundationModels or Qwen via MLX. Throws from init only if a
+    // prompt file is missing from the bundle (build pipeline broken).
+    // Surfaced clearly in the UI rather than silently degrading.
     //
     // The same engine instance handles BOTH listening responses (respond)
     // AND compression summarization (summarize). ConversationStore captures
     // it in its summarizer closure.
-    private let engine: FoundationModelsClient?
+    private let engine: (any ListeningEngine)?
 
     init() {
-        let engine = try? FoundationModelsClient()
+        let engine: (any ListeningEngine)?
+        switch EnginePreferenceStore.current {
+        case .apple:
+            engine = try? FoundationModelsClient()
+        case .qwen:
+            engine = try? QwenClient()
+        }
         self.engine = engine
 
         // Opening the DB should never fail on a healthy device. If it does,

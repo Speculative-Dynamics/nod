@@ -38,3 +38,8 @@ enum InferenceError: Error {
     case outOfMemory
     case interrupted             // phone call, app suspension, etc.
 }
+
+/// Convenience bundle for engines that do BOTH listening responses and
+/// compression summarization (FoundationModelsClient, QwenClient). Lets
+/// ChatView hold a single `any ListeningEngine` instead of two refs.
+protocol ListeningEngine: InferenceEngine, ConversationSummarizer {}
