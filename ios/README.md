@@ -30,8 +30,6 @@ vent/
     │   │   ├── NodAnimation.swift   # eye-blink + thinking-scan gestures
     │   │   ├── MiniNodFace.swift    # nav-bar brand face, auto-blinking
     │   │   └── SplashView.swift     # animated launch: orange → condense → eyes
-    │   ├── Audio/
-    │   │   └── Transcriber.swift    # SFSpeechRecognizer wrapper (unused)
     │   ├── Inference/
     │   │   ├── InferenceEngine.swift          # protocol + error enum
     │   │   ├── FoundationModelsClient.swift   # Apple on-device LLM (day-1)

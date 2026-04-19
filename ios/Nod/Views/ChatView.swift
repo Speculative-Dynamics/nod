@@ -1,5 +1,5 @@
 // ChatView.swift
-// The one screen in Phase 1. Chat message list + text input + input buttons.
+// The one screen in Phase 1. Chat message list + text input + send button.
 //
 // Layout:
 //   ┌─────────────────────────────────────┐
@@ -11,9 +11,9 @@
 //   │    AI bubble                        │
 //   │                                     │
 //   ├─────────────────────────────────────┤
-//   │ ┌───────────────┐  🎤  ↑             │  input bar:
-//   │ │ Type or tap…  │                   │   text + mic + send
-//   │ └───────────────┘                   │
+//   │ ┌──────────────────────┐  ↑         │  input bar: text + send
+//   │ │ Type what's on…      │            │  (dictation = keyboard's built-in
+//   │ └──────────────────────┘            │   mic button — no custom code)
 //   └─────────────────────────────────────┘
 
 import SwiftUI
@@ -21,7 +21,6 @@ import SwiftUI
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
-    @StateObject private var transcriber = Transcriber()
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
@@ -108,28 +107,6 @@ struct ChatView: View {
                         }
                     }
             )
-            // Dictation → input field sync. When Transcriber updates its
-            // transcript, mirror it into inputText so the user sees what
-            // they're saying as they speak (and can edit before sending).
-            .onChange(of: transcriber.transcript) { _, newTranscript in
-                if transcriber.isListening {
-                    inputText = newTranscript
-                }
-            }
-            // Surface permission / locale errors from the Transcriber. The
-            // TranscriberError localizedDescription is user-facing and
-            // actionable ("Open Settings to enable").
-            .alert(
-                "Dictation Error",
-                isPresented: Binding(
-                    get: { transcriber.error != nil },
-                    set: { if !$0 { transcriber.clearError() } }
-                )
-            ) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(transcriber.error?.localizedDescription ?? "")
-            }
         }
     }
 
@@ -160,7 +137,12 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Type or tap the mic…", text: $inputText, axis: .vertical)
+            // The text field handles both typing AND dictation — iOS's
+            // built-in keyboard has a mic button in the bottom-right that
+            // dictates into any focused text field, on-device on
+            // Apple-Intelligence-capable devices. We don't need our own
+            // mic button or mic-handling code.
+            TextField("Type what's on your mind…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
@@ -169,19 +151,6 @@ struct ChatView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .focused($inputFocused)
                 .accessibilityLabel("Message")
-
-            // Mic: toggle on-device dictation. Transcript streams into the
-            // input field as you speak; edit before sending if needed.
-            // Uses SFSpeechRecognizer with requiresOnDeviceRecognition = true
-            // so nothing leaves the phone (P5).
-            Button {
-                toggleDictation()
-            } label: {
-                Image(systemName: transcriber.isListening ? "mic.fill" : "mic")
-                    .font(.title)
-                    .foregroundStyle(transcriber.isListening ? Color("NodAccent") : .secondary)
-            }
-            .accessibilityLabel(transcriber.isListening ? "Stop dictation" : "Dictate message")
 
             Button {
                 sendMessage()
@@ -200,32 +169,12 @@ struct ChatView: View {
     }
 
     private func sendMessage() {
-        // Stop any in-flight dictation so the transcript stops updating
-        // after the user commits the message.
-        if transcriber.isListening {
-            transcriber.stop()
-        }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         inputText = ""
         store.append(Message(role: .user, text: text))
         triggerNod()
         respond(to: text)
-    }
-
-    /// Toggle dictation on or off. Stops if currently listening; starts
-    /// otherwise. iOS will prompt for mic + speech permissions on first use
-    /// (usage strings live in Info.plist).
-    private func toggleDictation() {
-        if transcriber.isListening {
-            transcriber.stop()
-        } else {
-            // Dismiss the keyboard so the user knows the mic took over.
-            inputFocused = false
-            Task {
-                await transcriber.start()
-            }
-        }
     }
 
     private func triggerNod() {

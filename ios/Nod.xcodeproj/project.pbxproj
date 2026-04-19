@@ -23,7 +23,6 @@
 		D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */; };
 		D152974FF40E7CF801B96C4B /* prompts in Resources */ = {isa = PBXBuildFile; fileRef = 860580835025DBBB5549C017 /* prompts */; };
 		E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */; };
-		E77BBBC0EF3D4BB9AFF8DDF2 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,7 +39,6 @@
 		860580835025DBBB5549C017 /* prompts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = prompts; path = ../prompts; sourceTree = SOURCE_ROOT; };
 		A7B129F4799D29E72530A088 /* InferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceEngine.swift; sourceTree = "<group>"; };
 		B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniNodFace.swift; sourceTree = "<group>"; };
-		BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
 		C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDatabase.swift; sourceTree = "<group>"; };
 		C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -73,7 +71,6 @@
 		142DF8797B5E19908B032FF6 /* Nod */ = {
 			isa = PBXGroup;
 			children = (
-				C19147D13389580C55678C5F /* Audio */,
 				41C8C3B2952D77AA18801C9E /* Inference */,
 				D1E2BD565F3F28214653AD53 /* Preview Content */,
 				DA4D0AD82C039054077B66E7 /* Storage */,
@@ -101,14 +98,6 @@
 				C814D0DD2E586B398C5424B5 /* vent */,
 				DEFF421EAA78615B580C1942 /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		C19147D13389580C55678C5F /* Audio */ = {
-			isa = PBXGroup;
-			children = (
-				BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */,
-			);
-			path = Audio;
 			sourceTree = "<group>";
 		};
 		C814D0DD2E586B398C5424B5 /* vent */ = {
@@ -236,7 +225,6 @@
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,
 				33CED9B1CEDD2F8FFFA5625B /* QwenClient.swift in Sources */,
 				24D408F3CA747F829DE44292 /* SplashView.swift in Sources */,
-				E77BBBC0EF3D4BB9AFF8DDF2 /* Transcriber.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

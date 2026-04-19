@@ -42,10 +42,6 @@
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Dark</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Nod uses the microphone to turn your voice into text when you tap the mic icon. Your audio never leaves your phone.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Nod uses speech recognition to transcribe your voice into the chat input. All processing happens on your device.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
