@@ -11,8 +11,8 @@
 //   │    AI bubble                        │
 //   │                                     │
 //   ├─────────────────────────────────────┤
-//   │ ┌───────────────┐  🎤  ⭘  ↑         │  input bar:
-//   │ │ Type or tap…  │                   │   text + mic + just-nod + send
+//   │ ┌───────────────┐  🎤  ↑             │  input bar:
+//   │ │ Type or tap…  │                   │   text + mic + send
 //   │ └───────────────┘                   │
 //   └─────────────────────────────────────┘
 
@@ -183,18 +183,6 @@ struct ChatView: View {
             }
             .accessibilityLabel(transcriber.isListening ? "Stop dictation" : "Dictate message")
 
-            // "Just nod" button: a silent acknowledgment without typing.
-            // Always enabled — sometimes you don't have words, you just
-            // want Nod to nod.
-            Button {
-                justNod()
-            } label: {
-                Image(systemName: "circle.dotted")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityLabel("Just nod — silent acknowledgment")
-
             Button {
                 sendMessage()
             } label: {
@@ -223,18 +211,6 @@ struct ChatView: View {
         store.append(Message(role: .user, text: text))
         triggerNod()
         respond(to: text)
-    }
-
-    private func justNod() {
-        // Tapping just-nod also stops dictation — the user is opting out of
-        // a worded response entirely.
-        if transcriber.isListening {
-            transcriber.stop()
-        }
-        store.append(Message(role: .nod))
-        triggerNod()
-        let haptic = UIImpactFeedbackGenerator(style: .medium)
-        haptic.impactOccurred()
     }
 
     /// Toggle dictation on or off. Stops if currently listening; starts

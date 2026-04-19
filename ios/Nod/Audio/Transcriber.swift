@@ -14,6 +14,9 @@
 import Foundation
 import Speech
 import AVFoundation
+import OSLog
+
+private let log = Logger(subsystem: "app.usenod.nod", category: "Transcriber")
 
 @MainActor
 final class Transcriber: ObservableObject {
@@ -24,7 +27,7 @@ final class Transcriber: ObservableObject {
     enum TranscriberError: Error, LocalizedError {
         case notAuthorized
         case onDeviceRecognitionUnsupported
-        case audioEngineFailed(Error)
+        case audioEngineFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -32,8 +35,8 @@ final class Transcriber: ObservableObject {
                 return "Dictation needs Microphone and Speech Recognition permission. Open Settings to enable."
             case .onDeviceRecognitionUnsupported:
                 return "Dictation isn't available for your language on this device. Please type instead."
-            case .audioEngineFailed(let underlying):
-                return "Audio input failed: \(underlying.localizedDescription)"
+            case .audioEngineFailed(let reason):
+                return "Audio input failed: \(reason)"
             }
         }
     }
@@ -45,61 +48,102 @@ final class Transcriber: ObservableObject {
 
     init(locale: Locale = .current) {
         self.recognizer = SFSpeechRecognizer(locale: locale)
+        log.info("Transcriber init for locale \(locale.identifier)")
     }
 
-    func start() async {
-        // Guard against double-start. If the user double-taps the mic button
-        // fast, the second call would create a second AVAudioEngine and
-        // orphan the first one (with its audio tap still running).
-        guard !isListening else { return }
+    // MARK: - Start / stop
 
-        // Request permissions first. Both mic and speech recognition are required.
-        let speechStatus = await withCheckedContinuation { cont in
+    func start() async {
+        log.info("Transcriber.start() called")
+        guard !isListening else {
+            log.info("already listening, ignoring")
+            return
+        }
+
+        // 1. Speech Recognition authorization
+        let speechStatus = await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
             SFSpeechRecognizer.requestAuthorization { status in cont.resume(returning: status) }
         }
-        let micAllowed = await AVAudioApplication.requestRecordPermission()
-        guard speechStatus == .authorized, micAllowed else {
+        log.info("speech auth status: \(speechStatus.rawValue)")
+        guard speechStatus == .authorized else {
             self.error = .notAuthorized
             return
         }
-        guard let recognizer, recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {
+
+        // 2. Microphone authorization
+        let micAllowed = await AVAudioApplication.requestRecordPermission()
+        log.info("mic allowed: \(micAllowed)")
+        guard micAllowed else {
+            self.error = .notAuthorized
+            return
+        }
+
+        // 3. Recognizer availability
+        guard let recognizer else {
+            log.error("no recognizer for current locale")
+            self.error = .onDeviceRecognitionUnsupported
+            return
+        }
+        guard recognizer.isAvailable else {
+            log.error("recognizer unavailable")
+            self.error = .onDeviceRecognitionUnsupported
+            return
+        }
+        guard recognizer.supportsOnDeviceRecognition else {
+            log.error("recognizer doesn't support on-device")
             self.error = .onDeviceRecognitionUnsupported
             return
         }
 
+        // 4. Audio session — kept simple. `.record` mode, defaults. No
+        //    option flags that might require extra entitlements on iOS 26.
         do {
-            // Activate a record-oriented audio session so the input node
-            // actually gets audio. Without this, AVAudioEngine.inputNode
-            // can return silent/empty buffers if the default session is in
-            // a playback-only category (or if music is playing via another
-            // app). Duck other audio so the user isn't competing with music.
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try session.setCategory(.record, mode: .default)
+            try session.setActive(true)
+            log.info("audio session active")
+        } catch {
+            log.error("audio session setup failed: \(error.localizedDescription)")
+            self.error = .audioEngineFailed("session setup: \(error.localizedDescription)")
+            return
+        }
 
+        // 5. Audio engine + tap + recognition task. Wrapped so any
+        //    thrown Swift error becomes a user-visible message. Obj-C
+        //    exceptions from installTap (invalid format) still crash —
+        //    the format validation below is specifically to prevent that.
+        do {
             try startAudioEngine(with: recognizer)
             self.isListening = true
             self.transcript = ""
             self.error = nil
+            log.info("dictation started successfully")
+        } catch let e as TranscriberError {
+            log.error("engine start failed: \(e.localizedDescription ?? "")")
+            self.error = e
+            releaseAudioSession()
         } catch {
-            self.error = .audioEngineFailed(error)
-            // If the engine failed partway, make sure the session is released.
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            log.error("engine start failed: \(error.localizedDescription)")
+            self.error = .audioEngineFailed(error.localizedDescription)
+            releaseAudioSession()
         }
     }
 
     func stop() {
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
+        log.info("Transcriber.stop() called")
+        if let engine = audioEngine {
+            engine.stop()
+            // Only remove the tap if one was successfully installed. Calling
+            // removeTap on a bus with no tap is a no-op but logs a warning.
+            engine.inputNode.removeTap(onBus: 0)
+        }
         request?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
         request = nil
         audioEngine = nil
         isListening = false
-        // Release the audio session so other apps' audio (music, calls) can
-        // resume normal routing. Failing here isn't user-visible.
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        releaseAudioSession()
     }
 
     /// Clears the last error so UI alerts can dismiss and reset state.
@@ -107,17 +151,36 @@ final class Transcriber: ObservableObject {
         self.error = nil
     }
 
+    // MARK: - Internals
+
     private func startAudioEngine(with recognizer: SFSpeechRecognizer) throws {
         let engine = AVAudioEngine()
         let req = SFSpeechAudioBufferRecognitionRequest()
-        req.requiresOnDeviceRecognition = true  // P5: stay on-device
+        req.requiresOnDeviceRecognition = true
+        req.shouldReportPartialResults = true
 
         let inputNode = engine.inputNode
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputNode.outputFormat(forBus: 0)) { buffer, _ in
+        let format = inputNode.outputFormat(forBus: 0)
+        log.info("input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
+
+        // Critical guard: installTap crashes with an Obj-C exception
+        // (unrecoverable) if the format has 0 channels or 0 sample rate.
+        // This can happen when the audio session isn't active or some
+        // other process holds the mic.
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw TranscriberError.audioEngineFailed(
+                "Microphone returned invalid format. Another app may be using the mic."
+            )
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             req.append(buffer)
         }
+        log.info("tap installed")
+
         engine.prepare()
         try engine.start()
+        log.info("engine started")
 
         let task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             Task { @MainActor in
@@ -133,5 +196,13 @@ final class Transcriber: ObservableObject {
         self.audioEngine = engine
         self.request = req
         self.recognitionTask = task
+    }
+
+    private func releaseAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false)
+        } catch {
+            log.error("audio session deactivate failed: \(error.localizedDescription)")
+        }
     }
 }
