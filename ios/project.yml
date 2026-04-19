@@ -1,0 +1,53 @@
+# XcodeGen input. Regenerate Nod.xcodeproj with:
+#   cd ios && xcodegen generate
+#
+# The generated .xcodeproj is committed to the repo so first-clone works
+# without additional tooling. Regenerate after changing this file.
+
+name: Nod
+
+options:
+  bundleIdPrefix: app.usenod
+  deploymentTarget:
+    iOS: "18.2"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  defaultConfig: Debug
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    CLANG_ENABLE_MODULES: YES
+    # No code signing identity set — Xcode picks Automatic with your team
+    # on first open. Sign in once; Xcode remembers for every future build.
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Nod:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.2"
+    sources:
+      - path: Nod
+        excludes:
+          - "Info.plist"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.usenod.Nod
+        PRODUCT_NAME: Nod
+        INFOPLIST_FILE: Nod/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"                    # iPhone only
+        SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: NodAccent
+        DEVELOPMENT_ASSET_PATHS: "\"Nod/Preview Content\""
+        ENABLE_PREVIEWS: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
