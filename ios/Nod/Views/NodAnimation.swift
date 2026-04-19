@@ -51,8 +51,12 @@ struct NodAnimation: View {
     }
 
     private var eye: some View {
+        // Brand-colored eyes (NodAccent orange) rather than .primary, so the
+        // eye shape reads as "Nod's eyes" anywhere it appears — not just
+        // against the orange icon square. Keeps visual identity consistent
+        // between the thinking indicator and historical nod bubbles.
         Ellipse()
-            .fill(Color.primary)
+            .fill(Color("NodAccent"))
             .frame(width: 8, height: 12)
             .scaleEffect(y: reduceMotion ? 1.0 : eyeScaleY, anchor: .center)
             .opacity(opacity)

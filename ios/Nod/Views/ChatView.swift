@@ -25,6 +25,11 @@ struct ChatView: View {
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     @State private var showingSidebar: Bool = false
+    // The ID of the bottom-most fully-visible message. Bound to the
+    // ScrollView via .scrollPosition. When user scrolls manually, this
+    // updates; we use it to decide whether auto-scroll should follow new
+    // messages or leave the user reading history undisturbed.
+    @State private var scrollAnchorId: UUID?
     @FocusState private var inputFocused: Bool
 
     // FoundationModelsClient throws from init only if a prompt file is
@@ -133,10 +138,40 @@ struct ChatView: View {
             // Interactive keyboard dismiss: dragging down on messages pulls
             // the keyboard down with the finger, iOS-native feel.
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: store.messages.count) { _, _ in
-                if let last = store.messages.last {
+            // Track which message is at the bottom of the visible area so
+            // we can decide whether the user is "pinned to bottom" or
+            // "reading history" when new messages arrive.
+            .scrollPosition(id: $scrollAnchorId, anchor: .bottom)
+            .onChange(of: store.messages.count) { oldCount, newCount in
+                guard newCount > 0 else { return }
+                let msgs = store.messages
+                let newLastId = msgs.last?.id
+                // The message that was previously the bottom of the list
+                // (i.e., what the user was looking at if they were at the
+                // bottom before this new one arrived).
+                let prevLastId = msgs.count >= 2 ? msgs[msgs.count - 2].id : nil
+
+                // Follow the new message IF the user was at the bottom, or
+                // if this is the very first message ever. If they scrolled
+                // up to read history, leave them alone.
+                let wasAtBottom = scrollAnchorId == prevLastId || prevLastId == nil
+                if wasAtBottom, let newLastId {
                     withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        proxy.scrollTo(newLastId, anchor: .bottom)
+                    }
+                }
+            }
+            // When the in-flight assistant message's text fills in, also
+            // follow to bottom (if we were there). Count doesn't change on
+            // replaceLastAssistantMessage, so we need a separate trigger.
+            .onChange(of: store.messages.last?.text) { _, _ in
+                guard let newLastId = store.messages.last?.id else { return }
+                // Was-at-bottom check: scrollAnchor still points at the
+                // last message (since count hasn't changed), so if it
+                // matches, we're at bottom.
+                if scrollAnchorId == newLastId {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(newLastId, anchor: .bottom)
                     }
                 }
             }
@@ -206,18 +241,29 @@ struct ChatView: View {
 
         Task {
             let reply: String
+            var wasError = false
             do {
                 reply = try await engine.respond(to: text, context: context)
             } catch InferenceError.modelNotReady {
                 reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
+                wasError = true
             } catch InferenceError.guardrailViolation {
                 reply = "I'd rather not respond to that."
+                wasError = true
             } catch {
                 reply = "Something went wrong. Try again."
+                wasError = true
             }
             await MainActor.run {
                 store.replaceLastAssistantMessage(with: reply)
                 isInferring = false
+                // Haptic on arrival. Lighter than send (soft tap, "something
+                // landed for you"). Error uses a distinct warning pattern.
+                if wasError {
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                } else {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                }
             }
         }
     }
