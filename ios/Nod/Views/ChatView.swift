@@ -368,7 +368,17 @@ struct ChatView: View {
             let reply: String
             var wasError = false
             do {
-                reply = try await engine.respond(to: text, context: context)
+                let rawReply = try await engine.respond(to: text, context: context)
+                // Guard against empty replies (e.g. Qwen burns all its tokens
+                // inside a <think> block and never emits a final response).
+                // Without this, the placeholder message stays empty and the
+                // UI shows typing-dots indefinitely with no way to recover.
+                if rawReply.isEmpty {
+                    reply = "Something went wrong. Try again."
+                    wasError = true
+                } else {
+                    reply = rawReply
+                }
             } catch InferenceError.modelNotReady {
                 // Engine-specific: AFM is settings-gated; Qwen is download-gated.
                 switch EnginePreferenceStore.current {

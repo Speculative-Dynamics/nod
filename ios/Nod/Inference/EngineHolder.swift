@@ -88,13 +88,13 @@ final class EngineHolder: ObservableObject {
         guard preference == .qwen, let client = engine as? QwenClient else { return }
 
         // Observe state changes and mirror them into @Published.
+        // Task inherits MainActor from the enclosing @MainActor class in
+        // Swift 6, so we can assign to @Published directly without hopping.
         qwenObservationTask = Task { [weak self] in
             let stream = await client.makeStateStream()
             for await newState in stream {
                 guard let self else { return }
-                await MainActor.run {
-                    self.qwenLoadState = newState
-                }
+                self.qwenLoadState = newState
             }
         }
 
