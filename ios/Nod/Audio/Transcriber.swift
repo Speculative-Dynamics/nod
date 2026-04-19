@@ -1,12 +1,15 @@
 // Transcriber.swift
-// Wraps SFSpeechRecognizer for optional speech-to-text input.
+// Wraps SFSpeechRecognizer for optional on-device speech-to-text input.
 //
 // The user types by default. The mic icon triggers dictation; the transcript
 // fills the text input field for the user to review and edit before sending.
 // This preserves precision for technical vocabulary (names, acronyms, etc.)
 // where on-device STT is weakest.
 //
-// Not added until day 5-6 per the design doc's Next Steps. Stub file for now.
+// Uses `requiresOnDeviceRecognition = true` so audio never leaves the phone.
+// If the user's locale doesn't support on-device recognition, the start
+// attempt fails with onDeviceRecognitionUnsupported rather than falling back
+// to Apple's server STT — never silently compromises the privacy promise.
 
 import Foundation
 import Speech
@@ -45,6 +48,11 @@ final class Transcriber: ObservableObject {
     }
 
     func start() async {
+        // Guard against double-start. If the user double-taps the mic button
+        // fast, the second call would create a second AVAudioEngine and
+        // orphan the first one (with its audio tap still running).
+        guard !isListening else { return }
+
         // Request permissions first. Both mic and speech recognition are required.
         let speechStatus = await withCheckedContinuation { cont in
             SFSpeechRecognizer.requestAuthorization { status in cont.resume(returning: status) }
@@ -60,12 +68,23 @@ final class Transcriber: ObservableObject {
         }
 
         do {
+            // Activate a record-oriented audio session so the input node
+            // actually gets audio. Without this, AVAudioEngine.inputNode
+            // can return silent/empty buffers if the default session is in
+            // a playback-only category (or if music is playing via another
+            // app). Duck other audio so the user isn't competing with music.
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+
             try startAudioEngine(with: recognizer)
             self.isListening = true
             self.transcript = ""
             self.error = nil
         } catch {
             self.error = .audioEngineFailed(error)
+            // If the engine failed partway, make sure the session is released.
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 
@@ -78,6 +97,9 @@ final class Transcriber: ObservableObject {
         request = nil
         audioEngine = nil
         isListening = false
+        // Release the audio session so other apps' audio (music, calls) can
+        // resume normal routing. Failing here isn't user-visible.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     /// Clears the last error so UI alerts can dismiss and reset state.

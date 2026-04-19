@@ -1,20 +1,20 @@
 // ChatView.swift
-// The one screen in Phase 1. Chat message list + text input + send button.
+// The one screen in Phase 1. Chat message list + text input + input buttons.
 //
 // Layout:
-//   ┌─────────────────────────────────┐
-//   │ 🟠                              │  nav bar: MiniNodFace (leading),
-//   │                                 │           no title text
-//   ├─────────────────────────────────┤
-//   │   AI bubble (left-aligned)      │
-//   │        User bubble (right)      │  scrolling message list
-//   │   AI bubble                     │
-//   │                                 │
-//   ├─────────────────────────────────┤
-//   │ ┌───────────────┐  ⭘  ↑         │  input bar: textfield +
-//   │ │ Type what's … │                │             just-nod + send
-//   │ └───────────────┘                │
-//   └─────────────────────────────────┘
+//   ┌─────────────────────────────────────┐
+//   │ 🟠                                  │  nav bar: MiniNodFace (leading),
+//   │                                     │           no title text
+//   ├─────────────────────────────────────┤
+//   │    AI bubble (left-aligned)         │
+//   │           User bubble (right)       │  scrolling message list
+//   │    AI bubble                        │
+//   │                                     │
+//   ├─────────────────────────────────────┤
+//   │ ┌───────────────┐  🎤  ⭘  ↑         │  input bar:
+//   │ │ Type or tap…  │                   │   text + mic + just-nod + send
+//   │ └───────────────┘                   │
+//   └─────────────────────────────────────┘
 
 import SwiftUI
 
