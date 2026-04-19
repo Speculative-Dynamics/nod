@@ -60,7 +60,13 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: NodAccent
         DEVELOPMENT_ASSET_PATHS: "\"Nod/Preview Content\""
+        # Previews are kept on for Xcode canvas (#Preview blocks still work
+        # in the Xcode canvas). The debug-dylib split is what was fragile —
+        # ENABLE_DEBUG_DYLIB=NO forces the app to build as a single binary
+        # on device, which is more reliable and avoids the SIGKILL-at-dyld
+        # crash pattern after project regenerations.
         ENABLE_PREVIEWS: YES
+        ENABLE_DEBUG_DYLIB: NO
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: NO
