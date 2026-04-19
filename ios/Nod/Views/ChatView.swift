@@ -41,7 +41,10 @@ struct ChatView: View {
                 }
 
                 if isInferring {
-                    NodAnimation(trigger: nodTrigger)
+                    // While Nod is thinking, the eyes do a left-right-blink
+                    // loop so the user feels an active presence rather than
+                    // staring at static eyes.
+                    NodAnimation(trigger: nodTrigger, isThinking: true)
                         .padding(.bottom, 8)
                         .transition(.opacity)
                 }
@@ -50,8 +53,19 @@ struct ChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
             }
-            .navigationTitle("Nod")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        openSidebar()
+                    } label: {
+                        MiniNodFace()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open menu")
+                }
+            }
             // Swipe gestures to manage the keyboard without reaching for the
             // input field: swipe up anywhere to open, swipe down to close.
             // Uses simultaneousGesture so it doesn't steal events from the
@@ -161,6 +175,12 @@ struct ChatView: View {
         nodTrigger &+= 1
         let haptic = UIImpactFeedbackGenerator(style: .light)
         haptic.impactOccurred()
+    }
+
+    /// Reserved for a future sidebar (settings, history, etc.). No-op today —
+    /// tapping the mini face in the nav bar doesn't do anything yet.
+    private func openSidebar() {
+        // TODO: present sidebar sheet or navigation destination.
     }
 
     private func respond(to text: String) {

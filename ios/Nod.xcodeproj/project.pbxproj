@@ -17,6 +17,7 @@
 		89331638D0D309292F560723 /* NodAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E9E17AF4055789FC092B5E /* NodAnimation.swift */; };
 		A484A82A83997D60C288E522 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */; };
 		AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */; };
+		C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */; };
 		D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */; };
 		D152974FF40E7CF801B96C4B /* prompts in Resources */ = {isa = PBXBuildFile; fileRef = 860580835025DBBB5549C017 /* prompts */; };
 		E77BBBC0EF3D4BB9AFF8DDF2 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */; };
@@ -35,6 +36,7 @@
 		83E9E17AF4055789FC092B5E /* NodAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodAnimation.swift; sourceTree = "<group>"; };
 		860580835025DBBB5549C017 /* prompts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = prompts; path = ../prompts; sourceTree = SOURCE_ROOT; };
 		A7B129F4799D29E72530A088 /* InferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceEngine.swift; sourceTree = "<group>"; };
+		B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniNodFace.swift; sourceTree = "<group>"; };
 		BE6F1727B4D22EB412BBA7CE /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -45,6 +47,7 @@
 			children = (
 				78E7655A16D7F32F90AD7401 /* ChatView.swift */,
 				114CF100E130E7C854FBB3BD /* EmptyStateView.swift */,
+				B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */,
 				83E9E17AF4055789FC092B5E /* NodAnimation.swift */,
 			);
 			path = Views;
@@ -204,6 +207,7 @@
 				D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */,
 				2C884D7C63A57E9026C13381 /* InferenceEngine.swift in Sources */,
 				3CFF54759908C1830B9F54E3 /* Message.swift in Sources */,
+				C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */,
 				89331638D0D309292F560723 /* NodAnimation.swift in Sources */,
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,
 				33CED9B1CEDD2F8FFFA5625B /* QwenClient.swift in Sources */,
