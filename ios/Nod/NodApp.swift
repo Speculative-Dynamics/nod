@@ -24,7 +24,7 @@ struct NodApp: App {
 
                 if isLaunching {
                     SplashView(onComplete: {
-                        withAnimation(.easeInOut(duration: 0.45)) {
+                        withAnimation(.easeInOut(duration: 0.6)) {
                             isLaunching = false
                         }
                     })
