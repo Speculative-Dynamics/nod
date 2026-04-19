@@ -1,0 +1,1134 @@
+/* =====================================================================
+   Nod — marketing site
+   Design tokens, typography, layout, animations.
+   ===================================================================== */
+
+/* --------- tokens --------- */
+:root {
+    /* palette — anchored on the icon's burnt orange */
+    --nod-orange: #d97a3a;
+    --nod-orange-deep: #a85a28; /* better contrast on cream */
+    --nod-orange-soft: #f0a574;
+    --nod-orange-glow: rgba(217, 122, 58, 0.18);
+
+    /* Dark (used only by the hero) */
+    --bg: #0e0c0a; /* warm near-black */
+    --bg-raised: #16120e;
+    --bg-elev: #1e1913;
+    --ink: #f5efe6; /* warm off-white */
+    --ink-soft: #d8cdbc;
+    --ink-mute: #8f8476;
+    --ink-dim: #5a5248;
+    --hairline: rgba(245, 239, 230, 0.08);
+    --hairline-strong: rgba(245, 239, 230, 0.14);
+
+    /* Paper (used by every section below the hero) */
+    --paper: #f2e9d7; /* warm cream */
+    --paper-deep: #e8ddc6; /* card surface / raised */
+    --ink-warm: #2a2620; /* warm near-black for body */
+    --ink-warm-soft: #5a5248; /* dim warm text */
+    --ink-warm-mute: #7a7064; /* small meta text */
+    --rule-warm: rgba(42, 38, 32, 0.14);
+    --rule-warm-strong: rgba(42, 38, 32, 0.22);
+
+    /* type */
+    --font-serif: "Fraunces", "New York", Georgia, "Times New Roman", serif;
+    --font-sans:
+        "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    /* scale */
+    --fs-eyebrow: 0.78rem;
+    --fs-body: 1.05rem;
+    --fs-body-lg: 1.2rem;
+    --fs-pull: 1.45rem;
+    --fs-h2: clamp(2.4rem, 6vw, 5rem);
+    --fs-hero: clamp(2.8rem, 7.2vw, 6.2rem);
+
+    /* space */
+    --space-section: clamp(6rem, 12vw, 10rem);
+    --gutter: clamp(1.25rem, 4vw, 3rem);
+    --container-max: 1180px;
+    --container-narrow: 780px;
+
+    /* motion */
+    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* --------- reset-ish --------- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    background: var(--bg); /* floor color behind the fixed backdrop image */
+    overflow-x: hidden; /* the fixed ::before extends beyond viewport; don't scroll */
+}
+body {
+    background: transparent; /* let the fixed hero image show through */
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    line-height: 1.55;
+    font-weight: 400;
+    letter-spacing: 0.002em;
+    overflow-x: hidden;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* --------- paper sheet ---------
+ * Everything below the hero sits inside .paper-sheet — warm cream
+ * background with a subtle grain. This is where all the reading happens.
+ */
+.paper-sheet {
+    background: var(--paper);
+    color: var(--ink-warm);
+    position: relative;
+    isolation: isolate; /* keep our grain + pseudos confined */
+}
+.paper-sheet::before {
+    /* soft paper grain so the cream isn't flat */
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.55;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncA type='linear' slope='0.09'/></feComponentTransfer></filter><rect width='100%25' height='100%25' filter='url(%23n)' fill='%23a08868'/></svg>");
+    z-index: 0;
+}
+.paper-sheet > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Soft-blur dissolve — the transition overlaps the hero's bottom and
+   blurs the actual video pixels behind it, then fades to cream. */
+/* Thin soft fade where the video meets cream — no filter on the video,
+   just a small cream-tinted gradient that sits at the boundary.
+   Overlaps only the bottom 40px of hero so the buttons/text stay crisp. */
+/*.paper-transition {
+    height: 20px;
+    margin-top: -20px;
+    position: relative;
+    z-index: 3;
+    background: linear-gradient(
+        to bottom,
+        rgba(242, 233, 215, 0) 0%,
+        rgba(242, 233, 215, 0.55) 60%,
+        var(--paper) 100%
+    );
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    pointer-events: none;
+}*/
+
+img,
+video,
+svg {
+    display: block;
+    max-width: 100%;
+}
+a {
+    color: inherit;
+    text-decoration: none;
+}
+button {
+    font: inherit;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    color: inherit;
+}
+
+::selection {
+    background: var(--nod-orange);
+    color: var(--bg);
+}
+
+/* --------- noise overlay (painterly warmth) --------- */
+.noise {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* --------- layout primitives --------- */
+.container {
+    width: 100%;
+    max-width: var(--container-max);
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+}
+.container--narrow {
+    max-width: var(--container-narrow);
+}
+
+.section {
+    position: relative;
+    padding: var(--space-section) 0;
+}
+
+/* --------- typography primitives --------- */
+.eyebrow {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: var(--fs-eyebrow);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--nod-orange);
+    margin: 0 0 1.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+.eyebrow::before {
+    content: "";
+    display: inline-block;
+    width: 2rem;
+    height: 1px;
+    background: var(--nod-orange);
+    opacity: 0.6;
+}
+
+.display {
+    font-family: var(--font-serif);
+    font-weight: 350;
+    font-variation-settings:
+        "opsz" 96,
+        "SOFT" 50;
+    font-size: var(--fs-h2);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    margin: 0 0 2.5rem;
+    color: var(--ink);
+    max-width: 22ch;
+}
+.display em {
+    font-style: italic;
+    color: var(--nod-orange);
+    font-weight: 350;
+}
+
+.body {
+    max-width: 56ch;
+    margin: 0 0 2rem;
+}
+.body p {
+    margin: 0 0 1.1rem;
+    font-size: var(--fs-body-lg);
+    color: var(--ink-soft);
+    line-height: 1.65;
+}
+.body p:last-child {
+    margin-bottom: 0;
+}
+
+/* =====================================================================
+   HERO
+   ===================================================================== */
+.hero {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: grid;
+    place-items: end end;
+    padding: 6rem var(--gutter) clamp(4rem, 8vw, 7rem);
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.hero__video-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.hero__video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* subtle warmth and grain-compatible contrast */
+    filter: saturate(1.05) contrast(1.02);
+    will-change: transform;
+}
+
+/* Gradient wash for text legibility — darkens the RIGHT side where text sits */
+.hero__wash {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(
+            to left,
+            rgba(14, 12, 10, 0.78) 0%,
+            rgba(14, 12, 10, 0.55) 22%,
+            rgba(14, 12, 10, 0.18) 45%,
+            rgba(14, 12, 10, 0) 62%
+        ),
+        linear-gradient(
+            to top,
+            rgba(14, 12, 10, 0.55) 0%,
+            rgba(14, 12, 10, 0.2) 30%,
+            rgba(14, 12, 10, 0) 55%
+        );
+}
+
+.hero__content {
+    position: relative;
+    max-width: 640px;
+    z-index: 1;
+    text-align: right;
+    padding-left: 1rem;
+}
+
+.hero__title {
+    font-family: var(--font-serif);
+    font-weight: 350;
+    font-variation-settings:
+        "opsz" 144,
+        "SOFT" 50;
+    font-size: var(--fs-hero);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    margin: 0 0 2rem;
+    color: var(--ink);
+    text-shadow: 0 2px 40px rgba(14, 12, 10, 0.7);
+}
+.hero__title em {
+    font-style: italic;
+    color: var(--nod-orange-soft);
+    font-weight: 350;
+}
+
+.hero__sub {
+    font-size: 1.1rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 2.5rem 0;
+    max-width: 38ch;
+    margin-left: auto;
+    text-shadow: 0 2px 24px rgba(14, 12, 10, 0.75);
+}
+
+.hero__cta {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* scroll indicator — moved to left so it doesn't collide with the right-aligned text */
+.hero__scroll {
+    position: absolute;
+    left: var(--gutter);
+    bottom: clamp(2rem, 5vw, 3rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: var(--ink-mute);
+    z-index: 1;
+    opacity: 0.75;
+}
+.hero__scroll-line {
+    width: 1px;
+    height: 48px;
+    background: linear-gradient(to bottom, var(--ink-mute), transparent);
+    position: relative;
+    overflow: hidden;
+}
+.hero__scroll-line::after {
+    content: "";
+    position: absolute;
+    top: -48px;
+    left: 0;
+    width: 1px;
+    height: 48px;
+    background: linear-gradient(to bottom, transparent, var(--nod-orange));
+    animation: scroll-hint 2.2s var(--ease-in-out) infinite;
+}
+@keyframes scroll-hint {
+    0% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(96px);
+    }
+}
+
+/* =====================================================================
+   BUTTONS
+   ===================================================================== */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.9rem 1.6rem;
+    border-radius: 999px;
+    font-weight: 500;
+    font-size: 0.98rem;
+    letter-spacing: 0.01em;
+    transition:
+        transform 0.25s var(--ease-out-soft),
+        background 0.25s var(--ease-out-soft),
+        color 0.25s var(--ease-out-soft),
+        box-shadow 0.25s var(--ease-out-soft);
+    white-space: nowrap;
+    will-change: transform;
+}
+.btn:hover {
+    transform: translateY(-1px);
+}
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn--primary {
+    background: var(--nod-orange);
+    color: var(--bg);
+    box-shadow: 0 10px 32px -10px rgba(217, 122, 58, 0.55);
+}
+.btn--primary:hover {
+    background: var(--nod-orange-soft);
+    box-shadow: 0 14px 40px -10px rgba(217, 122, 58, 0.7);
+}
+
+.btn--ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--hairline-strong);
+}
+.btn--ghost:hover {
+    color: var(--ink);
+    border-color: var(--nod-orange);
+}
+
+/* Ghost buttons on the cream paper need inverted colors for contrast */
+.paper-sheet .btn--ghost {
+    color: var(--ink-warm);
+    border-color: var(--rule-warm-strong);
+}
+.paper-sheet .btn--ghost:hover {
+    color: var(--ink-warm);
+    border-color: var(--nod-orange-deep);
+    background: rgba(217, 122, 58, 0.06);
+}
+.paper-sheet .btn__arrow {
+    color: var(--nod-orange-deep);
+}
+
+.btn__arrow {
+    transition: transform 0.25s var(--ease-out-soft);
+    color: var(--nod-orange);
+    font-weight: 400;
+}
+.btn:hover .btn__arrow {
+    transform: translateX(3px);
+}
+
+.cta-row {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+/* =====================================================================
+   PAPER TYPE SCOPE — all sections inside .paper-sheet get warm ink
+   ===================================================================== */
+.paper-sheet .display {
+    color: var(--ink-warm);
+}
+.paper-sheet .display em {
+    color: var(--nod-orange-deep);
+}
+.paper-sheet .body p {
+    color: var(--ink-warm-soft);
+}
+.paper-sheet .eyebrow {
+    color: var(--nod-orange-deep);
+}
+.paper-sheet .eyebrow::before {
+    background: var(--nod-orange-deep);
+}
+.paper-sheet ::selection {
+    background: var(--nod-orange-deep);
+    color: var(--paper);
+}
+
+/* =====================================================================
+   SECTION: LISTENING
+   ===================================================================== */
+
+.split {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: clamp(2rem, 6vw, 5rem);
+    align-items: start;
+    margin-top: 2rem;
+}
+.split__body p {
+    font-size: var(--fs-body-lg);
+    color: var(--ink-soft);
+    line-height: 1.65;
+    margin: 0 0 1.1rem;
+    max-width: 42ch;
+}
+.split__body p:last-child {
+    margin-bottom: 0;
+}
+
+.pull {
+    position: relative;
+    margin: 0;
+    padding: 1.5rem 0 1.5rem 1.75rem;
+    border-left: 2px solid var(--nod-orange-deep);
+    font-family: var(--font-serif);
+}
+.pull p {
+    font-size: var(--fs-pull);
+    line-height: 1.35;
+    color: var(--ink-warm);
+    margin: 0 0 1rem;
+    font-style: italic;
+}
+.pull cite {
+    font-family: var(--font-sans);
+    font-style: normal;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-warm-mute);
+}
+.split__body p {
+    color: var(--ink-warm-soft);
+}
+
+@media (max-width: 760px) {
+    .split {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =====================================================================
+   SECTION: ON-DEVICE
+   ===================================================================== */
+.section--ondevice {
+    position: relative;
+}
+/* painted corner warmth — warm tangerine wash behind the heading */
+.section--ondevice::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 55%;
+    height: 55%;
+    background: radial-gradient(
+        ellipse at top right,
+        rgba(217, 122, 58, 0.14),
+        transparent 65%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+.section--ondevice > .container {
+    position: relative;
+    z-index: 1;
+}
+
+.facts {
+    list-style: none;
+    padding: 0;
+    margin: 4rem 0 0;
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--rule-warm);
+    position: relative;
+}
+.facts li {
+    display: grid;
+    grid-template-columns: minmax(180px, 22%) minmax(180px, 28%) 1fr;
+    gap: 2rem;
+    align-items: baseline;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--rule-warm);
+    transition: background 0.3s var(--ease-out-soft);
+}
+.facts li:hover {
+    background: rgba(42, 38, 32, 0.04);
+}
+.facts__key {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-warm-mute);
+}
+.facts__val {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.35rem;
+    color: var(--nod-orange-deep);
+    line-height: 1.2;
+}
+.facts__note {
+    color: var(--ink-warm-soft);
+    font-size: 0.98rem;
+    line-height: 1.55;
+    max-width: 60ch;
+}
+@media (max-width: 760px) {
+    .facts li {
+        grid-template-columns: 1fr;
+        gap: 0.4rem;
+        padding: 1.25rem 0;
+    }
+}
+
+/* =====================================================================
+   SECTION: OPEN SOURCE
+   ===================================================================== */
+.section--source {
+    position: relative;
+}
+.section--source::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: var(--rule-warm);
+}
+
+/* =====================================================================
+   SECTION: JUST NOD (the button showcase)
+   ===================================================================== */
+.section--nod {
+    text-align: center;
+    position: relative;
+}
+.section--nod::before,
+.section--nod::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--rule-warm);
+}
+.section--nod::before {
+    top: 0;
+}
+.section--nod::after {
+    bottom: 0;
+}
+/* warm glow behind the floating face */
+.nod-demo::before {
+    content: "";
+    position: absolute;
+    inset: -60%;
+    background: radial-gradient(
+        circle,
+        rgba(217, 122, 58, 0.22),
+        transparent 60%
+    );
+    z-index: -1;
+    pointer-events: none;
+}
+
+.section--nod .eyebrow,
+.section--nod .display {
+    margin-left: auto;
+    margin-right: auto;
+}
+.section--nod .display {
+    text-align: center;
+    max-width: 26ch;
+}
+.section--nod .body {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+.section--nod .body p {
+    max-width: 56ch;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.nod-demo {
+    margin: 4rem auto 0;
+    width: 200px;
+    height: 200px;
+    border-radius: 46px;
+    background: var(--nod-orange);
+    display: grid;
+    place-items: center;
+    position: relative;
+    box-shadow:
+        0 30px 80px -20px rgba(217, 122, 58, 0.45),
+        0 0 0 1px rgba(245, 239, 230, 0.06);
+    animation: nod-breathe 4.5s var(--ease-in-out) infinite;
+}
+.nod-demo__caption {
+    position: absolute;
+    top: calc(100% + 1.75rem);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.25rem;
+    color: var(--ink-warm-soft);
+    margin: 0;
+    white-space: nowrap;
+    letter-spacing: 0.002em;
+}
+/* give the section extra bottom room for the caption */
+.section--nod {
+    padding-bottom: calc(var(--space-section) + 2rem);
+}
+.nod-face {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+}
+.nod-face__eye {
+    width: 32px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--eye, #1a1612);
+    position: relative;
+    animation: nod-blink 4.5s var(--ease-in-out) infinite;
+}
+.nod-face__eye::after {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 18px;
+    width: 5px;
+    height: 5px;
+    background: var(--ink);
+    border-radius: 50%;
+}
+@keyframes nod-blink {
+    0%,
+    88%,
+    100% {
+        transform: scaleY(1);
+    }
+    92% {
+        transform: scaleY(0.05);
+    }
+    96% {
+        transform: scaleY(1);
+    }
+}
+@keyframes nod-breathe {
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+    50% {
+        transform: translateY(-6px) scale(1.015);
+    }
+}
+
+/* =====================================================================
+   SECTION: DOWNLOAD — center-aligned final CTA
+   ===================================================================== */
+.section--download {
+    position: relative;
+    text-align: center;
+}
+.section--download::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: var(--rule-warm);
+}
+.section--download::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 55%;
+    background: radial-gradient(
+        ellipse 55% 100% at 50% 0%,
+        rgba(217, 122, 58, 0.16),
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+.section--download > .container {
+    position: relative;
+    z-index: 1;
+}
+.section--download .eyebrow,
+.section--download .display {
+    margin-left: auto;
+    margin-right: auto;
+}
+.section--download .display {
+    text-align: center;
+    max-width: 28ch;
+}
+.section--download .body {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+.section--download .body p {
+    max-width: 52ch;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.download-box {
+    margin: 3rem auto 0;
+    padding: 2.25rem 2.5rem;
+    border-radius: 22px;
+    background: var(--paper-deep);
+    border: 1px solid var(--rule-warm-strong);
+    box-shadow: 0 20px 50px -28px rgba(42, 38, 32, 0.25);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 520px;
+}
+
+.appstore-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.85rem 1.6rem 0.85rem 1.25rem;
+    background: var(--ink-warm);
+    color: var(--paper);
+    border-radius: 12px;
+    transition:
+        transform 0.25s var(--ease-out-soft),
+        background 0.25s;
+}
+.appstore-btn:hover {
+    transform: translateY(-2px);
+    background: #000;
+}
+.appstore-btn__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    text-align: left;
+}
+.appstore-btn__text small {
+    font-size: 0.68rem;
+    opacity: 0.72;
+    margin-bottom: 2px;
+    letter-spacing: 0.01em;
+}
+.appstore-btn__text strong {
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.download-box__meta {
+    font-size: 0.92rem;
+    color: var(--ink-warm-soft);
+    line-height: 1.6;
+    margin: 0;
+    text-align: center;
+}
+
+/* =====================================================================
+   FOOTER
+   ===================================================================== */
+.footer {
+    padding: 3rem 0 2.5rem;
+    border-top: 1px solid var(--rule-warm);
+    position: relative;
+}
+.footer__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+}
+.footer__brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.footer__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+}
+.footer__tag {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.1rem;
+    color: var(--ink-warm-soft);
+    margin: 0;
+}
+.footer__links {
+    display: flex;
+    gap: 1.75rem;
+    font-size: 0.92rem;
+}
+.footer__links a {
+    color: var(--ink-warm-soft);
+    transition: color 0.2s;
+}
+.footer__links a:hover {
+    color: var(--nod-orange-deep);
+}
+.footer__fine {
+    font-size: 0.8rem;
+    color: var(--ink-warm-mute);
+    margin: 0;
+    letter-spacing: 0.02em;
+}
+
+/* =====================================================================
+   SCROLL REVEAL
+   ===================================================================== */
+[data-reveal] > .container > * {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+        opacity 0.9s var(--ease-out-soft),
+        transform 0.9s var(--ease-out-soft);
+}
+[data-reveal].is-in > .container > * {
+    opacity: 1;
+    transform: none;
+}
+[data-reveal].is-in > .container > :nth-child(2) {
+    transition-delay: 0.08s;
+}
+[data-reveal].is-in > .container > :nth-child(3) {
+    transition-delay: 0.16s;
+}
+[data-reveal].is-in > .container > :nth-child(4) {
+    transition-delay: 0.24s;
+}
+[data-reveal].is-in > .container > :nth-child(5) {
+    transition-delay: 0.32s;
+}
+
+/* respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    html {
+        scroll-behavior: auto;
+    }
+    [data-reveal] > .container > * {
+        opacity: 1;
+        transform: none;
+    }
+    .hero__video {
+        display: none;
+    }
+    .hero {
+        background-image: url("/assets/hero/desktop.png");
+        background-size: cover;
+        background-position: center;
+    }
+}
+
+/* =====================================================================
+   RESPONSIVE
+   ===================================================================== */
+@media (max-width: 640px) {
+    .hero {
+        padding: 5rem 1.25rem 2.5rem;
+        place-items: end stretch; /* full width instead of right-aligned */
+    }
+    .hero__content {
+        max-width: 100%;
+        text-align: left;
+        padding-left: 0;
+    }
+    .hero__title {
+        margin-bottom: 1.2rem;
+        line-height: 1.02;
+    }
+    .hero__sub {
+        font-size: 1.02rem;
+        margin: 0 0 1.8rem 0;
+        max-width: 32ch;
+    }
+    .hero__scroll {
+        display: none;
+    }
+    .hero__cta {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+    }
+    .hero__cta .btn {
+        justify-content: center;
+    }
+
+    .footer__row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .download-box {
+        padding: 1.75rem;
+    }
+}
+
+/* =====================================================================
+   LEGAL PAGES — /privacy and /terms
+   A simple, readable layout for long-form text on the paper sheet.
+   ===================================================================== */
+.legal-page .page-header {
+    padding: clamp(5rem, 10vw, 8rem) 0 clamp(2rem, 4vw, 3rem);
+    border-bottom: 1px solid var(--rule-warm);
+    position: relative;
+    z-index: 1;
+}
+.legal-page .page-header .back-link {
+    font-size: 0.82rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-warm-mute);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 2rem;
+    transition: color 0.2s;
+}
+.legal-page .page-header .back-link:hover {
+    color: var(--nod-orange-deep);
+}
+.legal-page .page-header h1 {
+    font-family: var(--font-serif);
+    font-weight: 350;
+    font-variation-settings:
+        "opsz" 96,
+        "SOFT" 50;
+    font-size: clamp(2.2rem, 5vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.8rem;
+    color: var(--ink-warm);
+}
+.legal-page .page-header .meta {
+    font-size: 0.92rem;
+    color: var(--ink-warm-mute);
+    margin: 0;
+}
+
+.legal-page .prose {
+    padding: clamp(3rem, 6vw, 5rem) 0 clamp(5rem, 10vw, 8rem);
+    position: relative;
+    z-index: 1;
+}
+/* Tighter reading width on legal pages — 680px reads better for long text */
+.legal-page .container--narrow {
+    max-width: 680px;
+}
+.legal-page .prose h2 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 1.6rem;
+    line-height: 1.3;
+    color: var(--ink-warm);
+    margin: 3rem 0 1rem;
+    letter-spacing: -0.005em;
+}
+.legal-page .prose h2:first-child {
+    margin-top: 0;
+}
+.legal-page .prose h3 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 1.02rem;
+    color: var(--ink-warm);
+    margin: 2rem 0 0.6rem;
+    letter-spacing: 0.005em;
+}
+.legal-page .prose p,
+.legal-page .prose ul,
+.legal-page .prose ol {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--ink-warm-soft);
+    margin: 0 0 1.1rem;
+}
+.legal-page .prose ul,
+.legal-page .prose ol {
+    padding-left: 1.4rem;
+}
+.legal-page .prose li {
+    margin: 0.3rem 0;
+}
+.legal-page .prose a {
+    color: var(--nod-orange-deep);
+    border-bottom: 1px solid rgba(168, 90, 40, 0.3);
+    transition: border-color 0.2s;
+}
+.legal-page .prose a:hover {
+    border-bottom-color: var(--nod-orange-deep);
+}
+.legal-page .prose strong {
+    color: var(--ink-warm);
+    font-weight: 600;
+}
+.legal-page .prose code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    background: rgba(42, 38, 32, 0.08);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+}
+.legal-page .prose .callout {
+    margin: 1.75rem 0;
+    padding: 1.1rem 1.4rem;
+    border-left: 3px solid var(--nod-orange-deep);
+    background: rgba(217, 122, 58, 0.06);
+    border-radius: 0 6px 6px 0;
+    color: var(--ink-warm);
+}
+.legal-page .prose .callout p:last-child {
+    margin-bottom: 0;
+}
