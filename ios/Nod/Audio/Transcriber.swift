@@ -80,6 +80,11 @@ final class Transcriber: ObservableObject {
         isListening = false
     }
 
+    /// Clears the last error so UI alerts can dismiss and reset state.
+    func clearError() {
+        self.error = nil
+    }
+
     private func startAudioEngine(with recognizer: SFSpeechRecognizer) throws {
         let engine = AVAudioEngine()
         let req = SFSpeechAudioBufferRecognitionRequest()

@@ -21,6 +21,7 @@ import SwiftUI
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
+    @StateObject private var transcriber = Transcriber()
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
@@ -107,6 +108,28 @@ struct ChatView: View {
                         }
                     }
             )
+            // Dictation → input field sync. When Transcriber updates its
+            // transcript, mirror it into inputText so the user sees what
+            // they're saying as they speak (and can edit before sending).
+            .onChange(of: transcriber.transcript) { _, newTranscript in
+                if transcriber.isListening {
+                    inputText = newTranscript
+                }
+            }
+            // Surface permission / locale errors from the Transcriber. The
+            // TranscriberError localizedDescription is user-facing and
+            // actionable ("Open Settings to enable").
+            .alert(
+                "Dictation Error",
+                isPresented: Binding(
+                    get: { transcriber.error != nil },
+                    set: { if !$0 { transcriber.clearError() } }
+                )
+            ) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(transcriber.error?.localizedDescription ?? "")
+            }
         }
     }
 
@@ -137,7 +160,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Type what's on your mind…", text: $inputText, axis: .vertical)
+            TextField("Type or tap the mic…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
@@ -147,10 +170,22 @@ struct ChatView: View {
                 .focused($inputFocused)
                 .accessibilityLabel("Message")
 
-            // "Just nod" button: lets the user get a silent acknowledgment
-            // without typing. Always enabled — sometimes you don't have
-            // words, you just want Nod to nod. Independent of send so it
-            // works whether the input is empty or not.
+            // Mic: toggle on-device dictation. Transcript streams into the
+            // input field as you speak; edit before sending if needed.
+            // Uses SFSpeechRecognizer with requiresOnDeviceRecognition = true
+            // so nothing leaves the phone (P5).
+            Button {
+                toggleDictation()
+            } label: {
+                Image(systemName: transcriber.isListening ? "mic.fill" : "mic")
+                    .font(.title)
+                    .foregroundStyle(transcriber.isListening ? Color("NodAccent") : .secondary)
+            }
+            .accessibilityLabel(transcriber.isListening ? "Stop dictation" : "Dictate message")
+
+            // "Just nod" button: a silent acknowledgment without typing.
+            // Always enabled — sometimes you don't have words, you just
+            // want Nod to nod.
             Button {
                 justNod()
             } label: {
@@ -177,6 +212,11 @@ struct ChatView: View {
     }
 
     private func sendMessage() {
+        // Stop any in-flight dictation so the transcript stops updating
+        // after the user commits the message.
+        if transcriber.isListening {
+            transcriber.stop()
+        }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         inputText = ""
@@ -186,10 +226,30 @@ struct ChatView: View {
     }
 
     private func justNod() {
+        // Tapping just-nod also stops dictation — the user is opting out of
+        // a worded response entirely.
+        if transcriber.isListening {
+            transcriber.stop()
+        }
         store.append(Message(role: .nod))
         triggerNod()
         let haptic = UIImpactFeedbackGenerator(style: .medium)
         haptic.impactOccurred()
+    }
+
+    /// Toggle dictation on or off. Stops if currently listening; starts
+    /// otherwise. iOS will prompt for mic + speech permissions on first use
+    /// (usage strings live in Info.plist).
+    private func toggleDictation() {
+        if transcriber.isListening {
+            transcriber.stop()
+        } else {
+            // Dismiss the keyboard so the user knows the mic took over.
+            inputFocused = false
+            Task {
+                await transcriber.start()
+            }
+        }
     }
 
     private func triggerNod() {
