@@ -27,6 +27,10 @@ struct ChatView: View {
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     @State private var showingSidebar: Bool = false
+    /// Controls the "Pause download?" alert triggered by Cancel on the
+    /// downloading card. Splitting it into its own state avoids races
+    /// where a fast-fingered user could double-tap.
+    @State private var showingCancelDownloadAlert: Bool = false
     // The ID of the bottom-most fully-visible message. Bound to the
     // ScrollView via .scrollPosition. When user scrolls manually, this
     // updates; we use it to decide whether auto-scroll should follow new
@@ -160,6 +164,20 @@ struct ChatView: View {
                     UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 }
             }
+            // "Pause download?" confirmation. Default action is "Keep
+            // downloading" (safer on accidental tap). "Pause" is .cancel
+            // role (not .destructive) because Pause is genuinely
+            // reversible — resume data is persisted and the user can
+            // resume whenever. Destructive-red would miscommunicate.
+            .alert("Pause download?", isPresented: $showingCancelDownloadAlert) {
+                Button("Keep downloading", role: nil) { }
+                Button("Pause", role: .cancel) {
+                    engineHolder.cancelQwenDownload()
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                }
+            } message: {
+                Text("Your progress is saved — you can resume anytime.")
+            }
             // Keep the screen awake while Qwen is mid-download or mid-load.
             // A foreground URLSession dies when iOS suspends the app after
             // screen lock, and a 2 GB model takes 5+ minutes — a default
@@ -169,10 +187,14 @@ struct ChatView: View {
             // the model is ready or the transfer fails, so we don't drain
             // the battery during normal chat.
             .onChange(of: engineHolder.qwenLoadState) { _, newValue in
+                // Keep the screen awake while bytes are actively moving OR
+                // MLX is loading. In waiting/paused states the download
+                // isn't progressing, so a sleeping screen costs us nothing.
                 switch newValue {
                 case .downloading, .loading:
                     UIApplication.shared.isIdleTimerDisabled = true
-                case .ready, .failed, .notLoaded:
+                case .ready, .failed, .notLoaded,
+                     .waitingForNetwork, .waitingForWifi, .paused:
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
             }
@@ -347,31 +369,56 @@ struct ChatView: View {
     }
 
     // MARK: - Qwen readiness bar
-
+    //
+    // All download-ish states reuse the same `readinessCard` chrome —
+    // only headers, metadata, and actions vary. The state taxonomy:
+    //
+    //   .downloading(m)           → animated bar, live bytes/speed/ETA, Cancel
+    //   .waitingForNetwork(m)     → frozen bar, "we'll pick up when you're online", Cancel
+    //   .waitingForWifi(m)        → frozen bar, "Use cellular this time" + Cancel
+    //   .paused(m)                → frozen bar, centered [Resume download] button
+    //   .loading                  → spinner + "Loading Qwen into memory…"
+    //   .failed(msg)              → typed error title + body + Try again
+    //   .notLoaded / .ready       → card hidden
+    //
+    // Variant B layout: stacked hierarchy. Bytes get their own line
+    // (the primary "how far along am I" signal). Speed + ETA share the
+    // second metadata line in secondary. Cancel is bottom-right, plain
+    // text, not a button.
     @ViewBuilder
     private var qwenReadinessBar: some View {
         switch engineHolder.qwenLoadState {
         case .notLoaded, .ready:
             EmptyView()
 
-        case .downloading(let fraction):
+        case .downloading(let metrics):
             readinessCard {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Downloading Qwen…")
-                            .font(.subheadline.weight(.medium))
-                        Spacer()
-                        Text("\(Int(fraction * 100))%")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    ProgressView(value: fraction)
-                        .tint(Color("NodAccent"))
-                    Text("Nod runs the AI on your device. This one-time download is ~2.3 GB — keep the app open and your phone plugged in if possible.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                downloadingCardContent(metrics: metrics, isActive: true)
+            }
+
+        case .waitingForNetwork(let metrics):
+            readinessCard {
+                waitingCardContent(
+                    metrics: metrics,
+                    header: "Waiting for the network…",
+                    body: "We'll pick up when you're back online.",
+                    showCellularLink: false
+                )
+            }
+
+        case .waitingForWifi(let metrics):
+            readinessCard {
+                waitingCardContent(
+                    metrics: metrics,
+                    header: "Waiting for Wi-Fi…",
+                    body: "Nod will continue when you're back on Wi-Fi.",
+                    showCellularLink: true
+                )
+            }
+
+        case .paused(let metrics):
+            readinessCard {
+                pausedCardContent(metrics: metrics)
             }
 
         case .loading:
@@ -402,6 +449,183 @@ struct ChatView: View {
                 }
             }
         }
+    }
+
+    /// Active downloading card: live bytes + speed + ETA + Cancel.
+    @ViewBuilder
+    private func downloadingCardContent(metrics: DownloadMetrics, isActive: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Downloading Qwen…")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(Int(metrics.fraction * 100))%")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+
+            // Line 1: byte count — the primary "how far along" signal.
+            Text(formatByteProgress(written: metrics.bytesWritten,
+                                     total: metrics.totalBytes))
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+
+            // Line 2: speed · ETA (caption secondary). Hidden until we
+            // have a stable rate reading; otherwise we'd show "0 MB/s"
+            // for the first second which looks like something's wrong.
+            if isActive, let subtitle = formatSpeedAndETA(metrics: metrics) {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            // Cancel link. Plain text, right-aligned. Pressing it opens
+            // the "Pause download?" confirmation alert rather than
+            // cancelling immediately.
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    showingCancelDownloadAlert = true
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Waiting-for-something card. Same chrome as downloading, bar frozen,
+    /// rate/ETA line hidden. Optionally shows "Use cellular this time".
+    @ViewBuilder
+    private func waitingCardContent(
+        metrics: DownloadMetrics,
+        header: String,
+        body: String,
+        showCellularLink: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(header)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+            }
+
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+
+            Text(formatByteProgress(written: metrics.bytesWritten,
+                                     total: metrics.totalBytes))
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+
+            Text(body)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                if showCellularLink {
+                    Button("Use cellular this time") {
+                        engineHolder.useCellularThisTime()
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(Color("NodAccent"))
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Button("Cancel") {
+                    showingCancelDownloadAlert = true
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Paused card: user tapped Cancel earlier; resume data on disk.
+    /// Presents a filled [Resume download] button, centered, NodAccent
+    /// fill — a positive action deserves visual weight that a link wouldn't.
+    @ViewBuilder
+    private func pausedCardContent(metrics: DownloadMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Qwen download paused")
+                .font(.subheadline.weight(.medium))
+
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+
+            Text("\(formatByteProgress(written: metrics.bytesWritten, total: metrics.totalBytes)) downloaded")
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button {
+                    engineHolder.resumeQwenDownload()
+                } label: {
+                    Text("Resume download")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(Color("NodAccent"))
+                        .foregroundStyle(.black)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    // MARK: - Download formatters
+
+    /// "721 MB of 2.3 GB". Uses ByteCountFormatter in the friendlier
+    /// decimal style (MB, GB) rather than binary (MiB, GiB) because that
+    /// matches Apple's own App Store / iCloud sizing copy.
+    private func formatByteProgress(written: Int64, total: Int64) -> String {
+        let f = ByteCountFormatter()
+        f.countStyle = .file
+        f.allowedUnits = [.useMB, .useGB]
+        f.includesUnit = true
+        return "\(f.string(fromByteCount: written)) of \(f.string(fromByteCount: total))"
+    }
+
+    /// "3.4 MB/s · about 8 min remaining". Returns nil when we don't have
+    /// stable data yet — the caller then shows only the byte-count line.
+    private func formatSpeedAndETA(metrics: DownloadMetrics) -> String? {
+        let rate = metrics.bytesPerSecond
+        guard rate > 0 else { return nil }
+
+        let rateFormatter = ByteCountFormatter()
+        rateFormatter.countStyle = .file
+        rateFormatter.allowedUnits = [.useKB, .useMB]
+        rateFormatter.includesUnit = true
+        let rateString = "\(rateFormatter.string(fromByteCount: Int64(rate)))/s"
+
+        guard let seconds = metrics.secondsRemaining, seconds.isFinite, seconds > 0 else {
+            return rateString
+        }
+
+        let etaString: String
+        if seconds < 60 {
+            etaString = "less than a minute remaining"
+        } else if seconds < 3600 {
+            let minutes = Int((seconds / 60).rounded())
+            etaString = "about \(minutes) min remaining"
+        } else {
+            let hours = Int((seconds / 3600).rounded())
+            etaString = "about \(hours) hr remaining"
+        }
+        return "\(rateString)  ·  \(etaString)"
     }
 
     /// Shared card chrome for the readiness states so we only edit one place

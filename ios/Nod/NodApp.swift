@@ -10,6 +10,12 @@ import SwiftUI
 @main
 struct NodApp: App {
 
+    // SwiftUI's bridge to UIApplicationDelegate. We use this ONLY so iOS
+    // can hand us the background URLSession completion handler via the
+    // AppDelegate's application(_:handleEvents...:). Everything else stays
+    // in the SwiftUI lifecycle.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // MLX's GPU buffer cache is the silent memory hog on iOS. By default
         // it's allowed to grow to ~1 GB alongside model weights, which on a

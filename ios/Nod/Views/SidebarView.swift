@@ -63,6 +63,23 @@ struct SidebarView: View {
                     Text("Nod runs the AI on your device — nothing is sent to a server. Switching keeps your conversation intact.")
                 }
 
+                // Downloads section: only relevant for Qwen (AFM doesn't
+                // download), but we show it always because the alternative
+                // (conditional reveal) makes the setting feel hidden.
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { engineHolder.cellularAllowed },
+                        set: { engineHolder.cellularAllowed = $0 }
+                    )) {
+                        Label("Download over cellular", systemImage: "antenna.radiowaves.left.and.right")
+                    }
+                    .tint(Color("NodAccent"))
+                } header: {
+                    Text("Downloads")
+                } footer: {
+                    Text("Nod needs Wi-Fi to download the ~2.3 GB Qwen model. Turn this on to allow cellular data.")
+                }
+
                 Section {
                     Toggle(isOn: $appLock.isEnabled) {
                         Label("Require Face ID", systemImage: "faceid")

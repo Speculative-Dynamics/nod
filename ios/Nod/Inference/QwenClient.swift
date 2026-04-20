@@ -35,25 +35,30 @@ private let log = Logger(subsystem: "app.usenod.nod", category: "qwen.client")
 actor QwenClient: ListeningEngine {
 
     /// What the engine is doing right now, for the UI.
+    ///
+    /// The four "progress-ish" cases all carry `DownloadMetrics` so the UI
+    /// can render the same card chrome with different headers and frozen
+    /// state: .downloading animates, .waitingForNetwork / .waitingForWifi
+    /// show the last known progress with the bar frozen and rate nulled,
+    /// .paused waits for a Resume tap.
     enum State: Equatable, Sendable {
         case notLoaded
-        case downloading(fractionCompleted: Double)
+        case downloading(DownloadMetrics)
+        /// No connectivity at all (airplane mode, no Wi-Fi, no cellular).
+        /// URLSession's `waitsForConnectivity` puts the request into this
+        /// state automatically.
+        case waitingForNetwork(DownloadMetrics)
+        /// Cellular download is disallowed by the user's preference, and
+        /// the current path is cellular. Shows "Waiting for Wi-Fi…" with
+        /// a "Use cellular this time" one-shot escape hatch.
+        case waitingForWifi(DownloadMetrics)
+        /// User tapped Cancel. Resume data persisted to disk; UI offers a
+        /// Resume button. Distinct from .notLoaded because there's real
+        /// partial progress to preserve in the UI.
+        case paused(DownloadMetrics)
         case loading
         case ready
         case failed(String)
-
-        static func == (lhs: State, rhs: State) -> Bool {
-            switch (lhs, rhs) {
-            case (.notLoaded, .notLoaded), (.loading, .loading), (.ready, .ready):
-                return true
-            case (.downloading(let a), .downloading(let b)):
-                return a == b
-            case (.failed(let a), .failed(let b)):
-                return a == b
-            default:
-                return false
-            }
-        }
     }
 
     private(set) var state: State = .notLoaded
@@ -103,7 +108,7 @@ actor QwenClient: ListeningEngine {
         string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3-4b-instruct-2507/v1"
     )!
 
-    private static let r2Files: [QwenR2Downloader.FileSpec] = [
+    private static let r2Files: [FileSpec] = [
         .init(name: "config.json",
               sha256: "574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849",
               size: 938),
@@ -225,21 +230,49 @@ actor QwenClient: ListeningEngine {
         setState(.notLoaded)
     }
 
+    // MARK: - User-facing controls
+
+    /// Pause the active download. The background session persists resume
+    /// data to disk and transitions to .paused. A later `prepare()` call
+    /// resumes from the same spot. Safe to call if nothing is downloading.
+    func cancelDownload() async {
+        await QwenR2BackgroundSession.shared.cancelAndPersistResume()
+        loadingTask?.cancel()
+        loadingTask = nil
+    }
+
+    /// Resume a previously paused download. Equivalent to calling
+    /// `prepare()` — the session reads persisted resume data on its own.
+    func resumeDownload() async throws {
+        try await prepare()
+    }
+
+    /// One-shot override: allow cellular for THIS run only. Doesn't touch
+    /// the persistent preference. The UI exposes this via "Use cellular
+    /// this time" on the .waitingForWifi card.
+    func useCellularThisTime() async {
+        await QwenR2BackgroundSession.shared.useCellularThisTime()
+    }
+
     private func performLoad() async throws {
         do {
             // Phase 1: fetch + verify the weight files from our R2 bucket.
             // `ensureLocalFiles` is a no-op for anything already present
             // and size-valid, so relaunches after a successful download
             // skip straight to phase 2.
+            //
+            // The background session observes the download events we
+            // bridge into `applyDownloadEvent` so both the progress UI
+            // and the four waiting/paused states surface through one path.
             let modelDir = Self.modelDirectoryURL()
 
-            try await QwenR2Downloader.ensureLocalFiles(
+            try await QwenR2BackgroundSession.shared.ensureLocalFiles(
                 baseURL: Self.r2BaseURL,
                 files: Self.r2Files,
                 destinationDir: modelDir,
-                progress: { [weak self] fraction in
+                on: { [weak self] event in
                     guard let self else { return }
-                    Task { await self.updateDownloadProgress(fraction) }
+                    Task { await self.applyDownloadEvent(event) }
                 }
             )
             try Task.checkCancellation()
@@ -265,6 +298,11 @@ actor QwenClient: ListeningEngine {
             // URLSession-level cancellation — fires when our loadingTask
             // is cancelled mid-download. NOT a failure; treat as notLoaded.
             setState(.notLoaded)
+            throw CancellationError()
+        } catch DownloadError.canceledByUser {
+            // User tapped Cancel. The session already emitted .paused via
+            // the event stream, so state is already in .paused(...). Don't
+            // overwrite with .failed — this isn't a failure.
             throw CancellationError()
         } catch {
             let mapped = Self.mapDownloadError(error)
@@ -295,12 +333,33 @@ actor QwenClient: ListeningEngine {
         return error
     }
 
-    private func updateDownloadProgress(_ fraction: Double) {
+    /// Called by QwenR2BackgroundSession whenever progress or a
+    /// connectivity-state change needs to surface. Metrics carry the full
+    /// picture (fraction, bytes, speed, ETA). Transitions from a
+    /// progress-ish state map cleanly into one of the four progress
+    /// cases; .ready and .failed are terminal so background-task echoes
+    /// that arrive after the fact are ignored.
+    func applyDownloadEvent(_ event: DownloadEvent) {
         switch state {
-        case .loading, .downloading, .notLoaded:
-            setState(fraction < 1.0 ? .downloading(fractionCompleted: fraction) : .loading)
         case .ready, .failed:
+            return
+        default:
             break
+        }
+
+        switch event {
+        case .progress(let metrics):
+            if metrics.fraction >= 1.0 {
+                setState(.loading)
+            } else {
+                setState(.downloading(metrics))
+            }
+        case .waitingForNetwork(let metrics):
+            setState(.waitingForNetwork(metrics.frozen()))
+        case .waitingForWifi(let metrics):
+            setState(.waitingForWifi(metrics.frozen()))
+        case .paused(let metrics):
+            setState(.paused(metrics.frozen()))
         }
     }
 

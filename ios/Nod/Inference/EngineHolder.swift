@@ -72,6 +72,49 @@ final class EngineHolder: ObservableObject {
         eagerPrepareTask = Task { try? await client.prepare() }
     }
 
+    /// Pause the active Qwen download. Transitions state to .paused(metrics)
+    /// and persists resume data so a later Resume tap picks up where we
+    /// left off. Called by ChatView's Cancel confirmation handler.
+    func cancelQwenDownload() {
+        guard let client = engine as? QwenClient else { return }
+        eagerPrepareTask?.cancel()
+        eagerPrepareTask = nil
+        Task { await client.cancelDownload() }
+    }
+
+    /// Resume a paused download. Called by ChatView's Resume button handler.
+    func resumeQwenDownload() {
+        guard preference == .qwen, let client = engine as? QwenClient else { return }
+        eagerPrepareTask?.cancel()
+        eagerPrepareTask = Task { try? await client.resumeDownload() }
+    }
+
+    /// One-shot cellular override for THIS download attempt. Does not flip
+    /// the persistent `QwenR2BackgroundSession.shared.cellularAllowed`.
+    /// Called by the "Use cellular this time" link on the Waiting-for-Wi-Fi
+    /// card.
+    func useCellularThisTime() {
+        guard let client = engine as? QwenClient else { return }
+        Task { await client.useCellularThisTime() }
+    }
+
+    /// The persistent cellular preference (binding-friendly).
+    /// Flipping this to true un-gates the download immediately if we
+    /// were sitting in .waitingForWifi.
+    var cellularAllowed: Bool {
+        get { QwenR2BackgroundSession.shared.cellularAllowed }
+        set {
+            QwenR2BackgroundSession.shared.cellularAllowed = newValue
+            // Nudge the session to re-evaluate its gate. The path monitor's
+            // pathUpdateHandler won't re-fire unless the path changes, so
+            // a preference flip mid-wait needs an explicit kick.
+            if newValue, case .waitingForWifi = qwenLoadState {
+                useCellularThisTime()
+            }
+            objectWillChange.send()
+        }
+    }
+
     // MARK: - Private
 
     private static func makeEngine(for pref: EnginePreference) -> (any ListeningEngine)? {
