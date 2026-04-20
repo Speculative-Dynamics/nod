@@ -75,11 +75,20 @@ struct SidebarView: View {
                 }
 
                 Section {
-                    Button(role: .destructive) {
+                    // No `role: .destructive` — the red tint didn't match
+                    // the app's muted palette. `.buttonStyle(.plain)` stops
+                    // SwiftUI from tinting the whole Label in the accent
+                    // color (which was what made the text orange); plain
+                    // preserves Label's default "icon=tint, text=primary",
+                    // giving us the orange counterclockwise icon next to
+                    // white text — matching the rest of the sidebar.
+                    // Same pattern as engineRow() above.
+                    Button {
                         showingClearConfirmation = true
                     } label: {
                         Label("Start fresh", systemImage: "arrow.counterclockwise")
                     }
+                    .buttonStyle(.plain)
                 } footer: {
                     Text("Clears every message and Nod's memory of your conversation. This can't be undone.")
                 }

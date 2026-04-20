@@ -25,7 +25,9 @@
 		AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */; };
 		AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0517337BBD8316AD61402BEF /* SidebarView.swift */; };
 		AFEE441085ADE17C5D17D3B5 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 7A8C846974EACAA6C64B06B8 /* MLXLLM */; };
+		C24E2CCA2BCF01FB3AD383D9 /* AppLockOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9F9FCA04E591DBC2EFA635 /* AppLockOverlay.swift */; };
 		C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */; };
+		CDAAAC3781D310A60DC2D9A2 /* AppLockManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */; };
 		D008E54F441E969FAADA8DA7 /* FoundationModelsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */; };
 		D152974FF40E7CF801B96C4B /* prompts in Resources */ = {isa = PBXBuildFile; fileRef = 860580835025DBBB5549C017 /* prompts */; };
 		E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */; };
@@ -36,9 +38,11 @@
 		0D5DAEB03E40D203EEAD3708 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		114CF100E130E7C854FBB3BD /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
+		2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockManager.swift; sourceTree = "<group>"; };
 		420B40291D1B3DE220552641 /* NodApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodApp.swift; sourceTree = "<group>"; };
 		4940AE0F466E23E8BD4994BD /* Nod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Nod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4AFBE124324D42CE1B70ADFB /* EnginePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginePreference.swift; sourceTree = "<group>"; };
+		6B9F9FCA04E591DBC2EFA635 /* AppLockOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockOverlay.swift; sourceTree = "<group>"; };
 		7170DBAA233CDB335396B05B /* QwenClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenClient.swift; sourceTree = "<group>"; };
 		7353A5B91242F165EFCD7D68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
@@ -84,6 +88,7 @@
 		142DF8797B5E19908B032FF6 /* Nod */ = {
 			isa = PBXGroup;
 			children = (
+				226EA1BE819A4CB390415DB3 /* AppLock */,
 				41C8C3B2952D77AA18801C9E /* Inference */,
 				D1E2BD565F3F28214653AD53 /* Preview Content */,
 				DA4D0AD82C039054077B66E7 /* Storage */,
@@ -92,6 +97,15 @@
 				420B40291D1B3DE220552641 /* NodApp.swift */,
 			);
 			path = Nod;
+			sourceTree = "<group>";
+		};
+		226EA1BE819A4CB390415DB3 /* AppLock */ = {
+			isa = PBXGroup;
+			children = (
+				2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */,
+				6B9F9FCA04E591DBC2EFA635 /* AppLockOverlay.swift */,
+			);
+			path = AppLock;
 			sourceTree = "<group>";
 		};
 		41C8C3B2952D77AA18801C9E /* Inference */ = {
@@ -232,6 +246,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDAAAC3781D310A60DC2D9A2 /* AppLockManager.swift in Sources */,
+				C24E2CCA2BCF01FB3AD383D9 /* AppLockOverlay.swift in Sources */,
 				36209BB2C752B19E2900045C /* ChatView.swift in Sources */,
 				AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */,
 				84B43B6993235D12CCED23BE /* EmptyStateView.swift in Sources */,
@@ -261,7 +277,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = NodAccent;
 				CODE_SIGN_ENTITLEMENTS = Nod/Nod.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_ASSET_PATHS = "\"Nod/Preview Content\"";
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
@@ -416,7 +432,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = NodAccent;
 				CODE_SIGN_ENTITLEMENTS = Nod/Nod.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_ASSET_PATHS = "\"Nod/Preview Content\"";
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;

@@ -23,12 +23,10 @@ import os
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
-    @EnvironmentObject private var appLock: AppLockManager
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     @State private var showingSidebar: Bool = false
-    @State private var showingEngineHint: Bool = false
     // The ID of the bottom-most fully-visible message. Bound to the
     // ScrollView via .scrollPosition. When user scrolls manually, this
     // updates; we use it to decide whether auto-scroll should follow new
@@ -41,12 +39,6 @@ struct ChatView: View {
     // same engine instance it hands out serves BOTH listening responses
     // (respond) AND compression summaries (summarize).
     @StateObject private var engineHolder: EngineHolder
-
-    /// One-shot flag so the "double-tap to switch" hint toast only appears
-    /// the very first time an engine actually becomes usable. Sticky across
-    /// launches via UserDefaults — no user wants to see a teaching toast
-    /// every cold boot.
-    @AppStorage("EngineHint.shown") private var engineHintShown: Bool = false
 
     init() {
         let holder = EngineHolder()
@@ -135,25 +127,29 @@ struct ChatView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // Single tap → sidebar. Double tap → engine toggle.
-                    // Stacked .onTapGesture modifiers handle the
-                    // disambiguation correctly: SwiftUI waits for a
-                    // possible second tap before firing the single. A
-                    // Button here would fire its action on EACH tap of a
-                    // double-tap (twice), opening the sidebar twice —
-                    // so we use a tappable plain view instead.
-                    MiniNodFace()
-                        .contentShape(Rectangle())
-                        .accessibilityElement()
-                        .accessibilityLabel("Open menu")
-                        .accessibilityAddTraits(.isButton)
-                        .onTapGesture(count: 2) {
-                            toggleEngine()
-                        }
-                        .onTapGesture(count: 1) {
-                            showingSidebar = true
-                        }
+                    // The mascot opens the sidebar. The tricky part is
+                    // stripping iOS 26's Liquid Glass treatment. That
+                    // treatment is applied at the TOOLBAR ITEM layer —
+                    // NOT the inner Button — which is why
+                    // `.buttonStyle(.plain)` and bare-view/onTapGesture
+                    // approaches both still showed the capsule chrome.
+                    //
+                    // Two things together fix it:
+                    //   1. `.sharedBackgroundVisibility(.hidden)` on the
+                    //      ToolbarItem strips the Liquid Glass capsule.
+                    //      (iOS 26+ API.)
+                    //   2. A zero-state ButtonStyle that ignores
+                    //      configuration.isPressed kills the press-tint
+                    //      flash — the orange "yellow" on tap.
+                    Button {
+                        showingSidebar = true
+                    } label: {
+                        MiniNodFace()
+                    }
+                    .buttonStyle(MascotButtonStyle())
+                    .accessibilityLabel("Open menu")
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showingSidebar) {
                 SidebarView(store: store, engineHolder: engineHolder) {
@@ -164,17 +160,6 @@ struct ChatView: View {
                     UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 }
             }
-            // Engine-switch hint toast. Appears once, ever, after the user
-            // has a second engine available. Dismisses itself after a few
-            // seconds. Pure education; no actions inside.
-            .overlay(alignment: .top) {
-                if showingEngineHint {
-                    engineHintToast
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .padding(.top, 8)
-                }
-            }
-            .animation(.easeInOut(duration: 0.25), value: showingEngineHint)
             // Keep the screen awake while Qwen is mid-download or mid-load.
             // A foreground URLSession dies when iOS suspends the app after
             // screen lock, and a 2 GB model takes 5+ minutes — a default
@@ -189,25 +174,6 @@ struct ChatView: View {
                     UIApplication.shared.isIdleTimerDisabled = true
                 case .ready, .failed, .notLoaded:
                     UIApplication.shared.isIdleTimerDisabled = false
-                }
-                // Piggyback: once Qwen is ready, we know both engines are
-                // available — time to teach the double-tap gesture.
-                if case .ready = newValue {
-                    maybeShowEngineHint()
-                }
-            }
-            .onAppear {
-                // Also check on appear — users on AFM-capable devices
-                // already have two engines usable and never touch Qwen.
-                maybeShowEngineHint()
-            }
-            // When the lock overlay dismisses, re-try the engine hint.
-            // Without this, cold launches with App Lock ON would fire the
-            // toast behind the lock screen, burn the one-shot flag, and
-            // the user would never see the hint.
-            .onChange(of: appLock.isLocked) { _, nowLocked in
-                if !nowLocked {
-                    maybeShowEngineHint()
                 }
             }
             .onDisappear {
@@ -378,62 +344,6 @@ struct ChatView: View {
             return false
         }
         return true
-    }
-
-    // MARK: - Engine hint toast
-
-    private var engineHintToast: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "hand.tap.fill")
-                .font(.subheadline)
-                .foregroundStyle(Color("NodAccent"))
-            Text("Double-tap the face to switch models.")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
-    }
-
-    /// Decide whether to show the one-shot engine-switch hint. Only fires
-    /// when both engines are usable on this device, the app isn't locked,
-    /// and we've never shown it before. Flipping the AppStorage flag is
-    /// deferred until all three are true so an early abort (e.g. locked)
-    /// doesn't burn the one-shot.
-    private func maybeShowEngineHint() {
-        guard !engineHintShown else { return }
-        // Both engines need to be usable for the tip to make sense.
-        let bothAvailable = EnginePreference.apple.isAvailable
-            && EnginePreference.qwen.isAvailable
-        guard bothAvailable else { return }
-        // Don't fire while the lock overlay is covering the screen —
-        // the toast would time out before the user ever sees it.
-        guard !appLock.isLocked else { return }
-
-        engineHintShown = true
-        // Small delay so the toast doesn't collide with other first-launch
-        // animations (splash dismiss, lock overlay unlock).
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(800))
-            showingEngineHint = true
-            try? await Task.sleep(for: .seconds(4))
-            showingEngineHint = false
-        }
-    }
-
-    /// Flip the engine preference to the other usable option. No-op if
-    /// only one engine is available (e.g. low-RAM device without Qwen).
-    private func toggleEngine() {
-        let other: EnginePreference = engineHolder.preference == .apple ? .qwen : .apple
-        guard other.isAvailable else { return }
-        engineHolder.setPreference(other)
-        // Rigid haptic: the switch is consequential, and a firm click
-        // confirms the gesture actually registered (hidden gestures need
-        // louder feedback than visible buttons do).
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
 
     // MARK: - Qwen readiness bar
@@ -699,6 +609,16 @@ struct MessageBubble: View {
                     }
                 }
         }
+    }
+}
+
+// A ButtonStyle that renders its label unchanged on every state — no
+// opacity dim, no scale, no tint shift when pressed. Used for the toolbar
+// mascot so that tapping it doesn't flash the orange NodAccent toward
+// yellow. Intentionally ignores `configuration.isPressed`.
+private struct MascotButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }
 
