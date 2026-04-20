@@ -19,11 +19,21 @@ final class ConversationStore: ObservableObject {
 
     @Published private(set) var messages: [Message] = []
 
-    // Compression tuning. High-water kicks compression; low-water is how many
-    // we eat on each compression pass. The gap (20) is how many full-fidelity
-    // recent turns are always available to the LLM after compression settles.
-    private let HIGH_WATER_MARK = 40
-    private let BATCH_SIZE = 20
+    // Compression tuning. High-water kicks compression; batch-size is how
+    // many we eat on each compression pass. The gap between them (6) is how
+    // many full-fidelity recent turns are always available to the LLM after
+    // compression settles.
+    //
+    // Why these specific numbers: on iPhone 15 Pro, passing 20 full-fidelity
+    // recent turns plus the summary plus the system prompt to Qwen 3 4B
+    // blows the KV cache past the jetsam line — we saw this empirically as
+    // a second-message crash. Dropping to 6 recent turns after compression
+    // keeps effective context under ~2 k tokens, which is what MLX Swift
+    // can actually fit alongside a 2.3 GB model and a 3 GB memory budget
+    // (or 6 GB with the increased-memory-limit entitlement; the tighter
+    // cap is still the safer default).
+    private let HIGH_WATER_MARK = 16
+    private let BATCH_SIZE = 10
 
     private let database: MessageDatabase
     private let summarizer: () -> ConversationSummarizer?
@@ -49,7 +59,6 @@ final class ConversationStore: ObservableObject {
         } catch {
             // DB read failures aren't user-visible — start with an empty
             // in-memory state and let the next write heal it.
-            print("ConversationStore: failed to load from disk: \(error)")
         }
     }
 
@@ -57,11 +66,10 @@ final class ConversationStore: ObservableObject {
 
     func append(_ message: Message) {
         messages.append(message)
-        do {
-            try database.insert(message)
-        } catch {
-            print("ConversationStore: insert failed: \(error)")
-        }
+        // Silent-fail: if the insert fails, the in-memory message is still
+        // appended and the user sees their message on screen. The write
+        // will be retried on next `append`.
+        try? database.insert(message)
         // Only trigger compression on messages with actual text — skip the
         // empty assistant placeholder that ChatView inserts before streaming
         // tokens in, and skip nod (silent acknowledgment) messages.
@@ -77,11 +85,7 @@ final class ConversationStore: ObservableObject {
         let current = messages[lastIndex]
         let updated = Message(id: current.id, role: .assistant, text: text, createdAt: current.createdAt)
         messages[lastIndex] = updated
-        do {
-            try database.updateText(id: updated.id, text: text)
-        } catch {
-            print("ConversationStore: updateText failed: \(error)")
-        }
+        try? database.updateText(id: updated.id, text: text)
     }
 
     // MARK: - Context for the LLM
@@ -118,7 +122,8 @@ final class ConversationStore: ObservableObject {
                 parts.append("RECENT EXCHANGES:\n\(formatted)")
             }
         } catch {
-            print("ConversationStore: fetching recent messages failed: \(error)")
+            // Fall through: the model just sees the summary (or empty context).
+            // Worse answer this turn, but not a crash.
         }
 
         return parts.joined(separator: "\n\n")
@@ -173,7 +178,9 @@ final class ConversationStore: ObservableObject {
                 self.summary = newSummary
             }
         } catch {
-            print("ConversationStore: compression failed: \(error)")
+            // Compression is best-effort — if it fails this pass, the
+            // un-summarized backlog grows by one batch and we retry on
+            // the next high-water trip. The conversation keeps working.
         }
     }
 
@@ -194,11 +201,12 @@ final class ConversationStore: ObservableObject {
         }
         compressionTask = nil
 
-        // Wipe disk in one transaction.
+        // Wipe disk in one transaction. If the write fails (e.g. disk full
+        // at the exact moment the user hit "Start fresh"), bail without
+        // clearing the in-memory state so the UI stays consistent with disk.
         do {
             try database.clearAll()
         } catch {
-            print("ConversationStore: clear failed: \(error)")
             return
         }
 

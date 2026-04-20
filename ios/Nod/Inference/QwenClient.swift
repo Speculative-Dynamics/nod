@@ -12,8 +12,10 @@
 // right starting point; swapping the ModelConfiguration when 3.5 lands is
 // a one-line change.
 //
-// Model weights (~2.3GB) are downloaded on first use via HubApi. EngineHolder
-// observes `makeStateStream()` to drive the download progress UI.
+// Model weights (~2 GB) are downloaded on first use from our Cloudflare R2
+// bucket (not Hugging Face — HF's public endpoints throttle at any real
+// install count). EngineHolder observes `makeStateStream()` to drive the
+// download progress UI. See QwenR2Downloader for the fetch + verify details.
 //
 // Concurrency shape: QwenClient is an actor. The heavy MLX objects
 // (LanguageModel, Tokenizer, KV cache) aren't Sendable, so we keep them
@@ -26,6 +28,9 @@ import Hub
 import MLX
 import MLXLLM
 import MLXLMCommon
+import os
+
+private let log = Logger(subsystem: "app.usenod.nod", category: "qwen.client")
 
 actor QwenClient: ListeningEngine {
 
@@ -68,13 +73,87 @@ actor QwenClient: ListeningEngine {
     /// EngineHolder attaches this to drive the download UI.
     private var stateContinuation: AsyncStream<State>.Continuation?
 
-    /// Model config pinned at type-level. Swap for qwen3.5 family when
-    /// mlx-community publishes a 4-bit build.
-    private static let modelConfig = LLMRegistry.qwen3_4b_4bit
-
     /// Cap generation length. Listening-mode replies are a paragraph at most;
-    /// anything longer is Qwen hallucinating. 500 tokens ~ 350-400 words.
-    private static let maxGenerationTokens = 500
+    /// anything longer is Qwen hallucinating. 250 tokens ~ 175-200 words —
+    /// plenty for a warm 2-3 sentence reflection, and the shorter ceiling
+    /// keeps KV cache growth bounded during generation (every extra token
+    /// is ~100 KB of cache on a 28-layer, 8-KV-head model).
+    private static let maxGenerationTokens = 250
+
+    // MARK: - R2 download source
+    //
+    // Files are re-hosted at a versioned path so we can ship future model
+    // updates without invalidating existing installs. SHA-256 values are
+    // computed once at upload time and pinned here to guarantee bit-
+    // identical weights even if the CDN (or our bucket) is ever tampered
+    // with.
+    //
+    // As of build 18 we're on Qwen 3 4B **Instruct 2507** (July 2025 Alibaba
+    // refresh). Key differences from the original Qwen 3 4B we shipped first:
+    //   - Instruct-only build: no "thinking mode" in the chat template, so
+    //     responses don't begin with `<think>...</think>` reasoning blocks.
+    //     We no longer need the `/no_think` prompt prefix; the defensive
+    //     `stripThinkingBlock` helper stays as a safety net in case Qwen
+    //     ever slips one through anyway.
+    //   - ~3 months newer training data.
+    //   - Ships a separate `chat_template.jinja` that swift-transformers'
+    //     tokenizer loads automatically from the model directory.
+    //   - Includes `generation_config.json` for default sampling params.
+    private static let r2BaseURL = URL(
+        string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3-4b-instruct-2507/v1"
+    )!
+
+    private static let r2Files: [QwenR2Downloader.FileSpec] = [
+        .init(name: "config.json",
+              sha256: "574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849",
+              size: 938),
+        .init(name: "merges.txt",
+              sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+              size: 1_671_853),
+        .init(name: "model.safetensors",
+              sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f",
+              size: 2_263_022_417),
+        .init(name: "model.safetensors.index.json",
+              sha256: "388d811b8b7c2608dd04cce1bcb04a8bf715d19b42790894e6d3427ff429a777",
+              size: 63_964),
+        .init(name: "tokenizer.json",
+              sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+              size: 11_422_654),
+        .init(name: "tokenizer_config.json",
+              sha256: "4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9",
+              size: 5_440),
+        .init(name: "vocab.json",
+              sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+              size: 2_776_833),
+        // Special-token maps. Missing these makes swift-transformers' tokenizer
+        // fopen-fail on `special_tokens_map.json` and under-register Qwen's
+        // ChatML tokens.
+        .init(name: "added_tokens.json",
+              sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
+              size: 707),
+        .init(name: "special_tokens_map.json",
+              sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+              size: 613),
+        // New in 2507: chat template is split out of tokenizer_config.json
+        // into its own jinja file; swift-transformers' tokenizer picks this
+        // up automatically from the model directory.
+        .init(name: "chat_template.jinja",
+              sha256: "40c21f34cf67d8c760ef72f8ad3ae5afad514299d4b06e91dd9a8d705af7b541",
+              size: 4_040),
+        .init(name: "generation_config.json",
+              sha256: "835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48",
+              size: 238),
+    ]
+
+    /// Where the verified model files live after a successful download.
+    /// Application Support keeps them invisible to Files, out of iCloud
+    /// backups, and not evictable like Caches. MLX loads directly from
+    /// here via `loadModelContainer(hub:directory:)`.
+    private static func modelDirectoryURL() -> URL {
+        URL.applicationSupportDirectory
+            .appending(path: "Nod")
+            .appending(path: "Qwen3-4B-4bit")
+    }
 
     init() throws {
         self.listeningPrompt = try Self.loadPrompt(named: "listening_mode")
@@ -148,13 +227,31 @@ actor QwenClient: ListeningEngine {
 
     private func performLoad() async throws {
         do {
-            let loaded = try await loadModelContainer(
-                hub: HubApi(),
-                configuration: Self.modelConfig,
-                progressHandler: { [weak self] progress in
+            // Phase 1: fetch + verify the weight files from our R2 bucket.
+            // `ensureLocalFiles` is a no-op for anything already present
+            // and size-valid, so relaunches after a successful download
+            // skip straight to phase 2.
+            let modelDir = Self.modelDirectoryURL()
+
+            try await QwenR2Downloader.ensureLocalFiles(
+                baseURL: Self.r2BaseURL,
+                files: Self.r2Files,
+                destinationDir: modelDir,
+                progress: { [weak self] fraction in
                     guard let self else { return }
-                    Task { await self.updateDownloadProgress(progress.fractionCompleted) }
+                    Task { await self.updateDownloadProgress(fraction) }
                 }
+            )
+            try Task.checkCancellation()
+
+            setState(.loading)
+
+            // Phase 2: hand MLX a pre-populated directory. Offline mode
+            // stops HubApi from phoning home to Hugging Face for anything
+            // that might appear missing.
+            let loaded = try await loadModelContainer(
+                hub: HubApi(useOfflineMode: true),
+                directory: modelDir
             )
             try Task.checkCancellation()
             self.container = loaded
@@ -171,6 +268,7 @@ actor QwenClient: ListeningEngine {
             throw CancellationError()
         } catch {
             let mapped = Self.mapDownloadError(error)
+            log.error("performLoad: failed \(String(describing: mapped), privacy: .public)")
             setState(.failed(String(describing: mapped)))
             throw mapped
         }
@@ -226,6 +324,11 @@ actor QwenClient: ListeningEngine {
             instructions = listeningPrompt + "\n\n---\n\n" + userContext
         }
 
+        // Qwen 3 Instruct 2507 is an Instruct-only build with no thinking
+        // mode baked into the chat template, so we send the user message
+        // directly. The `stripThinkingBlock` post-processing stays as a
+        // defensive net in case a future model ships with thinking
+        // re-enabled.
         let raw = try await Self.generate(
             container: container,
             instructions: instructions,
@@ -319,11 +422,28 @@ actor QwenClient: ListeningEngine {
 
     // MARK: - Helpers
 
-    /// Qwen 3 emits a `<think>…</think>` block before its user-facing reply
-    /// when thinking mode is on. We want the reply only. Drop anything up
-    /// to and including the closing tag; if there's no tag, return as-is.
+    /// Belt-and-suspenders strip of Qwen's `<think>…</think>` block, even
+    /// if `/no_think` wasn't honored and we end up with one anyway.
+    ///
+    /// Three cases handled:
+    ///   • matched `<think>…</think>` → keep what's after the close
+    ///   • orphan `<think>` with no close (budget ran out mid-think, the
+    ///     exact failure mode we observed) → drop the whole buffer rather
+    ///     than leak raw reasoning to the user
+    ///   • no `<think>` at all → pass through untouched
     private func stripThinkingBlock(_ text: String) -> String {
-        guard let end = text.range(of: "</think>") else { return text }
-        return String(text[end.upperBound...])
+        if let end = text.range(of: "</think>") {
+            return String(text[end.upperBound...])
+        }
+        if text.contains("<think>") {
+            // Everything after an unclosed `<think>` is internal reasoning
+            // we don't want to show. Show only what came before it (usually
+            // nothing, since thinking starts the buffer).
+            if let start = text.range(of: "<think>") {
+                return String(text[..<start.lowerBound])
+            }
+            return ""
+        }
+        return text
     }
 }

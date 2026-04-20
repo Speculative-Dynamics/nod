@@ -35,6 +35,15 @@ fastlane/test_output
 .env.*
 !.env.example
 
+# Local tooling / machine-specific state (belt-and-suspenders: these
+# aren't tracked today, but listing them prevents a future `git add .`
+# from accidentally committing Claude Code settings, Cloudflare Wrangler
+# state, or machine-specific TestFlight export options.
+.claude/
+.wrangler/
+ios/TestFlightExportOptions-local.plist
+ios/background-assets/
+
 # Node (for future website)
 node_modules/
 .next/

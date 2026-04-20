@@ -49,6 +49,7 @@ targets:
       - path: Nod
         excludes:
           - "Info.plist"
+          - "Nod.entitlements"
       # Prompts live at the repo root (../prompts/) — single source of truth
       # for LLM prompts across iOS and any future platforms (web, android).
       # Files copied into the iOS app bundle as resources at build time.
@@ -60,6 +61,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.usenod.nod
         PRODUCT_NAME: Nod
         INFOPLIST_FILE: Nod/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Nod/Nod.entitlements
         TARGETED_DEVICE_FAMILY: "1"                    # iPhone only
         SUPPORTED_PLATFORMS: iphoneos iphonesimulator
         SUPPORTS_MACCATALYST: NO
@@ -74,7 +76,7 @@ targets:
         ENABLE_PREVIEWS: YES
         ENABLE_DEBUG_DYLIB: NO
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "19"
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: GRDB

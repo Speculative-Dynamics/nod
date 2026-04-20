@@ -15,6 +15,7 @@ struct SidebarView: View {
 
     @ObservedObject var store: ConversationStore
     @ObservedObject var engineHolder: EngineHolder
+    @EnvironmentObject private var appLock: AppLockManager
     @Environment(\.dismiss) private var dismiss
 
     /// Called after the user confirms "Start fresh." ChatView uses this to
@@ -35,6 +36,19 @@ struct SidebarView: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
+                    // "Day N" stat — shows how long the relationship has
+                    // been going. Computed from the first message's
+                    // createdAt. Hidden until there's at least one message
+                    // so first-launch empty state doesn't show "Day 1."
+                    if let dayCount = relationshipDayCount {
+                        HStack {
+                            Text("Relationship")
+                            Spacer()
+                            Text(dayCount == 1 ? "Day 1" : "Day \(dayCount)")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
                 } header: {
                     Text("Your conversation")
                 }
@@ -47,6 +61,17 @@ struct SidebarView: View {
                     Text("Listening model")
                 } footer: {
                     Text("Nod runs the AI on your device — nothing is sent to a server. Switching keeps your conversation intact.")
+                }
+
+                Section {
+                    Toggle(isOn: $appLock.isEnabled) {
+                        Label("Require Face ID", systemImage: "faceid")
+                    }
+                    .tint(Color("NodAccent"))
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("Ask for Face ID when opening Nod. Your conversation never leaves this device either way.")
                 }
 
                 Section {
@@ -97,6 +122,18 @@ struct SidebarView: View {
         return version
     }
 
+    /// Days between today and the first ever message. 1-indexed (the day
+    /// the first message was sent is "Day 1"). nil when the conversation
+    /// is empty.
+    private var relationshipDayCount: Int? {
+        guard let first = store.messages.first else { return nil }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: first.createdAt)
+        let today = cal.startOfDay(for: Date())
+        let days = cal.dateComponents([.day], from: start, to: today).day ?? 0
+        return days + 1
+    }
+
     // MARK: - Engine row
 
     /// One row for an engine option. Unavailable engines (e.g. Qwen on a
@@ -109,6 +146,11 @@ struct SidebarView: View {
         Button {
             guard available else { return }
             engineHolder.setPreference(pref)
+            // Rigid tap: the engine-switch decision is consequential
+            // (different model, different personality). A firm click
+            // confirms "I heard you, we're switching" more clearly than
+            // the soft receive-tap used elsewhere.
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         } label: {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -138,5 +180,6 @@ struct SidebarView: View {
     let holder = EngineHolder()
     let store = ConversationStore(database: db, summarizer: { [holder] in holder.engine })
     return SidebarView(store: store, engineHolder: holder, onCleared: {})
+        .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }

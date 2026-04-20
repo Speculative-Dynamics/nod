@@ -17,14 +17,18 @@
 //   └─────────────────────────────────────┘
 
 import SwiftUI
+import UIKit
+import os
 
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
+    @EnvironmentObject private var appLock: AppLockManager
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     @State private var showingSidebar: Bool = false
+    @State private var showingEngineHint: Bool = false
     // The ID of the bottom-most fully-visible message. Bound to the
     // ScrollView via .scrollPosition. When user scrolls manually, this
     // updates; we use it to decide whether auto-scroll should follow new
@@ -38,18 +42,22 @@ struct ChatView: View {
     // (respond) AND compression summaries (summarize).
     @StateObject private var engineHolder: EngineHolder
 
+    /// One-shot flag so the "double-tap to switch" hint toast only appears
+    /// the very first time an engine actually becomes usable. Sticky across
+    /// launches via UserDefaults — no user wants to see a teaching toast
+    /// every cold boot.
+    @AppStorage("EngineHint.shown") private var engineHintShown: Bool = false
+
     init() {
         let holder = EngineHolder()
         self._engineHolder = StateObject(wrappedValue: holder)
 
-        // Opening the DB should never fail on a healthy device. If it does,
-        // crash with a clear message — this is not a user-recoverable state.
-        let db: MessageDatabase
-        do {
-            db = try MessageDatabase()
-        } catch {
-            fatalError("Nod: could not open conversation database: \(error)")
-        }
+        // Open the SQLite DB. If it fails (typically because the app was
+        // killed mid-write and the file is left inconsistent — a very real
+        // crash-on-open failure mode), quarantine the bad file and try a
+        // fresh one. Losing the conversation history is strictly better
+        // than "app never opens again, user must delete and reinstall."
+        let db = Self.openOrQuarantineDatabase()
 
         // Capture the holder (not a specific engine) so compression always
         // uses whichever engine is current when it fires — even if the user
@@ -58,6 +66,37 @@ struct ChatView: View {
             database: db,
             summarizer: { [holder] in holder.engine }
         ))
+    }
+
+    private static let storageLog = Logger(subsystem: "app.usenod.nod", category: "storage")
+
+    /// Attempt to open the DB. On failure, move the broken file aside with
+    /// a timestamped suffix and retry once. Keeping (not deleting) the bad
+    /// file preserves it for post-mortem diagnostics while unblocking the
+    /// app. If the retry also fails, fall through to fatalError — at that
+    /// point the filesystem itself is likely unusable.
+    private static func openOrQuarantineDatabase() -> MessageDatabase {
+        if let db = try? MessageDatabase() {
+            return db
+        }
+        let brokenURL = MessageDatabase.fileURL
+        let quarantineURL = brokenURL
+            .deletingLastPathComponent()
+            .appending(path: "nod-conversation.broken-\(Int(Date().timeIntervalSince1970)).sqlite")
+        storageLog.error("DB open failed; moving to \(quarantineURL.lastPathComponent, privacy: .public) and retrying")
+        try? FileManager.default.moveItem(at: brokenURL, to: quarantineURL)
+        // SQLite may also leave WAL and SHM sidecars. Move those too so the
+        // retry sees a clean slate.
+        for sidecar in ["-wal", "-shm"] {
+            let src = URL(fileURLWithPath: brokenURL.path + sidecar)
+            let dst = URL(fileURLWithPath: quarantineURL.path + sidecar)
+            try? FileManager.default.moveItem(at: src, to: dst)
+        }
+        do {
+            return try MessageDatabase()
+        } catch {
+            fatalError("Nod: could not open conversation database after quarantine: \(error)")
+        }
     }
 
     var body: some View {
@@ -96,13 +135,24 @@ struct ChatView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showingSidebar = true
-                    } label: {
-                        MiniNodFace()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open menu")
+                    // Single tap → sidebar. Double tap → engine toggle.
+                    // Stacked .onTapGesture modifiers handle the
+                    // disambiguation correctly: SwiftUI waits for a
+                    // possible second tap before firing the single. A
+                    // Button here would fire its action on EACH tap of a
+                    // double-tap (twice), opening the sidebar twice —
+                    // so we use a tappable plain view instead.
+                    MiniNodFace()
+                        .contentShape(Rectangle())
+                        .accessibilityElement()
+                        .accessibilityLabel("Open menu")
+                        .accessibilityAddTraits(.isButton)
+                        .onTapGesture(count: 2) {
+                            toggleEngine()
+                        }
+                        .onTapGesture(count: 1) {
+                            showingSidebar = true
+                        }
                 }
             }
             .sheet(isPresented: $showingSidebar) {
@@ -110,7 +160,61 @@ struct ChatView: View {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
                     isInferring = false
+                    // Warning haptic confirms the destructive action landed.
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 }
+            }
+            // Engine-switch hint toast. Appears once, ever, after the user
+            // has a second engine available. Dismisses itself after a few
+            // seconds. Pure education; no actions inside.
+            .overlay(alignment: .top) {
+                if showingEngineHint {
+                    engineHintToast
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: showingEngineHint)
+            // Keep the screen awake while Qwen is mid-download or mid-load.
+            // A foreground URLSession dies when iOS suspends the app after
+            // screen lock, and a 2 GB model takes 5+ minutes — a default
+            // screen timeout would kill the transfer. Idle-timer-disabled
+            // is the standard iOS affordance for "user is watching a
+            // long-running operation." Released back to the system once
+            // the model is ready or the transfer fails, so we don't drain
+            // the battery during normal chat.
+            .onChange(of: engineHolder.qwenLoadState) { _, newValue in
+                switch newValue {
+                case .downloading, .loading:
+                    UIApplication.shared.isIdleTimerDisabled = true
+                case .ready, .failed, .notLoaded:
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+                // Piggyback: once Qwen is ready, we know both engines are
+                // available — time to teach the double-tap gesture.
+                if case .ready = newValue {
+                    maybeShowEngineHint()
+                }
+            }
+            .onAppear {
+                // Also check on appear — users on AFM-capable devices
+                // already have two engines usable and never touch Qwen.
+                maybeShowEngineHint()
+            }
+            // When the lock overlay dismisses, re-try the engine hint.
+            // Without this, cold launches with App Lock ON would fire the
+            // toast behind the lock screen, burn the one-shot flag, and
+            // the user would never see the hint.
+            .onChange(of: appLock.isLocked) { _, nowLocked in
+                if !nowLocked {
+                    maybeShowEngineHint()
+                }
+            }
+            .onDisappear {
+                // Belt-and-suspenders: if the view goes away mid-download
+                // (shouldn't happen — ChatView is the root — but defensive),
+                // release the idle lock so we don't drain battery forever.
+                UIApplication.shared.isIdleTimerDisabled = false
             }
             // Swipe gestures to manage the keyboard without reaching for the
             // input field: swipe up anywhere to open, swipe down to close.
@@ -130,20 +234,51 @@ struct ChatView: View {
                         }
                     }
             )
+            // iPad keyboard shortcuts. On iPhone these are harmless — no
+            // hardware keyboard means they never fire. Cmd+Return sends
+            // (sendMessage self-gates on sendEnabled). Cmd+K focuses the
+            // input so you can start typing without tapping. Kept always
+            // enabled: disabling Cmd+K based on focus state is backwards —
+            // that's precisely when you'd want the shortcut.
+            .background(
+                ZStack {
+                    Button("") { sendMessage() }
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .hidden()
+                    Button("") { inputFocused = true }
+                        .keyboardShortcut("k", modifiers: .command)
+                        .hidden()
+                }
+            )
         }
     }
 
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(store.messages) { msg in
+                // Spacing: 0 at the VStack level; each bubble contributes its
+                // own top padding based on whether the message above it was
+                // from the same speaker. Grouping same-speaker messages tight
+                // (4 pt) and separating cross-speaker turns wider (14 pt)
+                // reads like iMessage — blocks of thought from one voice
+                // feel unified, the shift to the other voice has room to
+                // breathe. Nod-blink rows get a little extra breathing room
+                // since the eyes are visually weighty.
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(store.messages.enumerated()), id: \.element.id) { index, msg in
+                        let prev = index > 0 ? store.messages[index - 1] : nil
                         MessageBubble(message: msg)
                             .id(msg.id)
+                            .padding(.top, Self.topPadding(for: msg, prev: prev, isFirst: index == 0))
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
+                // Breathing room between the last message and whatever sits
+                // directly below: the download readiness card or the input
+                // bar. Without this, the final bubble visually collides
+                // with the chrome underneath.
+                .padding(.bottom, 16)
             }
             // Interactive keyboard dismiss: dragging down on messages pulls
             // the keyboard down with the finger, iOS-native feel.
@@ -217,6 +352,11 @@ struct ChatView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .focused($inputFocused)
                 .accessibilityLabel("Message")
+                // No .submitLabel(.send)/.onSubmit here: with axis: .vertical
+                // and lineLimit(1...5), Return inserts a newline (iMessage
+                // behavior) and onSubmit never fires. A "send" label would
+                // lie. Hardware keyboards get Cmd+Return via the shortcut
+                // button in .background above.
 
             Button {
                 sendMessage()
@@ -238,6 +378,62 @@ struct ChatView: View {
             return false
         }
         return true
+    }
+
+    // MARK: - Engine hint toast
+
+    private var engineHintToast: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hand.tap.fill")
+                .font(.subheadline)
+                .foregroundStyle(Color("NodAccent"))
+            Text("Double-tap the face to switch models.")
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+    }
+
+    /// Decide whether to show the one-shot engine-switch hint. Only fires
+    /// when both engines are usable on this device, the app isn't locked,
+    /// and we've never shown it before. Flipping the AppStorage flag is
+    /// deferred until all three are true so an early abort (e.g. locked)
+    /// doesn't burn the one-shot.
+    private func maybeShowEngineHint() {
+        guard !engineHintShown else { return }
+        // Both engines need to be usable for the tip to make sense.
+        let bothAvailable = EnginePreference.apple.isAvailable
+            && EnginePreference.qwen.isAvailable
+        guard bothAvailable else { return }
+        // Don't fire while the lock overlay is covering the screen —
+        // the toast would time out before the user ever sees it.
+        guard !appLock.isLocked else { return }
+
+        engineHintShown = true
+        // Small delay so the toast doesn't collide with other first-launch
+        // animations (splash dismiss, lock overlay unlock).
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            showingEngineHint = true
+            try? await Task.sleep(for: .seconds(4))
+            showingEngineHint = false
+        }
+    }
+
+    /// Flip the engine preference to the other usable option. No-op if
+    /// only one engine is available (e.g. low-RAM device without Qwen).
+    private func toggleEngine() {
+        let other: EnginePreference = engineHolder.preference == .apple ? .qwen : .apple
+        guard other.isAvailable else { return }
+        engineHolder.setPreference(other)
+        // Rigid haptic: the switch is consequential, and a firm click
+        // confirms the gesture actually registered (hidden gestures need
+        // louder feedback than visible buttons do).
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
 
     // MARK: - Qwen readiness bar
@@ -262,7 +458,7 @@ struct ChatView: View {
                     }
                     ProgressView(value: fraction)
                         .tint(Color("NodAccent"))
-                    Text("Nod runs the AI on your device. This one-time download is ~2.3 GB.")
+                    Text("Nod runs the AI on your device. This one-time download is ~2.3 GB — keep the app open and your phone plugged in if possible.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -339,6 +535,7 @@ struct ChatView: View {
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        guard sendEnabled else { return }
         inputText = ""
         store.append(Message(role: .user, text: text))
         triggerNod()
@@ -347,8 +544,9 @@ struct ChatView: View {
 
     private func triggerNod() {
         nodTrigger &+= 1
-        let haptic = UIImpactFeedbackGenerator(style: .light)
-        haptic.impactOccurred()
+        // Light tap on send. The user initiated this; keep the feedback
+        // quiet and confirmatory rather than demanding attention.
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func respond(to text: String) {
@@ -398,8 +596,9 @@ struct ChatView: View {
             await MainActor.run {
                 store.replaceLastAssistantMessage(with: reply)
                 isInferring = false
-                // Haptic on arrival. Lighter than send (soft tap, "something
-                // landed for you"). Error uses a distinct warning pattern.
+                // Haptic on arrival. Soft tap ("something landed for you")
+                // for a real reply; warning pattern for an error so the
+                // user feels the difference without reading.
                 if wasError {
                     UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 } else {
@@ -408,12 +607,26 @@ struct ChatView: View {
             }
         }
     }
+
+    // MARK: - Message spacing
+
+    /// Top padding between message bubbles. Tight for same-sender follow-ups
+    /// so a block of thought reads as one block; wider when the speaker
+    /// changes so the exchange has visible rhythm. Nod-blink rows get a bit
+    /// more breathing room because the eyes are visually heavy.
+    private static func topPadding(for msg: Message, prev: Message?, isFirst: Bool) -> CGFloat {
+        if isFirst { return 0 }
+        guard let prev else { return 0 }
+        if msg.role == .nod || prev.role == .nod { return 16 }
+        return msg.role == prev.role ? 4 : 14
+    }
 }
 
 // MARK: - MessageBubble
 
 struct MessageBubble: View {
     let message: Message
+
     @State private var nodTriggerForThisBubble: Int = 0
 
     var body: some View {
@@ -465,11 +678,32 @@ struct MessageBubble: View {
                 .background(color)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .accessibilityLabel(message.role == .user ? "You said: \(message.text)" : "Nod said: \(message.text)")
+                // Long-press to copy or share. iOS renders this as a
+                // standard context-menu preview with the bubble lifted —
+                // the same affordance Messages uses. Only on text bubbles;
+                // the typing-dots placeholder has nothing to share, and
+                // .nod has no text.
+                //
+                // ShareLink is the iOS 16+ native share affordance — it
+                // handles the iPad popover anchor itself, avoiding the
+                // UIActivityViewController-inside-a-sheet crash pattern.
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = message.text
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    ShareLink(item: message.text) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                }
         }
     }
 }
 
 #Preview {
     ChatView()
+        .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }

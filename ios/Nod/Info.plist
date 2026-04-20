@@ -44,5 +44,7 @@
 	<string>Dark</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Nod uses Face ID to keep your journal private on this device.</string>
 </dict>
 </plist>
