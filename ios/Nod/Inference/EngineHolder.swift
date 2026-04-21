@@ -15,10 +15,10 @@
 // Switching engines drops the old instance. For any MLX engine:
 //   - Switching TO an MLX engine: kicks off prepare() eagerly so the
 //     download starts at switch time, not on first message send.
-//   - Switching AWAY from an MLX engine: calls cancelLoading() so an
-//     in-flight download stops cooperatively. The background session
-//     persists resume data per-spec, so the outgoing engine can be
-//     resumed later from the same byte.
+//   - Switching AWAY from an MLX engine: calls cancelDownload() so the
+//     in-flight download cancels with resume data persisted to the
+//     outgoing spec's per-engine .resume.data file. Coming back to
+//     that engine later resumes from the same byte.
 
 import Foundation
 import SwiftUI
@@ -188,11 +188,19 @@ final class EngineHolder: ObservableObject {
         mlxObservationTask = nil
 
         if let outgoing = engine as? MLXEngineClient {
-            // Fire-and-forget cancellation. The background session will
-            // persist resume data to the outgoing spec's per-engine file
-            // before the task actually stops, so switching back later
-            // picks up where it left off.
-            Task { await outgoing.cancelLoading() }
+            // Fire-and-forget cancellation. `cancelDownload()` calls
+            // the session's `cancelAndPersistResume`, which produces
+            // URLSession resume data before stopping the in-flight
+            // download task and writes it to the outgoing spec's
+            // per-engine `.resume.data` file. Switching back to this
+            // engine later picks up from the same byte (per eng-review
+            // decision #2).
+            //
+            // We don't reset container/state on the outgoing — it's
+            // about to be released by ARC (we're reassigning `engine`
+            // to the new one just below), so the MLX container gets
+            // cleaned up naturally.
+            Task { await outgoing.cancelDownload() }
         }
     }
 }

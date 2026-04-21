@@ -52,6 +52,12 @@ esac
 : "${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID}"
 : "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY}"
 
+# R2 requires the AWS SDK to use region "auto". Without this, if the
+# user has a different default region in ~/.aws/config (e.g.
+# "ap-south-1") every put-object call fails with "InvalidRegionName".
+# Forcing it here beats silently inheriting from the user's env.
+export AWS_DEFAULT_REGION=auto
+
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SPEC_FILE="$ROOT_DIR/ios/Nod/Inference/MLXModelSpec.swift"
 WORK_DIR="$(mktemp -d)"

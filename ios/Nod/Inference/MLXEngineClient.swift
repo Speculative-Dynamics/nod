@@ -178,16 +178,13 @@ actor MLXEngineClient: ListeningEngine {
         try await task.value
     }
 
-    /// Cancel any in-flight download. URLSession (via HubApi) respects
-    /// Task cancellation at its suspension points, so the actual network
-    /// transfer stops cooperatively. Resets state to .notLoaded so a
-    /// subsequent prepare() starts fresh.
-    func cancelLoading() {
-        loadingTask?.cancel()
-        loadingTask = nil
-        container = nil
-        setState(.notLoaded)
-    }
+    // Note: The earlier `cancelLoading()` method was removed as dead
+    // code. Its only caller (EngineHolder's engine-switch path) now
+    // uses `cancelDownload()` so that switching engines mid-download
+    // persists resume data to the outgoing spec's per-engine file.
+    // For "user hit Start fresh / wipe everything", call
+    // `MLXModelSpec.deleteDownloadedFiles()` on the relevant spec
+    // directly.
 
     // MARK: - User-facing controls
 

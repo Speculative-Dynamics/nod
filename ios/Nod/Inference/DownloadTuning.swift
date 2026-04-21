@@ -62,17 +62,20 @@ enum DownloadTuning {
     // MARK: - Relocked grace
 
     /// When the user hits Cancel, we immediately persist the resume data
-    /// to disk. This is the filename.
-    static let resumeDataFilename = "qwen-download-resume.data"
+    /// to disk. Scoped per model: the file lives at
+    /// `<modelDir>/.resume.data` where <modelDir> is the spec's
+    /// `modelDirectoryURL`. Dotfile so it's hidden alongside the weights.
+    static let resumeDataFilename = ".resume.data"
 
     // MARK: - Background session identity
 
-    /// Stable identifier for the background URLSession. iOS uses this to
-    /// route delegate callbacks when the app is killed and relaunched
-    /// mid-download. The session identifier must be unique to this app
-    /// bundle and must not change across app versions — otherwise iOS
-    /// can't reattach to in-flight tasks from a previous launch.
-    static let backgroundSessionIdentifier = "app.usenod.nod.qwen-download"
+    /// Stable identifier retained from when we ran a background
+    /// URLSession. Currently dead code: the delivery path uses a
+    /// foreground URLSession (to get reliable didWriteData delivery, see
+    /// MLXR2BackgroundSession), so iOS never routes background events
+    /// to us with this identifier. Kept as scaffolding for a post-v0.1
+    /// return to background sessions if we need screen-lock survival.
+    static let backgroundSessionIdentifier = "app.usenod.nod.mlx-download"
 
     // MARK: - SHA-256 streaming
 

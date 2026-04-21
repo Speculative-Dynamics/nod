@@ -82,7 +82,7 @@ struct MLXModelSpec: Sendable, Hashable {
     /// clobber Qwen 3.5's resume data — a real bug risk called out in
     /// eng review.
     var resumeDataURL: URL {
-        modelDirectoryURL.appending(path: ".resume.data")
+        modelDirectoryURL.appending(path: DownloadTuning.resumeDataFilename)
     }
 
     // MARK: - Status checks
