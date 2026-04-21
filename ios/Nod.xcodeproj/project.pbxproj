@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0CA4A1858373C7DC8EE573C4 /* DownloadTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71720E33D89D0A92B33AD8AB /* DownloadTuning.swift */; };
+		0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */; };
 		10533DEC2A85635650C1859F /* MLXEngineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495EE64172900DB2BC77D01B /* MLXEngineClient.swift */; };
 		2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FD58A9CC136146214D82403C /* GRDB */; };
 		24D408F3CA747F829DE44292 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */; };
@@ -47,6 +48,7 @@
 		114CF100E130E7C854FBB3BD /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
 		2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockManager.swift; sourceTree = "<group>"; };
+		30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationStore.swift; sourceTree = "<group>"; };
 		420B40291D1B3DE220552641 /* NodApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodApp.swift; sourceTree = "<group>"; };
 		4940AE0F466E23E8BD4994BD /* Nod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Nod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		495EE64172900DB2BC77D01B /* MLXEngineClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXEngineClient.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 			children = (
 				226EA1BE819A4CB390415DB3 /* AppLock */,
 				41C8C3B2952D77AA18801C9E /* Inference */,
+				2CA1B11C509FCCD3C0FE81C5 /* Personalization */,
 				D1E2BD565F3F28214653AD53 /* Preview Content */,
 				DA4D0AD82C039054077B66E7 /* Storage */,
 				049ABFB8B4B979484ADA0C3D /* Views */,
@@ -123,6 +126,14 @@
 				6B9F9FCA04E591DBC2EFA635 /* AppLockOverlay.swift */,
 			);
 			path = AppLock;
+			sourceTree = "<group>";
+		};
+		2CA1B11C509FCCD3C0FE81C5 /* Personalization */ = {
+			isa = PBXGroup;
+			children = (
+				30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */,
+			);
+			path = Personalization;
 			sourceTree = "<group>";
 		};
 		41C8C3B2952D77AA18801C9E /* Inference */ = {
@@ -292,6 +303,7 @@
 				C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */,
 				89331638D0D309292F560723 /* NodAnimation.swift in Sources */,
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,
+				0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */,
 				AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */,
 				CD1DCEE44A282AA7684E5821 /* SpeedWindow.swift in Sources */,
 				24D408F3CA747F829DE44292 /* SplashView.swift in Sources */,

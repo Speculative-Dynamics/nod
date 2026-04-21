@@ -101,6 +101,15 @@ final class ConversationStore: ObservableObject {
     func contextForInference() -> String {
         var parts: [String] = []
 
+        // Personalisation goes FIRST so it frames how the rest of the
+        // context should be interpreted. The block is empty when the
+        // user hasn't set any preferences (isActive = false) — we skip
+        // adding a useless stub then.
+        let personalization = PersonalizationStore.shared.current.promptBlock
+        if !personalization.isEmpty {
+            parts.append(personalization)
+        }
+
         if !summary.isEmpty {
             parts.append("WHAT YOU KNOW FROM EARLIER IN THIS ONGOING CONVERSATION:\n\(summary)")
         }

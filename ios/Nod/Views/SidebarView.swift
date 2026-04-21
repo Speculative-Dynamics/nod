@@ -16,6 +16,7 @@ struct SidebarView: View {
     @ObservedObject var store: ConversationStore
     @ObservedObject var engineHolder: EngineHolder
     @EnvironmentObject private var appLock: AppLockManager
+    @ObservedObject private var personalization = PersonalizationStore.shared
     @Environment(\.dismiss) private var dismiss
 
     /// Called after the user confirms "Start fresh." ChatView uses this to
@@ -57,6 +58,74 @@ struct SidebarView: View {
                     }
                 } header: {
                     Text("Your conversation")
+                }
+
+                // Personalisation section. Right after "Your
+                // conversation" because it's about the USER and how
+                // they want to be heard — thematically part of that
+                // group, not a model-level setting.
+                Section {
+                    Picker(
+                        "Response style",
+                        selection: Binding(
+                            get: { personalization.current.responseStyle },
+                            set: { personalization.current.responseStyle = $0 }
+                        )
+                    ) {
+                        ForEach(ResponseStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+
+                    Picker(
+                        "When Nod responds",
+                        selection: Binding(
+                            get: { personalization.current.nodMode },
+                            set: { personalization.current.nodMode = $0 }
+                        )
+                    ) {
+                        ForEach(NodMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+
+                    // Free-form preferences. TextField with axis: .vertical
+                    // + lineLimit(1...4) keeps the field compact when
+                    // empty, expands as the user types — matches the
+                    // chat input's behavior for consistency. Hard-cap at
+                    // 500 chars via onChange (quality over quantity for
+                    // the system-prompt budget).
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField(
+                            "Like a friend checking in, not a therapist",
+                            text: Binding(
+                                get: { personalization.current.freeFormText },
+                                set: { new in
+                                    let capped = String(new.prefix(Personalization.maxFreeFormChars))
+                                    if capped != personalization.current.freeFormText {
+                                        personalization.current.freeFormText = capped
+                                    }
+                                }
+                            ),
+                            axis: .vertical
+                        )
+                        .lineLimit(1...4)
+                        .textInputAutocapitalization(.sentences)
+                        .accessibilityLabel("Anything else for Nod")
+
+                        // Character counter — only appears past 400 so
+                        // the empty / normal-length case stays clean.
+                        if personalization.current.freeFormText.count > 400 {
+                            Text("\(personalization.current.freeFormText.count) / \(Personalization.maxFreeFormChars)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                } header: {
+                    Text("Personalisation")
+                } footer: {
+                    Text("Nod reads this each time you send a message. Changes take effect on the next reply.")
                 }
 
                 Section {
