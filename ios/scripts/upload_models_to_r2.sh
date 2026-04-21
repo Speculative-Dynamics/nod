@@ -62,23 +62,34 @@ echo "R2 path: $R2_BUCKET/$R2_PATH/"
 echo "Working dir: $WORK_DIR"
 echo ""
 
-# Extract pinned (name, sha, size) triples for this model from the Swift
-# spec file. Awk reads from the `static let <SWIFT_STATIC> = MLXModelSpec(`
-# line through the matching closing bracket and pulls the FileSpec
-# entries.
+# Extract pinned (name, sha, size) triples for this model from the
+# Swift spec file. Using Python (not awk) because macOS ships BSD awk,
+# which doesn't support 3-arg match() for array capture.
 pinned_manifest=$(
-  awk -v target="static let $SWIFT_STATIC = MLXModelSpec(" '
-    $0 ~ target { in_block=1 }
-    in_block && /\.init\(name:/ {
-      while (!/size:/) { getline next_line; $0 = $0 " " next_line }
-      match($0, /name: "([^"]+)"/, n)
-      match($0, /sha256: "([^"]+)"/, s)
-      match($0, /size: ([0-9_]+)/, z)
-      gsub("_", "", z[1])
-      print n[1] "\t" s[1] "\t" z[1]
-    }
-    in_block && /^    \)$/ { exit }
-  ' "$SPEC_FILE"
+  python3 - "$SPEC_FILE" "$SWIFT_STATIC" <<'PY'
+import re, sys
+path, target = sys.argv[1], sys.argv[2]
+src = open(path).read()
+# Find the `static let <target> = MLXModelSpec(` block up to the
+# closing `)` of that constructor. Swift's indentation (matching `    )`
+# at line start) delimits the block.
+pat = re.compile(
+    r"static let " + re.escape(target) + r" = MLXModelSpec\(.*?\n    \)",
+    re.S
+)
+m = pat.search(src)
+if not m:
+    sys.exit(f"couldn't find MLXModelSpec block for {target}")
+block = m.group(0)
+# Each FileSpec entry spans multiple lines. Collapse whitespace so one
+# regex per entry pulls name/sha/size.
+flat = re.sub(r"\s+", " ", block)
+entry = re.compile(
+    r'\.init\(name:\s*"([^"]+)"\s*,\s*sha256:\s*"([^"]+)"\s*,\s*size:\s*([0-9_]+)'
+)
+for name, sha, size in entry.findall(flat):
+    print(f"{name}\t{sha}\t{size.replace('_', '')}")
+PY
 )
 
 if [ -z "$pinned_manifest" ]; then
