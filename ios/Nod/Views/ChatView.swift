@@ -587,29 +587,54 @@ struct ChatView: View {
     }
 
     // MARK: - Download formatters
+    //
+    // The bar and percentage update every 100 ms — they're the "is this
+    // alive" signal and need frequent motion. The byte count and speed
+    // numbers DO NOT get that treatment. At 3 MB/s emitting "721 MB,
+    // 722 MB, 725 MB" 10 times per second reads as nervous, twitchy
+    // noise — the exact opposite of what a 5-minute "just let it run"
+    // transfer should feel like.
+    //
+    // Fix: round the display values to coarse increments. Bytes snap to
+    // the nearest 10 MB (or 0.1 GB once we cross 1 GB); speed rounds to
+    // the nearest 1 MB/s. The underlying metrics still arrive at full
+    // precision — we only round at the format boundary.
 
-    /// "721 MB of 2.3 GB". Uses ByteCountFormatter in the friendlier
-    /// decimal style (MB, GB) rather than binary (MiB, GiB) because that
-    /// matches Apple's own App Store / iCloud sizing copy.
+    /// "720 MB of 2.3 GB". Rounded to nearest 10 MB under 1 GB, nearest
+    /// 0.1 GB over. Deliberately NOT `ByteCountFormatter.file` because
+    /// that style switches units at awkward boundaries (998 MB → 1.0 GB)
+    /// and changes visual width unpredictably.
     private func formatByteProgress(written: Int64, total: Int64) -> String {
-        let f = ByteCountFormatter()
-        f.countStyle = .file
-        f.allowedUnits = [.useMB, .useGB]
-        f.includesUnit = true
-        return "\(f.string(fromByteCount: written)) of \(f.string(fromByteCount: total))"
+        "\(formatCoarseBytes(written)) of \(formatCoarseBytes(total))"
     }
 
-    /// "3.4 MB/s · about 8 min remaining". Returns nil when we don't have
-    /// stable data yet — the caller then shows only the byte-count line.
+    private func formatCoarseBytes(_ bytes: Int64) -> String {
+        let oneGB: Int64 = 1_000_000_000
+        if bytes >= oneGB {
+            let gb = (Double(bytes) / Double(oneGB))
+            // One decimal ("2.3 GB"). At download speeds that cross
+            // 0.1 GB takes ~30 s — calm.
+            return String(format: "%.1f GB", gb)
+        } else {
+            // Round to nearest 10 MB. At 3 MB/s that's one visible
+            // update every ~3 s.
+            let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
+            return "\(mb) MB"
+        }
+    }
+
+    /// "3 MB/s  ·  about 8 min remaining". Speed rounds to nearest whole
+    /// MB/s. That plus the widened 10-second speed window (see
+    /// DownloadTuning.speedWindowSeconds) means the speed number rarely
+    /// flips between two neighbouring integers mid-download.
+    ///
+    /// Returns nil when we don't have a stable rate yet — the caller
+    /// shows only the byte line during that first ~1-2 s.
     private func formatSpeedAndETA(metrics: DownloadMetrics) -> String? {
         let rate = metrics.bytesPerSecond
         guard rate > 0 else { return nil }
 
-        let rateFormatter = ByteCountFormatter()
-        rateFormatter.countStyle = .file
-        rateFormatter.allowedUnits = [.useKB, .useMB]
-        rateFormatter.includesUnit = true
-        let rateString = "\(rateFormatter.string(fromByteCount: Int64(rate)))/s"
+        let rateString = formatCoarseSpeed(rate)
 
         guard let seconds = metrics.secondsRemaining, seconds.isFinite, seconds > 0 else {
             return rateString
@@ -626,6 +651,19 @@ struct ChatView: View {
             etaString = "about \(hours) hr remaining"
         }
         return "\(rateString)  ·  \(etaString)"
+    }
+
+    private func formatCoarseSpeed(_ bytesPerSec: Double) -> String {
+        let mbPerSec = bytesPerSec / 1_000_000
+        if mbPerSec >= 1.0 {
+            // Integer MB/s. "3 MB/s" not "3.42 MB/s".
+            return "\(Int(mbPerSec.rounded())) MB/s"
+        }
+        // Under 1 MB/s: show KB/s rounded to nearest 50. A dying
+        // connection this slow deserves a calm readout too.
+        let kbPerSec = bytesPerSec / 1000
+        let rounded = Int((kbPerSec / 50).rounded()) * 50
+        return "\(max(50, rounded)) KB/s"
     }
 
     /// Shared card chrome for the readiness states so we only edit one place

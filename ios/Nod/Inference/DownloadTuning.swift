@@ -24,13 +24,15 @@ enum DownloadTuning {
 
     // MARK: - Rolling speed window
 
-    /// Lookback window for the bytes-per-second calculation. Too short and
-    /// speed reading jitters wildly on bursty connections; too long and the
-    /// number lags reality (e.g. user just switched from cellular to Wi-Fi
-    /// and we're still showing the old average). 5 s is the point where a
-    /// plausible "3.4 MB/s" reads as stable but still responds to real
-    /// changes within a breath.
-    static let speedWindowSeconds: TimeInterval = 5.0
+    /// Lookback window for the bytes-per-second calculation. We display
+    /// speed rounded to the nearest whole MB/s (see ChatView.formatCoarse-
+    /// Speed), which gets jittery on a short window — the averaged rate
+    /// oscillates across an integer boundary ("3 MB/s ↔ 4 MB/s"). A
+    /// 10-second window smooths that across enough samples to keep the
+    /// displayed number stable for the duration of the download, while
+    /// still responding to genuine rate changes (Wi-Fi → cellular, etc.)
+    /// inside two breaths.
+    static let speedWindowSeconds: TimeInterval = 10.0
 
     // MARK: - Retry / backoff
 
