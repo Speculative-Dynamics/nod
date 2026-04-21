@@ -272,8 +272,11 @@ struct SidebarView: View {
 
     /// Metadata line text for one engine row.
     /// AFM: the static tagline.
-    /// MLX: "Jul 2025 · 2.3 GB" plus optional " · download on use" /
-    /// " · paused" suffix based on on-disk state.
+    /// MLX: "Latest · Apr 2026 · 2.6 GB" — role label ("Latest" / "Recent"
+    /// / "Proven") prefixed so a normal user can pick between the three
+    /// on-device options at a glance without decoding release dates or
+    /// model names. Then the status suffix (" · download on use" /
+    /// " · paused") is appended based on on-disk state.
     private func metadataLine(for pref: EnginePreference) -> String {
         if let reason = pref.unavailabilityReason {
             return reason
@@ -282,7 +285,7 @@ struct SidebarView: View {
             // AFM — use the tagline, which doubles as the metadata line.
             return pref.tagline
         }
-        let base = "\(spec.releaseMonth) · \(formatCoarseSize(spec.totalBytes))"
+        let base = "\(spec.roleLabel) · \(spec.releaseMonth) · \(formatCoarseSize(spec.totalBytes))"
         if spec.isFullyDownloaded {
             return base
         }

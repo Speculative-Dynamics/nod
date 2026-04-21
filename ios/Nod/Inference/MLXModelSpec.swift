@@ -42,6 +42,16 @@ struct MLXModelSpec: Sendable, Hashable {
     /// is more informative there); kept for parity with EnginePreference.
     let tagline: String
 
+    /// One-word role relative to the other MLX models in the lineup:
+    /// "Latest", "Recent", "Proven". Surfaced as the FIRST token on the
+    /// sidebar metadata line ("Latest · Apr 2026 · 2.6 GB · ..."), so a
+    /// user picking between models knows which is the newest vs. the
+    /// most battle-tested without needing to decode release dates or
+    /// model names.
+    ///
+    /// Relative labels: when we add a 4th model, re-rank existing ones.
+    let roleLabel: String
+
     // MARK: - Delivery
 
     /// Base URL for the versioned R2 path. Trailing slash implied by
@@ -153,6 +163,7 @@ extension MLXModelSpec {
         displayName: "Qwen 3 Instruct 2507",
         releaseMonth: "Jul 2025",
         tagline: "Text-only · tuned for chat",
+        roleLabel: "Proven",
         r2BaseURL: URL(
             string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3-4b-instruct-2507/v1"
         )!,
@@ -212,6 +223,7 @@ extension MLXModelSpec {
         displayName: "Qwen 3.5 4B",
         releaseMonth: "Mar 2026",
         tagline: "Multimodal arch · text-only use",
+        roleLabel: "Recent",
         r2BaseURL: URL(
             string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3.5-4b-4bit/v1"
         )!,
@@ -266,6 +278,7 @@ extension MLXModelSpec {
         displayName: "Gemma 4 E2B Text",
         releaseMonth: "Apr 2026",
         tagline: "Text-only · fresh training data",
+        roleLabel: "Latest",
         r2BaseURL: URL(
             string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/gemma4-e2b-text-int4/v1"
         )!,
