@@ -24,11 +24,23 @@
 // cross the boundary back into our actor.
 
 import Foundation
-import Hub
 import MLX
 import MLXLLM
 import MLXLMCommon
+import MLXHuggingFace
+import Tokenizers
 import os
+
+// No `import Hub` — mlx-swift-lm 3.x decoupled from the Hugging Face Hub
+// downloader package. By the time we reach loadModelContainer, the files
+// are already sitting on disk in Application Support thanks to
+// QwenR2BackgroundSession, so we just hand MLX the URL and let it read
+// config.json, tokenizer.json, etc. directly.
+//
+// `import Tokenizers` + `import MLXHuggingFace` are for the macro
+// `#huggingFaceTokenizerLoader()` used in performLoad — that's how 3.x
+// bridges its internal Tokenizer protocol to swift-transformers'
+// AutoTokenizer.
 
 private let log = Logger(subsystem: "app.usenod.nod", category: "qwen.client")
 
@@ -279,12 +291,16 @@ actor QwenClient: ListeningEngine {
 
             setState(.loading)
 
-            // Phase 2: hand MLX a pre-populated directory. Offline mode
-            // stops HubApi from phoning home to Hugging Face for anything
-            // that might appear missing.
+            // Phase 2: hand MLX a pre-populated directory. mlx-swift-lm
+            // 3.x requires an explicit TokenizerLoader; the
+            // `#huggingFaceTokenizerLoader()` macro expands at compile
+            // time to an adapter that uses swift-transformers'
+            // AutoTokenizer.from(directory:) under the hood. MLX picks
+            // up config.json and wires the right architecture via the
+            // registered model types.
             let loaded = try await loadModelContainer(
-                hub: HubApi(useOfflineMode: true),
-                directory: modelDir
+                from: modelDir,
+                using: #huggingFaceTokenizerLoader()
             )
             try Task.checkCancellation()
             self.container = loaded

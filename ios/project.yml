@@ -22,10 +22,30 @@ packages:
     from: "7.0.0"
   # MLX Swift — Apple's array/ML framework + LLM runners. Provides
   # MLXLLM and MLXLMCommon products used by QwenClient to load and
-  # run Qwen 3.5 4B on-device.
-  MLXSwiftExamples:
-    url: https://github.com/ml-explore/mlx-swift-examples
-    from: "2.29.1"
+  # run on-device language models.
+  #
+  # This was previously `mlx-swift-examples` 2.29.1. The MLX team split
+  # the examples repo from the library code in late 2025; model
+  # implementations now live in `mlx-swift-lm`. Bumping to 3.31.3
+  # gets us the Qwen 3.5 and Gemma 4 architecture registrations that
+  # landed in the 3.x line, which we don't use today but want available
+  # as an upgrade path for the on-device model.
+  #
+  # 3.x is a major version with breaking API changes around tokenizer
+  # and downloader loading. We load from a pre-populated local
+  # directory, so we're on the simpler side of the migration: we drop
+  # the `Hub` dependency entirely and call `loadModelContainer(from:
+  # URL)` directly. See QwenClient.performLoad for the new call.
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    from: "3.31.3"
+  # swift-transformers provides Tokenizers.AutoTokenizer — required at the
+  # call site by the MLXHuggingFace `#huggingFaceTokenizerLoader()` macro.
+  # 3.x mlx-swift-lm no longer has a hard dep on this, so we pull it in
+  # explicitly.
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers
+    from: "1.3.0"
 
 settings:
   base:
@@ -80,7 +100,16 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: GRDB
-      - package: MLXSwiftExamples
+      - package: MLXSwiftLM
         product: MLXLLM
-      - package: MLXSwiftExamples
+      - package: MLXSwiftLM
         product: MLXLMCommon
+      # MLXHuggingFace provides the tokenizer-loader macro that bridges
+      # mlx-swift-lm's Tokenizer protocol to swift-transformers'
+      # AutoTokenizer. Required by loadModelContainer(from:using:) in 3.x.
+      - package: MLXSwiftLM
+        product: MLXHuggingFace
+      # Tokenizers module from swift-transformers — referenced by the
+      # macro's expanded code. Must be imported in call-site files.
+      - package: SwiftTransformers
+        product: Tokenizers

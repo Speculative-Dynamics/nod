@@ -19,6 +19,7 @@ xcodebuild \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE_PATH" \
   -allowProvisioningUpdates \
+  -skipMacroValidation \
   archive
 
 echo "Archive created at: $ARCHIVE_PATH"
