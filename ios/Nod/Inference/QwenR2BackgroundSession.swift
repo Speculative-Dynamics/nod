@@ -171,29 +171,28 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
 
     // MARK: - URLSession
 
-    /// Lazy so the session only exists once something actually needs it.
-    /// iOS re-attaches to in-flight background tasks the moment we
-    /// construct the URLSession with our identifier.
+    /// Foreground URLSession. We DO NOT use a background (`.background(
+    /// withIdentifier:)`) session: iOS aggressively batches `didWriteData`
+    /// delivery for background sessions (likely every 15-30 s for a 2 GB
+    /// transfer) to conserve battery. That makes the progress bar look
+    /// frozen even while bytes are flowing, which was the exact symptom
+    /// that drove this refactor.
+    ///
+    /// The trade-off: foreground sessions die when iOS suspends the app
+    /// (screen lock, user switches away for >30 s). We mitigate with
+    /// `isIdleTimerDisabled` in ChatView while the card is .downloading,
+    /// which keeps the screen awake for the 5-10 min transfer. Resume
+    /// data on mid-stream drop still works via `cancel(byProducing-
+    /// ResumeData:)`, so a user-initiated cancel is recoverable.
+    ///
+    /// Keeping `waitsForConnectivity` means the session silently pauses
+    /// when there's no network and auto-resumes when it returns. The
+    /// delegate's `taskIsWaitingForConnectivity` fires in that window so
+    /// we can show "Waiting for the network…" to the user.
     private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.background(
-            withIdentifier: DownloadTuning.backgroundSessionIdentifier
-        )
-        // Nondiscretionary: user is waiting, not a best-effort housekeeping
-        // sync. Discretionary would wait for Wi-Fi + charging and could
-        // delay the download for hours.
-        config.isDiscretionary = false
-        // waitsForConnectivity pauses rather than fails when there's no
-        // network. Pair with didBecomeInvalidWithError + path monitor to
-        // surface a user-visible "Waiting for the network…" state.
+        let config = URLSessionConfiguration.default
         config.waitsForConnectivity = true
-        // Cellular access is per-request; here we allow it at the session
-        // level. The per-request gate uses URLRequest.allowsCellularAccess
-        // so we can honor the user's persistent preference without
-        // rebuilding the session.
         config.allowsCellularAccess = true
-        // sessionSendsLaunchEvents wakes the app if iOS needs to deliver
-        // completion for an in-flight task.
-        config.sessionSendsLaunchEvents = true
         config.timeoutIntervalForRequest = DownloadTuning.timeoutIntervalForRequest
         config.timeoutIntervalForResource = DownloadTuning.timeoutIntervalForResource
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
