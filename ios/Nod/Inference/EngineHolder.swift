@@ -1,21 +1,24 @@
 // EngineHolder.swift
 // Observable owner of the current inference engine. Bridges the
 // UserDefaults-backed EnginePreference into SwiftUI so ChatView and
-// SidebarView both see the same live engine and can react when it changes.
+// SidebarView both see the same live engine and react when it changes.
 //
-// Why a holder instead of a plain @State in ChatView: the summarizer
+// Why a holder instead of plain @State in ChatView: the summarizer
 // closure captured by ConversationStore needs to always return the
 // CURRENT engine, even after the user switches. Capturing the holder
 // gives us that — the closure reads `holder.engine` every time it fires.
 //
-// Also mirrors QwenClient's internal state into a @Published `qwenLoadState`
-// so the download progress bar updates reactively without polling.
+// Also mirrors MLXEngineClient's internal state into a @Published
+// `mlxEngineLoadState` so the download progress bar updates reactively
+// without polling.
 //
-// Switching engines drops the old instance. For Qwen:
-//   - Switching TO qwen: kicks off prepare() eagerly so the download
-//     starts at switch time, not on first message send.
-//   - Switching AWAY from qwen: calls cancelLoading() so an in-flight
-//     download stops and doesn't leak bandwidth.
+// Switching engines drops the old instance. For any MLX engine:
+//   - Switching TO an MLX engine: kicks off prepare() eagerly so the
+//     download starts at switch time, not on first message send.
+//   - Switching AWAY from an MLX engine: calls cancelLoading() so an
+//     in-flight download stops cooperatively. The background session
+//     persists resume data per-spec, so the outgoing engine can be
+//     resumed later from the same byte.
 
 import Foundation
 import SwiftUI
@@ -26,19 +29,20 @@ final class EngineHolder: ObservableObject {
     @Published private(set) var preference: EnginePreference
     @Published private(set) var engine: (any ListeningEngine)?
 
-    /// Mirrored from QwenClient's state stream. .notLoaded when the
-    /// current engine isn't Qwen. Drives the download progress UI.
-    @Published private(set) var qwenLoadState: QwenClient.State = .notLoaded
+    /// Mirrored from the active MLX engine's state stream.
+    /// `.notLoaded` when the current engine is AFM (or none). Drives
+    /// the download progress UI in ChatView.
+    @Published private(set) var mlxEngineLoadState: MLXEngineClient.State = .notLoaded
 
-    private var qwenObservationTask: Task<Void, Never>?
+    private var mlxObservationTask: Task<Void, Never>?
     private var eagerPrepareTask: Task<Void, Never>?
 
     init() {
         let stored = EnginePreferenceStore.current
         // If the stored preference isn't available on THIS device (e.g.
         // user restored a backup from an 8GB phone to a 4GB one), fall
-        // back to Apple Intelligence rather than trying to download 2.3GB
-        // and OOM at runtime. Persist the coerced value so the sidebar
+        // back to Apple Intelligence rather than trying to download and
+        // OOM at runtime. Persist the coerced value so the sidebar
         // reflects reality.
         let effective = stored.isAvailable ? stored : .apple
         if effective != stored {
@@ -46,55 +50,82 @@ final class EngineHolder: ObservableObject {
         }
         self.preference = effective
         self.engine = Self.makeEngine(for: effective)
-        attachQwenObserverIfNeeded()
+        attachMLXObserverIfNeeded()
     }
 
     /// Switch to a different engine. No-op if already on that preference.
+    /// For MLX→MLX switches, the outgoing engine's in-flight download is
+    /// cancelled with resume data persisted to its per-spec resume file,
+    /// so the user can come back to it later without re-downloading.
     func setPreference(_ newValue: EnginePreference) {
         guard newValue != preference else { return }
 
         // Tear down anything tied to the outgoing engine.
-        tearDownCurrentQwenIfAny()
+        tearDownCurrentMLXIfAny()
 
         EnginePreferenceStore.current = newValue
         preference = newValue
         engine = Self.makeEngine(for: newValue)
-        qwenLoadState = .notLoaded
+        mlxEngineLoadState = .notLoaded
 
-        attachQwenObserverIfNeeded()
+        attachMLXObserverIfNeeded()
     }
 
-    /// Retry the Qwen load after a failure. Exposed so the readiness bar
+    /// Retry the load after a failure. Exposed so the readiness bar
     /// can offer a "Try again" button without leaking the client type.
-    func retryQwenLoad() {
-        guard preference == .qwen, let client = engine as? QwenClient else { return }
+    func retryMLXLoad() {
+        guard let client = engine as? MLXEngineClient else { return }
         eagerPrepareTask?.cancel()
         eagerPrepareTask = Task { try? await client.prepare() }
     }
 
-    /// Pause the active Qwen download. Transitions state to .paused(metrics)
+    /// Pause the active MLX download. Transitions state to .paused(metrics)
     /// and persists resume data so a later Resume tap picks up where we
     /// left off. Called by ChatView's Cancel confirmation handler.
-    func cancelQwenDownload() {
-        guard let client = engine as? QwenClient else { return }
+    func cancelMLXDownload() {
+        guard let client = engine as? MLXEngineClient else { return }
         eagerPrepareTask?.cancel()
         eagerPrepareTask = nil
         Task { await client.cancelDownload() }
     }
 
-    /// Resume a paused download. Called by ChatView's Resume button handler.
-    func resumeQwenDownload() {
-        guard preference == .qwen, let client = engine as? QwenClient else { return }
+    /// Resume a paused download. Called by ChatView's Resume button.
+    func resumeMLXDownload() {
+        guard let client = engine as? MLXEngineClient else { return }
         eagerPrepareTask?.cancel()
         eagerPrepareTask = Task { try? await client.resumeDownload() }
     }
 
+    /// Delete a non-active, downloaded MLX model from disk to reclaim
+    /// space. Called by the sidebar's per-row Delete affordance. No-op
+    /// for the active model (UI blocks that via `canDelete(pref:)`) and
+    /// for AFM (has nothing to delete).
+    ///
+    /// Also wipes the resume-data file at `<modelDir>/.resume.data` so
+    /// a future download starts clean rather than trying to resume from
+    /// a now-orphaned blob.
+    func deleteDownloadedModel(for pref: EnginePreference) {
+        guard pref != preference,
+              let spec = pref.mlxSpec else { return }
+        spec.deleteDownloadedFiles()
+        // objectWillChange so sidebar rows re-read isFullyDownloaded.
+        objectWillChange.send()
+    }
+
+    /// Whether the sidebar should show a Delete affordance for this row.
+    /// True only for inactive MLX engines with files actually on disk.
+    func canDelete(_ pref: EnginePreference) -> Bool {
+        guard pref != preference,
+              let spec = pref.mlxSpec else { return false }
+        return spec.isFullyDownloaded || spec.hasPartialDownload
+    }
+
     /// One-shot cellular override for THIS download attempt. Does not flip
-    /// the persistent `QwenR2BackgroundSession.shared.cellularAllowed`.
-    /// Called by the "Use cellular this time" link on the Waiting-for-Wi-Fi
-    /// card.
+    /// the persistent `MLXR2BackgroundSession.shared.cellularAllowed`.
+    /// Called by the "Use cellular this time" link on the
+    /// Waiting-for-Wi-Fi card.
     func useCellularThisTime() {
-        guard let client = engine as? QwenClient else { return }
+        guard let client = engine as? MLXEngineClient else { return }
         Task { await client.useCellularThisTime() }
     }
 
@@ -102,13 +133,13 @@ final class EngineHolder: ObservableObject {
     /// Flipping this to true un-gates the download immediately if we
     /// were sitting in .waitingForWifi.
     var cellularAllowed: Bool {
-        get { QwenR2BackgroundSession.shared.cellularAllowed }
+        get { MLXR2BackgroundSession.shared.cellularAllowed }
         set {
-            QwenR2BackgroundSession.shared.cellularAllowed = newValue
-            // Nudge the session to re-evaluate its gate. The path monitor's
-            // pathUpdateHandler won't re-fire unless the path changes, so
-            // a preference flip mid-wait needs an explicit kick.
-            if newValue, case .waitingForWifi = qwenLoadState {
+            MLXR2BackgroundSession.shared.cellularAllowed = newValue
+            // Nudge the session to re-evaluate its gate. The path
+            // monitor's pathUpdateHandler won't re-fire unless the path
+            // changes, so a preference flip mid-wait needs an explicit kick.
+            if newValue, case .waitingForWifi = mlxEngineLoadState {
                 useCellularThisTime()
             }
             objectWillChange.send()
@@ -119,25 +150,28 @@ final class EngineHolder: ObservableObject {
 
     private static func makeEngine(for pref: EnginePreference) -> (any ListeningEngine)? {
         switch pref {
-        case .apple: return try? FoundationModelsClient()
-        case .qwen:  return try? QwenClient()
+        case .apple:
+            return try? FoundationModelsClient()
+        case .qwen3, .qwen35, .gemma4:
+            guard let spec = pref.mlxSpec else { return nil }
+            return try? MLXEngineClient(spec: spec)
         }
     }
 
-    /// If the current engine is Qwen, start observing its state stream
-    /// AND kick off the download eagerly. Safe to call on any transition
-    /// to a .qwen preference.
-    private func attachQwenObserverIfNeeded() {
-        guard preference == .qwen, let client = engine as? QwenClient else { return }
+    /// If the current engine is an MLX engine, start observing its state
+    /// stream AND kick off the download eagerly. Safe to call on any
+    /// transition to an MLX preference.
+    private func attachMLXObserverIfNeeded() {
+        guard let client = engine as? MLXEngineClient else { return }
 
         // Observe state changes and mirror them into @Published.
         // Task inherits MainActor from the enclosing @MainActor class in
         // Swift 6, so we can assign to @Published directly without hopping.
-        qwenObservationTask = Task { [weak self] in
+        mlxObservationTask = Task { [weak self] in
             let stream = await client.makeStateStream()
             for await newState in stream {
                 guard let self else { return }
-                self.qwenLoadState = newState
+                self.mlxEngineLoadState = newState
             }
         }
 
@@ -147,15 +181,17 @@ final class EngineHolder: ObservableObject {
         eagerPrepareTask = Task { try? await client.prepare() }
     }
 
-    private func tearDownCurrentQwenIfAny() {
+    private func tearDownCurrentMLXIfAny() {
         eagerPrepareTask?.cancel()
         eagerPrepareTask = nil
-        qwenObservationTask?.cancel()
-        qwenObservationTask = nil
+        mlxObservationTask?.cancel()
+        mlxObservationTask = nil
 
-        if let outgoing = engine as? QwenClient {
-            // Fire-and-forget cancellation: URLSession inside HubApi
-            // should respect Task cancellation at its suspension points.
+        if let outgoing = engine as? MLXEngineClient {
+            // Fire-and-forget cancellation. The background session will
+            // persist resume data to the outgoing spec's per-engine file
+            // before the task actually stops, so switching back later
+            // picks up where it left off.
             Task { await outgoing.cancelLoading() }
         }
     }

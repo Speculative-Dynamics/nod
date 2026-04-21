@@ -24,6 +24,12 @@ struct SidebarView: View {
     let onCleared: () -> Void
 
     @State private var showingClearConfirmation = false
+    /// Drives the Delete Model confirmation alert. Nil when hidden; set
+    /// to the preference whose row was tapped. Using an optional (rather
+    /// than a separate bool + state) keeps the "which model?" context
+    /// attached to the alert's lifetime, preventing a race where the
+    /// user double-taps different rows before the alert opens.
+    @State private var deleteTarget: EnginePreference?
 
     var body: some View {
         NavigationStack {
@@ -63,9 +69,9 @@ struct SidebarView: View {
                     Text("Nod runs the AI on your device — nothing is sent to a server. Switching keeps your conversation intact.")
                 }
 
-                // Downloads section: only relevant for Qwen (AFM doesn't
-                // download), but we show it always because the alternative
-                // (conditional reveal) makes the setting feel hidden.
+                // Downloads section: only relevant for MLX engines (AFM
+                // doesn't download). Shown always — conditional reveal
+                // makes the setting feel hidden.
                 Section {
                     Toggle(isOn: Binding(
                         get: { engineHolder.cellularAllowed },
@@ -77,7 +83,7 @@ struct SidebarView: View {
                 } header: {
                     Text("Downloads")
                 } footer: {
-                    Text("Nod needs Wi-Fi to download the ~2.3 GB Qwen model. Turn this on to allow cellular data.")
+                    Text("Nod needs Wi-Fi to download an on-device model (2-3 GB). Turn this on to allow cellular data.")
                 }
 
                 Section {
@@ -140,6 +146,31 @@ struct SidebarView: View {
             } message: {
                 Text("This clears every message and Nod's memory of your conversation. It can't be undone.")
             }
+            // Delete Model alert. Same warm "Keep it" / neutral "Delete"
+            // pattern as the download-pause alert in ChatView — the
+            // consequence (re-download) is real but recoverable, so
+            // destructive-red would miscommunicate. Attached here (not
+            // inside engineRow) because SwiftUI's .alert is one-per-view.
+            .alert(
+                deleteTarget.map { "Delete \($0.displayName)?" } ?? "",
+                isPresented: Binding(
+                    get: { deleteTarget != nil },
+                    set: { if !$0 { deleteTarget = nil } }
+                )
+            ) {
+                Button("Keep it", role: .cancel) { }
+                Button("Delete") {
+                    if let pref = deleteTarget {
+                        engineHolder.deleteDownloadedModel(for: pref)
+                        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                    }
+                    deleteTarget = nil
+                }
+            } message: {
+                if let pref = deleteTarget, let spec = pref.mlxSpec {
+                    Text("You'll need to download it again (\(formatCoarseSize(spec.totalBytes))) to use it.")
+                }
+            }
         }
     }
 
@@ -162,12 +193,30 @@ struct SidebarView: View {
 
     // MARK: - Engine row
 
-    /// One row for an engine option. Unavailable engines (e.g. Qwen on a
-    /// 4GB-RAM iPhone) render dimmed and don't respond to taps, with a
-    /// reason line in place of the tagline.
+    /// One row for an engine option.
+    ///
+    /// Layout per design review (`plan-design-review`, April 2026):
+    ///
+    ///   Line 1:  <displayName>                         ✓  (if active)
+    ///   Line 2:  <metadata-line>                   Delete  (if eligible)
+    ///
+    /// Metadata line varies by engine kind:
+    ///   - AFM:  the static tagline ("Built-in · fast · works offline")
+    ///   - MLX:  "<Month YYYY> · <size>" with optional " · download on
+    ///           use" or " · paused" suffix
+    ///
+    /// Delete shows only for NON-ACTIVE MLX engines with at least partial
+    /// files on disk — there's nothing to delete otherwise. Tapping Delete
+    /// opens the confirmation alert at the view level.
+    ///
+    /// Unavailable engines (MLX on an iPhone without enough RAM) render
+    /// dimmed with a replacement metadata line ("Needs iPhone 15 Pro or
+    /// newer") and don't respond to row taps.
     @ViewBuilder
     private func engineRow(_ pref: EnginePreference) -> some View {
         let available = pref.isAvailable
+        let isActive = engineHolder.preference == pref
+        let canDelete = engineHolder.canDelete(pref)
 
         Button {
             guard available else { return }
@@ -178,19 +227,40 @@ struct SidebarView: View {
             // the soft receive-tap used elsewhere.
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         } label: {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4) {
+                // Line 1: name on left, checkmark on right for active
+                HStack {
                     Text(pref.displayName)
                         .foregroundStyle(available ? .primary : .secondary)
-                    Text(pref.unavailabilityReason ?? pref.tagline)
+                    Spacer()
+                    if isActive {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(Color("NodAccent"))
+                            .font(.body.bold())
+                    }
+                }
+                // Line 2: metadata on left, Delete on right if eligible
+                HStack {
+                    Text(metadataLine(for: pref))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if engineHolder.preference == pref {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color("NodAccent"))
-                        .font(.body.bold())
+                        .monospacedDigit()
+                    Spacer()
+                    if canDelete {
+                        // Inline tappable text. Not a nested Button —
+                        // nested Buttons in a List row have a documented
+                        // history of stealing taps from the outer row.
+                        // Using `.onTapGesture` with simultaneousGesture
+                        // on just this text keeps the row-tap working
+                        // while the Delete label becomes its own target.
+                        Text("Delete")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                deleteTarget = pref
+                            }
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -198,6 +268,42 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .disabled(!available)
         .opacity(available ? 1 : 0.5)
+    }
+
+    /// Metadata line text for one engine row.
+    /// AFM: the static tagline.
+    /// MLX: "Jul 2025 · 2.3 GB" plus optional " · download on use" /
+    /// " · paused" suffix based on on-disk state.
+    private func metadataLine(for pref: EnginePreference) -> String {
+        if let reason = pref.unavailabilityReason {
+            return reason
+        }
+        guard let spec = pref.mlxSpec else {
+            // AFM — use the tagline, which doubles as the metadata line.
+            return pref.tagline
+        }
+        let base = "\(spec.releaseMonth) · \(formatCoarseSize(spec.totalBytes))"
+        if spec.isFullyDownloaded {
+            return base
+        }
+        if spec.hasPartialDownload {
+            return "\(base) · paused"
+        }
+        return "\(base) · download on use"
+    }
+
+    /// "2.3 GB" formatting — reused from the download card so the number
+    /// rolls the same way in both places. Snaps to 0.1 GB above 1 GB,
+    /// nearest 10 MB below.
+    private func formatCoarseSize(_ bytes: Int64) -> String {
+        let oneGB: Int64 = 1_000_000_000
+        if bytes >= oneGB {
+            let gb = Double(bytes) / Double(oneGB)
+            return String(format: "%.1f GB", gb)
+        } else {
+            let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
+            return "\(mb) MB"
+        }
     }
 }
 

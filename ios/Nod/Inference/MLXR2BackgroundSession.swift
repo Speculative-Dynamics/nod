@@ -1,5 +1,8 @@
-// QwenR2BackgroundSession.swift
-// The actual machinery behind Qwen model delivery.
+// MLXR2BackgroundSession.swift
+// The actual machinery behind on-device MLX model delivery.
+// Generalized from the original Qwen-specific class to support an
+// arbitrary MLX model via MLXModelSpec — now used for Qwen 3, Qwen 3.5,
+// and Gemma 4 E2B.
 //
 // ==========================================================================
 // Why this exists
@@ -103,14 +106,14 @@ enum DownloadError: Error, CustomStringConvertible, Sendable {
     }
 }
 
-final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
 
     // MARK: - Singleton
 
     /// The one instance. Must be touched from `AppDelegate.application(
     /// _:handleEventsForBackgroundURLSession:completionHandler:)` so the
     /// URLSession exists and can replay delegate events on cold relaunch.
-    static let shared = QwenR2BackgroundSession()
+    static let shared = MLXR2BackgroundSession()
 
     // MARK: - Preference keys
 
@@ -240,31 +243,41 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
     }
 
     // MARK: - Resume data disk persistence
+    //
+    // Resume data is SCOPED TO THE MODEL, not the session. When the user
+    // pauses Qwen 3.5 at 45% and switches to Gemma 4, Qwen 3.5's resume
+    // blob stays put at `<modelDir>/.resume.data` — Gemma 4 has its own.
+    // A shared app-global filename would silently overwrite, losing
+    // progress on any model the user isn't currently on. The active run's
+    // resume URL is stored in `currentResumeURL` below and updated at the
+    // top of each `ensureLocalFiles` call.
+    //
+    // Every read/write goes through the three helpers below so there's
+    // only one place to audit.
 
-    private static var resumeDataURL: URL {
-        let supportDir = URL.applicationSupportDirectory
-            .appending(path: "Nod")
-        try? FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
-        return supportDir.appending(path: DownloadTuning.resumeDataFilename)
+    /// The resume-data URL for the currently-active download run.
+    /// Lock-protected; set at the top of `ensureLocalFiles`, read by the
+    /// retry loop and cancellation path.
+    private var currentResumeURL: URL?
+
+    private func persistResumeData(_ data: Data) {
+        let url = lock.withLock { currentResumeURL }
+        guard let url else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url, options: .atomic)
     }
 
-    /// The presence of a resume-data blob on disk is the signal to the UI
-    /// that a prior download was paused and can be continued. QwenClient
-    /// consults this on launch.
-    static func hasPersistedResumeData() -> Bool {
-        FileManager.default.fileExists(atPath: resumeDataURL.path)
+    private func loadPersistedResumeData() -> Data? {
+        guard let url = lock.withLock({ currentResumeURL }) else { return nil }
+        return try? Data(contentsOf: url)
     }
 
-    private static func persistResumeData(_ data: Data) {
-        try? data.write(to: resumeDataURL, options: .atomic)
-    }
-
-    private static func loadPersistedResumeData() -> Data? {
-        try? Data(contentsOf: resumeDataURL)
-    }
-
-    private static func clearPersistedResumeData() {
-        try? FileManager.default.removeItem(at: resumeDataURL)
+    private func clearPersistedResumeData() {
+        guard let url = lock.withLock({ currentResumeURL }) else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 
     // MARK: - Background URL session completion handler
@@ -289,12 +302,19 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
     /// `destinationDir`. Returns when all files are in place or throws on
     /// terminal failure. Emits DownloadEvent updates via `on`.
     ///
-    /// Safe to call from QwenClient (an actor) — every mutation is
+    /// `resumeDataURL` is the per-engine path where cancellation will
+    /// persist the URLSession resume blob. Pass the spec's
+    /// `resumeDataURL` — it's `<modelDir>/.resume.data`. Scoping here
+    /// means switching engines mid-download doesn't clobber the outgoing
+    /// model's resume progress.
+    ///
+    /// Safe to call from MLXEngineClient (an actor) — every mutation is
     /// NSLock-guarded.
     func ensureLocalFiles(
         baseURL: URL,
         files: [FileSpec],
         destinationDir: URL,
+        resumeDataURL: URL,
         on event: @escaping @Sendable (DownloadEvent) -> Void
     ) async throws {
         try FileManager.default.createDirectory(at: destinationDir, withIntermediateDirectories: true)
@@ -326,6 +346,7 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
             self.completedByteBase = completedBytes
             self.totalManifestBytes = totalBytes
             self.onEvent = event
+            self.currentResumeURL = resumeDataURL
             self.wifiGatedSnapshot = isWifiGated(path: latestPath)
         }
 
@@ -394,7 +415,7 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
             task.cancel(byProducingResumeData: { [weak self] data in
                 guard let self else { cont.resume(); return }
                 if let data {
-                    Self.persistResumeData(data)
+                    self.persistResumeData(data)
                 }
                 let metrics = self.lock.withLock { self.snapshotMetricsLocked() }
                 self.onEvent?(.paused(metrics))
@@ -403,13 +424,10 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
         }
     }
 
-    /// True if a paused download's resume data is on disk and we should
-    /// wire up a Resume affordance on next prepare.
-    static var hasResumeData: Bool { hasPersistedResumeData() }
-
-    /// Clear the persisted resume data. Called by QwenClient after a
-    /// successful restart or "Start fresh" wipe.
-    static func clearResumeData() { clearPersistedResumeData() }
+    // Note: Removed the app-global `hasResumeData` / `clearResumeData`
+    // statics. Resume data is now scoped per MLXModelSpec — check
+    // `MLXModelSpec.hasPartialDownload` and call
+    // `MLXModelSpec.deleteDownloadedFiles()` to wipe it.
 
     /// One-shot: allow cellular for the CURRENT run only. Does not flip
     /// the persistent preference.
@@ -429,7 +447,7 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
         let url = baseURL.appending(path: file.name)
         let destPath = destinationDir.appending(path: file.name)
 
-        var resumeData = Self.loadPersistedResumeData()
+        var resumeData = self.loadPersistedResumeData()
         var lastError: Error?
 
         for attempt in 1...DownloadTuning.maxAttemptsPerFile {
@@ -471,7 +489,7 @@ final class QwenR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unch
                 try FileManager.default.moveItem(at: tempURL, to: destPath)
                 // Successful file → clear any persisted resume data since
                 // it belongs to a superseded attempt.
-                Self.clearPersistedResumeData()
+                self.clearPersistedResumeData()
                 return
 
             } catch is CancellationError {

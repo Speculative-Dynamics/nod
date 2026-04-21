@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
         // Hand the completion handler off. The session stashes it and
         // invokes it after its own urlSessionDidFinishEvents fires.
-        QwenR2BackgroundSession.shared.handleBackgroundEvents(
+        MLXR2BackgroundSession.shared.handleBackgroundEvents(
             completionHandler: completionHandler
         )
     }

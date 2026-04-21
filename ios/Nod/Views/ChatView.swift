@@ -113,14 +113,15 @@ struct ChatView: View {
                         .transition(.opacity)
                 }
 
-                // Qwen is the only engine that has a pre-send readiness
-                // step. AFM is ready as soon as it exists.
-                if engineHolder.preference == .qwen {
-                    qwenReadinessBar
+                // MLX engines (Qwen 3, Qwen 3.5, Gemma 4) all have a
+                // pre-send readiness step (download + load). AFM is
+                // ready as soon as it exists.
+                if engineHolder.preference.mlxSpec != nil {
+                    mlxReadinessBar
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        .animation(.easeInOut(duration: 0.25), value: engineHolder.qwenLoadState)
+                        .animation(.easeInOut(duration: 0.25), value: engineHolder.mlxEngineLoadState)
                 }
 
                 inputBar
@@ -172,7 +173,7 @@ struct ChatView: View {
             .alert("Pause download?", isPresented: $showingCancelDownloadAlert) {
                 Button("Keep downloading", role: nil) { }
                 Button("Pause", role: .cancel) {
-                    engineHolder.cancelQwenDownload()
+                    engineHolder.cancelMLXDownload()
                     UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                 }
             } message: {
@@ -186,7 +187,7 @@ struct ChatView: View {
             // long-running operation." Released back to the system once
             // the model is ready or the transfer fails, so we don't drain
             // the battery during normal chat.
-            .onChange(of: engineHolder.qwenLoadState) { _, newValue in
+            .onChange(of: engineHolder.mlxEngineLoadState) { _, newValue in
                 // Keep the screen awake while bytes are actively moving OR
                 // MLX is loading. In waiting/paused states the download
                 // isn't progressing, so a sleeping screen costs us nothing.
@@ -361,8 +362,8 @@ struct ChatView: View {
     private var sendEnabled: Bool {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         guard !isInferring else { return false }
-        if engineHolder.preference == .qwen {
-            if case .ready = engineHolder.qwenLoadState { return true }
+        if engineHolder.preference.mlxSpec != nil {
+            if case .ready = engineHolder.mlxEngineLoadState { return true }
             return false
         }
         return true
@@ -386,8 +387,8 @@ struct ChatView: View {
     // second metadata line in secondary. Cancel is bottom-right, plain
     // text, not a button.
     @ViewBuilder
-    private var qwenReadinessBar: some View {
-        switch engineHolder.qwenLoadState {
+    private var mlxReadinessBar: some View {
+        switch engineHolder.mlxEngineLoadState {
         case .notLoaded, .ready:
             EmptyView()
 
@@ -425,7 +426,7 @@ struct ChatView: View {
             readinessCard {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Loading Qwen into memory…")
+                    Text("Loading \(activeModelDisplayName) into memory…")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -435,13 +436,13 @@ struct ChatView: View {
         case .failed:
             readinessCard {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(qwenFailureTitle)
+                    Text(mlxFailureTitle)
                         .font(.subheadline.weight(.medium))
-                    Text(qwenFailureBody)
+                    Text(mlxFailureBody)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Try again") {
-                        engineHolder.retryQwenLoad()
+                        engineHolder.retryMLXLoad()
                     }
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color("NodAccent"))
@@ -456,7 +457,7 @@ struct ChatView: View {
     private func downloadingCardContent(metrics: DownloadMetrics, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Downloading Qwen…")
+                Text("Downloading \(activeModelDisplayName)…")
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 Text("\(Int(metrics.fraction * 100))%")
@@ -555,7 +556,7 @@ struct ChatView: View {
     @ViewBuilder
     private func pausedCardContent(metrics: DownloadMetrics) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Qwen download paused")
+            Text("\(activeModelDisplayName) download paused")
                 .font(.subheadline.weight(.medium))
 
             ProgressView(value: metrics.fraction)
@@ -569,7 +570,7 @@ struct ChatView: View {
             HStack {
                 Spacer()
                 Button {
-                    engineHolder.resumeQwenDownload()
+                    engineHolder.resumeMLXDownload()
                 } label: {
                     Text("Resume download")
                         .font(.subheadline.weight(.medium))
@@ -680,28 +681,46 @@ struct ChatView: View {
 
     /// Pull apart the `.failed(String)` payload to decide what to show.
     /// We match on the raw description rather than re-typing because
-    /// QwenClient stores the error's description in the state, not the
+    /// MLXEngineClient stores the error's description in the state, not the
     /// original Error. Crude but serviceable.
-    private var qwenFailureTitle: String {
-        guard case .failed(let msg) = engineHolder.qwenLoadState else { return "Qwen failed to load" }
+    private var mlxFailureTitle: String {
+        guard case .failed(let msg) = engineHolder.mlxEngineLoadState else {
+            return "\(activeModelDisplayName) failed to load"
+        }
         if msg.contains("downloadFailedNoNetwork") {
             return "Can't reach the download server"
         }
         if msg.contains("downloadFailedDiskFull") {
-            return "Not enough space for Qwen"
+            return "Not enough space for \(activeModelDisplayName)"
         }
-        return "Qwen failed to load"
+        return "\(activeModelDisplayName) failed to load"
     }
 
-    private var qwenFailureBody: String {
-        guard case .failed(let msg) = engineHolder.qwenLoadState else { return "Tap Try again below." }
+    private var mlxFailureBody: String {
+        guard case .failed(let msg) = engineHolder.mlxEngineLoadState else {
+            return "Tap Try again below."
+        }
+        let sizeGB = String(format: "%.1f", Double(activeModelTotalBytes) / 1_000_000_000)
         if msg.contains("downloadFailedNoNetwork") {
-            return "Connect to Wi-Fi and try again. The download is ~2.3 GB."
+            return "Connect to Wi-Fi and try again. The download is ~\(sizeGB) GB."
         }
         if msg.contains("downloadFailedDiskFull") {
-            return "Free up ~3 GB on your device, then try again."
+            return "Free up ~\(sizeGB) GB on your device, then try again."
         }
         return "Something went wrong. Try again, or switch back to Apple Intelligence in the menu."
+    }
+
+    /// Display name of the currently-active MLX engine, or an empty
+    /// string when we're on AFM. Used throughout the readiness-card
+    /// copy so "Downloading Qwen 3 Instruct 2507…" / "Loading Gemma 4
+    /// E2B Text into memory…" show the right model.
+    private var activeModelDisplayName: String {
+        engineHolder.preference.mlxSpec?.displayName ?? ""
+    }
+
+    /// Total bytes for the active model's manifest. Zero if AFM.
+    private var activeModelTotalBytes: Int64 {
+        engineHolder.preference.mlxSpec?.totalBytes ?? 0
     }
 
     private func sendMessage() {
@@ -750,12 +769,13 @@ struct ChatView: View {
                     reply = rawReply
                 }
             } catch InferenceError.modelNotReady {
-                // Engine-specific: AFM is settings-gated; Qwen is download-gated.
+                // Engine-specific: AFM is settings-gated; MLX engines are
+                // download-gated (all three: Qwen 3, Qwen 3.5, Gemma 4).
                 switch EnginePreferenceStore.current {
                 case .apple:
                     reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
-                case .qwen:
-                    reply = "Qwen isn't ready yet. The model still needs to finish downloading."
+                case .qwen3, .qwen35, .gemma4:
+                    reply = "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
                 }
                 wasError = true
             } catch InferenceError.guardrailViolation {

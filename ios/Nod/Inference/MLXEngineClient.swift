@@ -1,23 +1,26 @@
-// QwenClient.swift
-// Qwen 3 4B (4-bit) via MLX Swift — the alternate listening-loop engine.
+// MLXEngineClient.swift
+// One on-device MLX engine instance, parameterized by MLXModelSpec.
+// Generalized from QwenClient — now backs Qwen 3 Instruct 2507,
+// Qwen 3.5 4B, and Gemma 4 E2B Text equally.
 //
-// Why Qwen? Two reasons:
-//   1. AFM is Apple-Intelligence-gated. Many users won't have it enabled or
-//      will have regional/device restrictions. Qwen runs on any device with
-//      enough RAM (roughly iPhone 15 Pro and up for the 4B).
-//   2. Open weights mean we can fine-tune for the listening voice later.
+// Why multiple on-device options:
+//   1. AFM is Apple-Intelligence-gated. Many users won't have it enabled
+//      or will have regional/device restrictions. MLX-based models run on
+//      any device with enough RAM (roughly iPhone 15 Pro and up for 4B).
+//   2. Open weights across vendors (Alibaba / Google) let users pick
+//      based on voice, release recency, and training data mix.
 //
-// Note: the MLX registry ships Qwen 3 4B (not Qwen 3.5 — that family hasn't
-// been converted to an `mlx-community/*` 4-bit build yet). Qwen 3 4B is the
-// right starting point; swapping the ModelConfiguration when 3.5 lands is
-// a one-line change.
+// Each spec carries a stable identifier, display name, R2 base URL, and
+// a file manifest with pinned SHA-256s. The client itself is identical
+// regardless of which spec it's initialized with.
 //
-// Model weights (~2 GB) are downloaded on first use from our Cloudflare R2
-// bucket (not Hugging Face — HF's public endpoints throttle at any real
-// install count). EngineHolder observes `makeStateStream()` to drive the
-// download progress UI. See QwenR2Downloader for the fetch + verify details.
+// Model weights (~2.3-3.0 GB) are downloaded on first use from our
+// Cloudflare R2 bucket (not Hugging Face — HF's public endpoints
+// throttle at any real install count). EngineHolder observes
+// `makeStateStream()` to drive the download progress UI. See
+// `MLXR2BackgroundSession` for the fetch + verify details.
 //
-// Concurrency shape: QwenClient is an actor. The heavy MLX objects
+// Concurrency shape: this is an actor. The heavy MLX objects
 // (LanguageModel, Tokenizer, KV cache) aren't Sendable, so we keep them
 // behind MLX's own `ModelContainer` actor and run all generation inside
 // `container.perform { context in ... }`. Only Sendable values (String)
@@ -34,7 +37,7 @@ import os
 // No `import Hub` — mlx-swift-lm 3.x decoupled from the Hugging Face Hub
 // downloader package. By the time we reach loadModelContainer, the files
 // are already sitting on disk in Application Support thanks to
-// QwenR2BackgroundSession, so we just hand MLX the URL and let it read
+// MLXR2BackgroundSession, so we just hand MLX the URL and let it read
 // config.json, tokenizer.json, etc. directly.
 //
 // `import Tokenizers` + `import MLXHuggingFace` are for the macro
@@ -42,9 +45,15 @@ import os
 // bridges its internal Tokenizer protocol to swift-transformers'
 // AutoTokenizer.
 
-private let log = Logger(subsystem: "app.usenod.nod", category: "qwen.client")
+private let log = Logger(subsystem: "app.usenod.nod", category: "mlx.client")
 
-actor QwenClient: ListeningEngine {
+actor MLXEngineClient: ListeningEngine {
+
+    // MARK: - Spec
+    //
+    // Injected at init. Everything model-specific (name, R2 URL, file
+    // manifest, disk directory) lives here.
+    let spec: MLXModelSpec
 
     /// What the engine is doing right now, for the UI.
     ///
@@ -99,80 +108,18 @@ actor QwenClient: ListeningEngine {
 
     // MARK: - R2 download source
     //
-    // Files are re-hosted at a versioned path so we can ship future model
-    // updates without invalidating existing installs. SHA-256 values are
-    // computed once at upload time and pinned here to guarantee bit-
-    // identical weights even if the CDN (or our bucket) is ever tampered
-    // with.
+    // Files are re-hosted at a versioned path on Cloudflare R2 so we can
+    // ship future model updates without invalidating existing installs.
+    // SHA-256 values are computed once at upload time and pinned in
+    // `MLXModelSpec.files` to guarantee bit-identical weights even if the
+    // CDN (or our bucket) is ever tampered with.
     //
-    // As of build 18 we're on Qwen 3 4B **Instruct 2507** (July 2025 Alibaba
-    // refresh). Key differences from the original Qwen 3 4B we shipped first:
-    //   - Instruct-only build: no "thinking mode" in the chat template, so
-    //     responses don't begin with `<think>...</think>` reasoning blocks.
-    //     We no longer need the `/no_think` prompt prefix; the defensive
-    //     `stripThinkingBlock` helper stays as a safety net in case Qwen
-    //     ever slips one through anyway.
-    //   - ~3 months newer training data.
-    //   - Ships a separate `chat_template.jinja` that swift-transformers'
-    //     tokenizer loads automatically from the model directory.
-    //   - Includes `generation_config.json` for default sampling params.
-    private static let r2BaseURL = URL(
-        string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3-4b-instruct-2507/v1"
-    )!
+    // All spec-specific values — URL, files, disk directory, resume data
+    // path — come from `self.spec`. Adding a new model is a new
+    // `MLXModelSpec` static constant plus an `EnginePreference` case.
 
-    private static let r2Files: [FileSpec] = [
-        .init(name: "config.json",
-              sha256: "574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849",
-              size: 938),
-        .init(name: "merges.txt",
-              sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
-              size: 1_671_853),
-        .init(name: "model.safetensors",
-              sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f",
-              size: 2_263_022_417),
-        .init(name: "model.safetensors.index.json",
-              sha256: "388d811b8b7c2608dd04cce1bcb04a8bf715d19b42790894e6d3427ff429a777",
-              size: 63_964),
-        .init(name: "tokenizer.json",
-              sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-              size: 11_422_654),
-        .init(name: "tokenizer_config.json",
-              sha256: "4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9",
-              size: 5_440),
-        .init(name: "vocab.json",
-              sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
-              size: 2_776_833),
-        // Special-token maps. Missing these makes swift-transformers' tokenizer
-        // fopen-fail on `special_tokens_map.json` and under-register Qwen's
-        // ChatML tokens.
-        .init(name: "added_tokens.json",
-              sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
-              size: 707),
-        .init(name: "special_tokens_map.json",
-              sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
-              size: 613),
-        // New in 2507: chat template is split out of tokenizer_config.json
-        // into its own jinja file; swift-transformers' tokenizer picks this
-        // up automatically from the model directory.
-        .init(name: "chat_template.jinja",
-              sha256: "40c21f34cf67d8c760ef72f8ad3ae5afad514299d4b06e91dd9a8d705af7b541",
-              size: 4_040),
-        .init(name: "generation_config.json",
-              sha256: "835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48",
-              size: 238),
-    ]
-
-    /// Where the verified model files live after a successful download.
-    /// Application Support keeps them invisible to Files, out of iCloud
-    /// backups, and not evictable like Caches. MLX loads directly from
-    /// here via `loadModelContainer(hub:directory:)`.
-    private static func modelDirectoryURL() -> URL {
-        URL.applicationSupportDirectory
-            .appending(path: "Nod")
-            .appending(path: "Qwen3-4B-4bit")
-    }
-
-    init() throws {
+    init(spec: MLXModelSpec) throws {
+        self.spec = spec
         self.listeningPrompt = try Self.loadPrompt(named: "listening_mode")
         self.summaryPrompt   = try Self.loadPrompt(named: "summary")
     }
@@ -248,7 +195,7 @@ actor QwenClient: ListeningEngine {
     /// data to disk and transitions to .paused. A later `prepare()` call
     /// resumes from the same spot. Safe to call if nothing is downloading.
     func cancelDownload() async {
-        await QwenR2BackgroundSession.shared.cancelAndPersistResume()
+        await MLXR2BackgroundSession.shared.cancelAndPersistResume()
         loadingTask?.cancel()
         loadingTask = nil
     }
@@ -263,7 +210,7 @@ actor QwenClient: ListeningEngine {
     /// the persistent preference. The UI exposes this via "Use cellular
     /// this time" on the .waitingForWifi card.
     func useCellularThisTime() async {
-        await QwenR2BackgroundSession.shared.useCellularThisTime()
+        await MLXR2BackgroundSession.shared.useCellularThisTime()
     }
 
     private func performLoad() async throws {
@@ -276,12 +223,13 @@ actor QwenClient: ListeningEngine {
             // The background session observes the download events we
             // bridge into `applyDownloadEvent` so both the progress UI
             // and the four waiting/paused states surface through one path.
-            let modelDir = Self.modelDirectoryURL()
+            let modelDir = spec.modelDirectoryURL
 
-            try await QwenR2BackgroundSession.shared.ensureLocalFiles(
-                baseURL: Self.r2BaseURL,
-                files: Self.r2Files,
+            try await MLXR2BackgroundSession.shared.ensureLocalFiles(
+                baseURL: spec.r2BaseURL,
+                files: spec.files,
                 destinationDir: modelDir,
+                resumeDataURL: spec.resumeDataURL,
                 on: { [weak self] event in
                     guard let self else { return }
                     Task { await self.applyDownloadEvent(event) }
