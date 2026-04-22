@@ -20,6 +20,8 @@ final class ConversationStore: ObservableObject {
     private enum PendingDiskWrite: Codable, Sendable {
         case insert(Message)
         case updateText(id: UUID, text: String)
+        case delete(id: UUID)
+        case setCancelled(id: UUID, cancelled: Bool)
 
         func apply(to database: MessageDatabase) throws {
             switch self {
@@ -27,6 +29,10 @@ final class ConversationStore: ObservableObject {
                 try database.insert(message)
             case .updateText(let id, let text):
                 try database.updateText(id: id, text: text)
+            case .delete(let id):
+                try database.deleteMessage(id: id)
+            case .setCancelled(let id, let cancelled):
+                try database.setCancelled(id: id, cancelled: cancelled)
             }
         }
     }
@@ -161,14 +167,83 @@ final class ConversationStore: ObservableObject {
         }
     }
 
-    /// Used by streaming AI replies — updates the last assistant message in
-    /// place as new tokens arrive. Writes-through to the database at the end.
+    /// Commit-path for streaming replies: updates the last assistant message
+    /// AND enqueues a disk write. Call this ONCE per reply, at stream
+    /// completion — not per chunk. For per-chunk in-flight updates during
+    /// streaming, use `updateLastAssistantMessageInMemory(with:)` which
+    /// skips the WAL enqueue to avoid disk churn at 30 Hz.
     func replaceLastAssistantMessage(with text: String) {
         guard let lastIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
         let current = messages[lastIndex]
-        let updated = Message(id: current.id, role: .assistant, text: text, createdAt: current.createdAt)
+        let updated = Message(
+            id: current.id,
+            role: .assistant,
+            text: text,
+            wasCancelled: current.wasCancelled,
+            createdAt: current.createdAt
+        )
         messages[lastIndex] = updated
         enqueueDiskWrite(.updateText(id: updated.id, text: text))
+    }
+
+    /// In-flight streaming update: mutates the last assistant message
+    /// text in memory WITHOUT enqueueing a disk write. The caller is
+    /// responsible for calling `replaceLastAssistantMessage(with:)` once
+    /// at stream completion to persist the final text.
+    ///
+    /// Why split: streaming at 30 Hz with `enqueueDiskWrite` per call
+    /// triggers 30 JSON-WAL rewrites per second per reply, which hammers
+    /// disk for no benefit (the final text is what matters). One write
+    /// at the end matches the pre-streaming cost exactly.
+    func updateLastAssistantMessageInMemory(with text: String) {
+        guard let lastIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
+        let current = messages[lastIndex]
+        messages[lastIndex] = Message(
+            id: current.id,
+            role: .assistant,
+            text: text,
+            wasCancelled: current.wasCancelled,
+            createdAt: current.createdAt
+        )
+    }
+
+    /// Remove the LAST assistant message (by position). Used when the
+    /// user cancels before any token streams in — we tear down the empty
+    /// placeholder rather than leave an orphan empty bubble. No-op if
+    /// the last message isn't an assistant.
+    func removeLastAssistantMessage() {
+        guard let lastIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
+        let id = messages[lastIndex].id
+        messages.remove(at: lastIndex)
+        enqueueDiskWrite(.delete(id: id))
+    }
+
+    /// Remove a specific assistant message by ID. Used during regenerate:
+    /// we keep the old reply visible until the new reply's first token
+    /// arrives, then remove the old one. Keying by ID (not position)
+    /// avoids fragility if other turns land in between.
+    func removeAssistantMessage(id: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        guard messages[index].role == .assistant else { return }
+        messages.remove(at: index)
+        enqueueDiskWrite(.delete(id: id))
+    }
+
+    /// Flip the `wasCancelled` flag on a message (and persist it). Used
+    /// when the user taps stop mid-stream to mark the partial reply as
+    /// "stopped" so the tag shows on reload.
+    func markAssistantCancelled(id: UUID, cancelled: Bool = true) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        let current = messages[index]
+        guard current.role == .assistant else { return }
+        messages[index] = Message(
+            id: current.id,
+            role: current.role,
+            text: current.text,
+            wasCancelled: cancelled,
+            createdAt: current.createdAt
+        )
+        enqueueDiskWrite(.setCancelled(id: id, cancelled: cancelled))
     }
 
     // MARK: - Context for the LLM
@@ -402,6 +477,19 @@ final class ConversationStore: ObservableObject {
                     id: current.id,
                     role: current.role,
                     text: text,
+                    wasCancelled: current.wasCancelled,
+                    createdAt: current.createdAt
+                )
+            case .delete(let id):
+                messages.removeAll { $0.id == id }
+            case .setCancelled(let id, let cancelled):
+                guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
+                let current = messages[index]
+                messages[index] = Message(
+                    id: current.id,
+                    role: current.role,
+                    text: current.text,
+                    wasCancelled: cancelled,
                     createdAt: current.createdAt
                 )
             }

@@ -483,6 +483,81 @@ actor MLXEngineClient: ListeningEngine {
         return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Real per-token streaming for MLX. Each yielded element is the FULL
+    /// accumulated reply so far — callers just assign the snapshot to the
+    /// bubble, no delta math.
+    ///
+    /// CANCELLATION: when the consumer's `AsyncThrowingStream` is torn
+    /// down (Task.cancel on the caller), `continuation.onTermination`
+    /// fires and cancels the producer Task. The producer's inner
+    /// `for try await generation in stream` loop already honors
+    /// Task.cancellation at each suspension, so MLX generation exits
+    /// within a token or two of cancellation. This is real stop: the GPU
+    /// stops generating, not just the UI stops reading.
+    nonisolated func streamResponse(
+        to userMessage: String,
+        context userContext: String,
+        history: [Message],
+        options: GenerationOptions
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let producer = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                do {
+                    if await self.container == nil {
+                        try await self.prepare()
+                    }
+                    guard let container = await self.container else {
+                        throw InferenceError.modelNotReady
+                    }
+
+                    let instructions: String
+                    if userContext.isEmpty {
+                        instructions = await self.listeningPrompt
+                    } else {
+                        instructions = await self.listeningPrompt + "\n\n---\n\n" + userContext
+                    }
+
+                    try await Self.generateStreaming(
+                        container: container,
+                        instructions: instructions,
+                        history: history,
+                        userPrompt: userMessage,
+                        maxTokens: options.maxTokens
+                    ) { snapshot in
+                        // Guard against cancellation before each yield.
+                        // Throwing CancellationError breaks the MLX loop
+                        // cooperatively — the GPU stops generating.
+                        try Task.checkCancellation()
+                        // Strip `<think>...</think>` progressively. While
+                        // the model is still inside a thinking block,
+                        // cleaned is empty — typing-dots cover that
+                        // window. Once the close tag lands we begin
+                        // yielding snapshots of the user-visible reply.
+                        let cleaned = await self.stripThinkingBlock(snapshot)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !cleaned.isEmpty {
+                            continuation.yield(cleaned)
+                        }
+                    }
+
+                    try Task.checkCancellation()
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                producer.cancel()
+            }
+        }
+    }
+
     // MARK: - ConversationSummarizer
 
     func summarize(messages: [Message], existingSummary: String) async throws -> String {
@@ -748,6 +823,74 @@ actor MLXEngineClient: ListeningEngine {
 
             Stream.gpu.synchronize()
             return output
+        }
+    }
+
+    /// Streaming variant of `generate`: runs the same MLX token loop and
+    /// calls `onSnapshot` with the FULL accumulated reply each time a
+    /// chunk arrives. Accumulation happens here (inside the single
+    /// `container.perform` closure) so the caller's Sendable callback
+    /// doesn't need to juggle a captured mutable String across
+    /// concurrency boundaries.
+    ///
+    /// The inner `for try await generation in stream` loop honors
+    /// Task.cancellation at each suspension, so cancellation of the
+    /// outer Task breaks the loop within a token or two.
+    ///
+    /// `onSnapshot` is async-throwing so callers can use it as a
+    /// cancellation checkpoint.
+    private static func generateStreaming(
+        container: ModelContainer,
+        instructions: String,
+        history: [Message],
+        userPrompt: String,
+        maxTokens: Int,
+        onSnapshot: @escaping @Sendable (String) async throws -> Void
+    ) async throws {
+        try await container.perform { context in
+            var chat: [Chat.Message] = [.system(instructions)]
+            for msg in history {
+                switch msg.role {
+                case .user:
+                    chat.append(.user(msg.text))
+                case .assistant:
+                    if !msg.text.isEmpty {
+                        chat.append(.assistant(msg.text))
+                    }
+                case .nod:
+                    chat.append(.assistant("(I nodded.)"))
+                }
+            }
+            chat.append(.user(userPrompt))
+            let userInput = UserInput(
+                chat: chat,
+                additionalContext: ["enable_thinking": false]
+            )
+            let input = try await context.processor.prepare(input: userInput)
+
+            var parameters = GenerateParameters()
+            parameters.maxTokens = maxTokens
+            parameters.kvBits = Self.kvBits
+            parameters.kvGroupSize = Self.kvGroupSize
+            parameters.quantizedKVStart = Self.quantizedKVStart
+            let stream = try MLXLMCommon.generate(
+                input: input,
+                parameters: parameters,
+                context: context
+            )
+
+            var accumulator = ""
+            for try await generation in stream {
+                switch generation {
+                case .chunk(let chunk):
+                    accumulator += chunk
+                    try await onSnapshot(accumulator)
+                case .info, .toolCall:
+                    break
+                }
+            }
+
+            Stream.gpu.synchronize()
         }
     }
 

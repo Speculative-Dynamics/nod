@@ -132,6 +132,16 @@ final class MessageDatabase: @unchecked Sendable {
             try db.create(indexOn: "entity_aliases", columns: ["alias"])
         }
 
+        // v3: wasCancelled flag for assistant messages the user stopped
+        // mid-stream. Persists the "stopped" tag across relaunches.
+        // INTEGER with default 0 keeps existing rows valid; SQLite has
+        // no boolean type so we use INTEGER and treat it as 0/1.
+        migrator.registerMigration("v3_was_cancelled") { db in
+            try db.alter(table: "messages") { t in
+                t.add(column: "was_cancelled", .integer).notNull().defaults(to: 0)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
@@ -141,14 +151,15 @@ final class MessageDatabase: @unchecked Sendable {
     func insert(_ message: Message) throws {
         try queue.write { db in
             try db.execute(sql: """
-                INSERT OR IGNORE INTO messages (id, role, text, created_at, is_summarized)
-                VALUES (?, ?, ?, ?, 0)
+                INSERT OR IGNORE INTO messages (id, role, text, created_at, is_summarized, was_cancelled)
+                VALUES (?, ?, ?, ?, 0, ?)
                 """,
                 arguments: [
                     message.id.uuidString,
                     message.role.rawValue,
                     message.text,
-                    iso8601(message.createdAt)
+                    iso8601(message.createdAt),
+                    message.wasCancelled ? 1 : 0
                 ]
             )
         }
@@ -166,12 +177,38 @@ final class MessageDatabase: @unchecked Sendable {
         try applyBackupPreference()
     }
 
+    /// Mark a message as cancelled (or clear the flag). Used when the user
+    /// taps stop mid-stream, to persist the "stopped" tag across relaunches.
+    func setCancelled(id: UUID, cancelled: Bool) throws {
+        try queue.write { db in
+            try db.execute(
+                sql: "UPDATE messages SET was_cancelled = ? WHERE id = ?",
+                arguments: [cancelled ? 1 : 0, id.uuidString]
+            )
+        }
+        try applyBackupPreference()
+    }
+
+    /// Delete a message by ID. Used when the user regenerates a reply
+    /// (old assistant message vanishes after the new one lands) or cancels
+    /// before a single token streamed in (empty placeholder). No-op if
+    /// the id doesn't exist.
+    func deleteMessage(id: UUID) throws {
+        try queue.write { db in
+            try db.execute(
+                sql: "DELETE FROM messages WHERE id = ?",
+                arguments: [id.uuidString]
+            )
+        }
+        try applyBackupPreference()
+    }
+
     /// All messages, oldest first. Used once on app launch to populate the
     /// in-memory view model.
     func fetchAllMessages() throws -> [Message] {
         try queue.read { db in
             let rows = try Row.fetchAll(db,
-                sql: "SELECT id, role, text, created_at FROM messages ORDER BY created_at ASC"
+                sql: "SELECT id, role, text, created_at, was_cancelled FROM messages ORDER BY created_at ASC"
             )
             return rows.compactMap(messageFromRow)
         }
@@ -183,7 +220,7 @@ final class MessageDatabase: @unchecked Sendable {
         try queue.read { db in
             let rows = try Row.fetchAll(db,
                 sql: """
-                    SELECT id, role, text, created_at
+                    SELECT id, role, text, created_at, was_cancelled
                     FROM messages
                     WHERE is_summarized = 0
                     ORDER BY created_at ASC
@@ -208,7 +245,7 @@ final class MessageDatabase: @unchecked Sendable {
         try queue.read { db in
             let rows = try Row.fetchAll(db,
                 sql: """
-                    SELECT id, role, text, created_at
+                    SELECT id, role, text, created_at, was_cancelled
                     FROM messages
                     WHERE is_summarized = 0
                     ORDER BY created_at ASC
@@ -433,7 +470,16 @@ final class MessageDatabase: @unchecked Sendable {
         else {
             return nil
         }
-        return Message(id: id, role: role, text: text, createdAt: createdAt)
+        // `was_cancelled` is present in rows fetched after v3 migration;
+        // absent in any theoretical pre-migration read path. Default false.
+        let wasCancelled = (row["was_cancelled"] as? Int) == 1
+        return Message(
+            id: id,
+            role: role,
+            text: text,
+            wasCancelled: wasCancelled,
+            createdAt: createdAt
+        )
     }
 
     private func entityFromRow(_ row: Row, aliases: [String]) -> Entity? {

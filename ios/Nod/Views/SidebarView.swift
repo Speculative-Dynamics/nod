@@ -10,6 +10,7 @@
 // restructuring anything.
 
 import SwiftUI
+import UIKit
 
 struct SidebarView: View {
 
@@ -23,6 +24,13 @@ struct SidebarView: View {
     /// the direct reference to track changes.
     @ObservedObject var entityStore: EntityStore
     @Environment(\.dismiss) private var dismiss
+    /// Color scheme of the host view (ChatView) at the moment this
+    /// sheet renders. Passed as a prop (not read from @Environment
+    /// in-sheet) because `preferredColorScheme(nil)` at the app root
+    /// doesn't propagate reliably into an already-presented sheet.
+    /// ChatView's @Environment tracks the app's current scheme
+    /// correctly; we forward the value.
+    let hostColorScheme: ColorScheme
 
     /// Called after the user confirms "Start fresh." ChatView uses this to
     /// reset any local inference state (e.g. the isInferring thinking
@@ -78,7 +86,6 @@ struct SidebarView: View {
                             Text("What Nod knows about you")
                             Spacer()
                             Text("\(entityStore.entities.count)")
-                                .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                                 .accessibilityHidden(true)
@@ -180,6 +187,36 @@ struct SidebarView: View {
                     Text("Nod reads this each time you send a message. Changes take effect on the next reply.")
                 }
 
+                // Theme picker. Menu style instead of segmented because
+                // segmented caused visible three-band render artifacts
+                // during theme transitions (nav bar, content, and
+                // bottom safe-area glass materials arrived at
+                // different times). Menu style opens a tap-to-reveal
+                // dropdown, which momentarily dismisses before the
+                // theme flip lands — natural decoupling from the
+                // sheet's own render pass. Matches the pattern iOS
+                // Settings uses for secondary-frequency choices.
+                Section {
+                    Picker(
+                        "Theme",
+                        selection: Binding(
+                            get: { personalization.current.appearance },
+                            set: { newValue in
+                                personalization.current.appearance = newValue
+                            }
+                        )
+                    ) {
+                        ForEach(AppearancePreference.allCases) { pref in
+                            Text(pref.displayName).tag(pref)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("System follows your iOS setting. Light and Dark override it.")
+                }
+
                 Section {
                     ForEach(EnginePreference.allCases, id: \.self) { pref in
                         engineRow(pref)
@@ -238,6 +275,22 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                 } footer: {
                     Text("Clears every message and Nod's memory of your conversation. This can't be undone.")
+                }
+
+                Section {
+                    if let url = feedbackURL {
+                        Link(destination: url) {
+                            Label("Send feedback", systemImage: "envelope")
+                        }
+                    } else {
+                        // URLComponents couldn't assemble a valid mailto
+                        // (extremely unlikely — shouldn't happen in practice).
+                        // Show the row disabled rather than hiding it silently.
+                        Label("Send feedback", systemImage: "envelope")
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Opens Mail with a prefilled message to hello@usenod.app.")
                 }
 
                 Section {
@@ -300,11 +353,82 @@ struct SidebarView: View {
                 }
             }
         }
+        // Apply the user's appearance preference to the sidebar sheet
+        // itself. Without this, `.preferredColorScheme` applied at the
+        // NodApp root doesn't reach into the sheet's separate
+        // presentation context — the main chat flips but the settings
+        // stays stuck in whatever the OS last gave it. SidebarView
+        // already observes PersonalizationStore so this reacts live to
+        // the picker. Placed at the outermost view level so every nested
+        // alert / toolbar / keyboard inherits it.
+        // Apply an explicit color scheme to the sheet. For `.light` /
+        // `.dark` this is the user's pick. For `.system`, it's the
+        // host's current scheme (iOS system scheme, propagated
+        // through NodApp). Always explicit — never nil — because a
+        // nil preferredColorScheme on a sheet doesn't re-inherit
+        // from the parent when it transitions mid-flight.
+        .preferredColorScheme(
+            personalization.current.appearance.preferredColorScheme(
+                systemFallback: hostColorScheme
+            )
+        )
     }
 
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         return version
+    }
+
+    private var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+    }
+
+    private var deviceModel: String {
+        // `UIDevice.model` is "iPhone" / "iPad" — uninteresting. The
+        // hardware identifier (e.g. "iPhone15,3") requires sysctl, which
+        // is heavier than the feedback channel needs. Ship with model
+        // name + iOS version; a user on an old device can write the
+        // specific model if it matters to the bug.
+        UIDevice.current.model
+    }
+
+    private var iOSVersion: String {
+        UIDevice.current.systemVersion
+    }
+
+    /// mailto: URL to hello@usenod.app with subject carrying version +
+    /// build and a short triage template in the body. URLComponents
+    /// percent-encodes both subject and body so newlines and
+    /// parentheses survive the roundtrip.
+    ///
+    /// nil only if URL assembly fails (shouldn't happen given the
+    /// inputs). The Link row shows a disabled fallback in that case.
+    private var feedbackURL: URL? {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = "hello@usenod.app"
+        let subject = "Nod feedback (v\(appVersion) build \(buildNumber))"
+        let body = """
+            What happened:
+
+
+            What I expected:
+
+
+            —
+            iOS \(iOSVersion) · \(deviceModel)
+            """
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: subject),
+            URLQueryItem(name: "body", value: body),
+        ]
+        // URLComponents uses +-encoding for spaces in query values by
+        // default. Mail clients typically accept either, but %20 is
+        // safer across the board — fix up before handing to the URL.
+        let query = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%20")
+        components.percentEncodedQuery = query
+        return components.url
     }
 
     /// Days between today and the first ever message. 1-indexed (the day
@@ -452,7 +576,7 @@ struct SidebarView: View {
         summarizer: { [holder] in holder.engine },
         entityFallbackProvider: { [holder] in holder.engine }
     )
-    SidebarView(store: store, engineHolder: holder, entityStore: entities, onCleared: {})
+    SidebarView(store: store, engineHolder: holder, entityStore: entities, hostColorScheme: .dark, onCleared: {})
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }

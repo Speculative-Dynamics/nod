@@ -54,6 +54,65 @@ enum ResponseStyle: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// Light / dark / system theme preference. The default is `.system` — follow
+/// the OS setting — with `.light` and `.dark` as manual overrides.
+///
+/// Persisted alongside the other Personalization knobs so a theme flip
+/// survives relaunches. NodApp reads this via `preferredColorScheme` at
+/// the root of the view tree.
+enum AppearancePreference: String, CaseIterable, Sendable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light:  return "Light"
+        case .dark:   return "Dark"
+        }
+    }
+
+    /// Resolve to an EXPLICIT `ColorScheme` (never nil) using
+    /// `systemFallback` as the scheme for `.system`. Callers should
+    /// pass `@Environment(\.colorScheme)` read at a level where it
+    /// reflects the actual iOS system scheme (before any local
+    /// `.preferredColorScheme` override).
+    ///
+    /// Why this exists: `.preferredColorScheme(nil)` works at the app
+    /// root (the root scene re-inherits from iOS), but it does NOT
+    /// reliably re-inherit on a sheet in flight. A sheet that had an
+    /// explicit `.preferredColorScheme(.light)` set, when flipped to
+    /// nil, keeps its UIKit presentation context stuck at light even
+    /// though the app-root has re-inherited. Dismissing + re-presenting
+    /// the sheet fixes it, but that's user-visible friction. Passing
+    /// an always-explicit scheme bypasses the re-inheritance quirk
+    /// entirely.
+    func preferredColorScheme(systemFallback: ColorScheme) -> ColorScheme {
+        switch self {
+        case .system: return systemFallback
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
+
+    /// Nil means "let the system decide." Passed to SwiftUI's
+    /// `.preferredColorScheme(_:)` at the app root.
+    ///
+    /// Prefer `preferredColorScheme(systemFallback:)` for sheet-safe
+    /// resolution; the nil-returning variant below is kept for
+    /// convenience but is unsafe inside sheets.
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
+}
+
 /// What Nod does when the user speaks. "Listen" is the most restrained
 /// mode — just acknowledgment. "Reflect" is the default — mirror back
 /// to help the user see their own feelings. "Perspective" allows light
@@ -94,6 +153,11 @@ struct Personalization: Equatable, Sendable {
     var responseStyle: ResponseStyle = .conversational
     var nodMode: NodMode = .reflect
     var freeFormText: String = ""
+    /// App theme preference. Default `.system` follows iOS; users can
+    /// override from the sidebar. Not included in `isActive` because it
+    /// affects appearance, not Nod's voice — no reason to suppress the
+    /// voice block just because someone picked Light mode.
+    var appearance: AppearancePreference = .system
 
     /// Soft cap on the free-form field. Beyond this, the prompt block
     /// gets unwieldy against the fixed context window we allow the LLM
@@ -174,6 +238,7 @@ final class PersonalizationStore: ObservableObject {
     private static let responseStyleKey = "Personalization.responseStyle"
     private static let nodModeKey       = "Personalization.nodMode"
     private static let freeFormKey      = "Personalization.freeFormText"
+    private static let appearanceKey    = "Personalization.appearance"
 
     private static func load() -> Personalization {
         let d = UserDefaults.standard
@@ -182,10 +247,13 @@ final class PersonalizationStore: ObservableObject {
         let mode = NodMode(rawValue: d.string(forKey: nodModeKey) ?? "")
             ?? .reflect
         let text = d.string(forKey: freeFormKey) ?? ""
+        let appearance = AppearancePreference(rawValue: d.string(forKey: appearanceKey) ?? "")
+            ?? .system
         return Personalization(
             responseStyle: style,
             nodMode: mode,
-            freeFormText: text
+            freeFormText: text,
+            appearance: appearance
         )
     }
 
@@ -194,5 +262,6 @@ final class PersonalizationStore: ObservableObject {
         d.set(current.responseStyle.rawValue, forKey: Self.responseStyleKey)
         d.set(current.nodMode.rawValue, forKey: Self.nodModeKey)
         d.set(current.freeFormText, forKey: Self.freeFormKey)
+        d.set(current.appearance.rawValue, forKey: Self.appearanceKey)
     }
 }
