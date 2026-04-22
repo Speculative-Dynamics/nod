@@ -6,6 +6,7 @@
 
 import MLX
 import SwiftUI
+import UIKit
 
 @main
 struct NodApp: App {
@@ -17,6 +18,14 @@ struct NodApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // Boot-crash breaker FIRST — before any heavy allocation. If the
+        // previous launch didn't complete (killed by jetsam loading a
+        // 2-3 GB MLX model, say), this forces EnginePreferenceStore back
+        // to .apple for this run so we break the loop. Safe no-op on a
+        // normal launch. Runs synchronously; the work is one UserDefaults
+        // read + one UserDefaults write.
+        LaunchCrashBreaker.shared.markLaunchStarted()
+
         // MLX's GPU buffer cache is the silent memory hog on iOS. By default
         // it's allowed to grow to ~1 GB alongside model weights, which on a
         // 3 GB-budget iPhone 15 Pro leaves no room for a KV cache to grow.
@@ -24,7 +33,7 @@ struct NodApp: App {
         // walkthrough) is to cap it aggressively — 20 MB is plenty for a
         // chat workload. Pair this with the memory-limit entitlement so the
         // OS doesn't jetsam us mid-inference.
-        MLX.GPU.set(cacheLimit: 20 * 1024 * 1024)
+        Memory.cacheLimit = 20 * 1024 * 1024
     }
 
     // Resets to true on every cold launch (the @State default). Warm launches
@@ -76,6 +85,18 @@ struct NodApp: App {
             // with dark variant #E07C40 and light variant #DD6D2C.
             .tint(Color("NodAccent"))
             .animation(.easeInOut(duration: 0.25), value: appLock.isLocked)
+            // iOS issues a memory warning when we're close to the jetsam
+            // ceiling. On an MLX engine, that's our "about to die" signal
+            // — flip to Apple Intelligence NOW so the MLXEngineClient
+            // releases its 2.6 GB ModelContainer before the OS kills us.
+            // Observed app-wide so any view path is covered.
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIApplication.didReceiveMemoryWarningNotification
+                )
+            ) { _ in
+                LaunchCrashBreaker.shared.handleMemoryWarning()
+            }
             // App Lock lifecycle: background → foreground transitions run
             // through the manager so the grace period logic stays in one
             // place. Short trips (app switcher, copy a URL) stay unlocked;

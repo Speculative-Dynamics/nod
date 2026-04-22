@@ -276,13 +276,15 @@
                         <p>
                             Nod has no backend. There's no server to leak, no
                             account to delete, no API key to revoke. Every word
-                            you type stays on the device, in a local database,
+                            you type stays in a local database on the device,
                             read only by a model running on the same chip.
+                            iCloud backup for the conversation is off by
+                            default unless you turn it on.
                         </p>
                         <p>
-                            We can't see what you write. Nobody can. Not because
-                            we promise — because there is no pipe to send it
-                            through.
+                            We can't see what you write. Not because we promise
+                            — because Nod has no backend receiving your
+                            conversation.
                         </p>
                     </div>
 
@@ -312,7 +314,8 @@
                             <span class="facts__val">Local SQLite</span>
                             <span class="facts__note"
                                 >GRDB.swift, encrypted at rest by iOS. Tap
-                                "Start fresh" and it's gone.</span
+                                "Start fresh" and it's gone. iCloud backup is
+                                optional and off by default.</span
                             >
                         </li>
                         <li>

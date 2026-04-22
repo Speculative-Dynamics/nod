@@ -45,11 +45,11 @@ enum ResponseStyle: String, CaseIterable, Sendable, Identifiable {
     var promptDirective: String? {
         switch self {
         case .brief:
-            return "Keep replies very short — one or two sentences. Warm, present, minimal."
+            return "For this person, keep replies very short — one or two sentences. Warm, specific, minimal. No questions unless one would really help."
         case .conversational:
-            return nil
+            return nil  // Default — the base prompt handles it.
         case .deeper:
-            return "Take time to reflect more deeply. Replies can be three to five sentences, exploring what the person shared."
+            return "For this person, it's OK to go a little longer — four to six sentences when there's something real to sit with. Stay specific. Still a friend's voice, not an essay."
         }
     }
 }
@@ -76,11 +76,11 @@ enum NodMode: String, CaseIterable, Sendable, Identifiable {
     var promptDirective: String? {
         switch self {
         case .listen:
-            return "Your role is pure acknowledgment. Do not reflect, analyse, or offer perspective. Short affirmations like \"that sounds hard\" or \"I'm here\" are enough."
+            return "For this person, lean heavily toward quiet acknowledgment. Keep replies to one short sentence when you can. Skip questions unless truly necessary. They want to be heard, not drawn out."
         case .reflect:
-            return nil  // Default listening-mode behaviour.
+            return nil  // Default listening-mode behaviour — the base prompt handles it.
         case .perspective:
-            return "You may gently offer a different angle or a question when it feels appropriate. Never give advice or instructions."
+            return "This person wants you to push a little harder. When they're spiraling, stuck, or missing something obvious, offer a different angle or name what you see. Still a friend's voice, not a coach's. No prescriptions."
         }
     }
 }
@@ -112,21 +112,39 @@ struct Personalization: Equatable, Sendable {
     /// The block that gets prepended to the LLM context. Empty when
     /// `isActive` is false. Kept deliberately plain so a 4 B model can
     /// follow it without getting confused by nested structure.
+    ///
+    /// The two halves ("HOW...", "WHAT...") emit independently — we
+    /// only add the "HOW..." header when at least one directive is
+    /// non-default, and only add the "WHAT..." header when the
+    /// free-form is non-empty. A small model can get confused by an
+    /// orphan header with no bullets under it (would read it as
+    /// "no preferences" and ignore the free-form below), so we build
+    /// the block conditionally instead.
     var promptBlock: String {
         guard isActive else { return "" }
-        var lines: [String] = ["HOW THIS PERSON LIKES TO BE HEARD:"]
-        if let s = responseStyle.promptDirective {
-            lines.append("- \(s)")
+        var lines: [String] = []
+
+        let directives = [
+            responseStyle.promptDirective,
+            nodMode.promptDirective,
+        ].compactMap { $0 }
+
+        if !directives.isEmpty {
+            lines.append("HOW THIS PERSON LIKES TO BE HEARD:")
+            for d in directives {
+                lines.append("- \(d)")
+            }
         }
-        if let m = nodMode.promptDirective {
-            lines.append("- \(m)")
-        }
+
         let trimmed = freeFormText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            lines.append("")
+            if !lines.isEmpty {
+                lines.append("")
+            }
             lines.append("WHAT THIS PERSON HAS TOLD YOU ABOUT THEMSELVES:")
             lines.append(trimmed)
         }
+
         return lines.joined(separator: "\n")
     }
 }

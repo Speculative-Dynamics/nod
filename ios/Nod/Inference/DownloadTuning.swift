@@ -13,9 +13,13 @@ enum DownloadTuning {
     /// Minimum wall-clock time between UI progress emissions. At ~3 MB/s on
     /// iPhone, didWriteData fires dozens of times per second. Emitting all
     /// of them would flood @Published → SwiftUI → layout and cost more CPU
-    /// than the download itself. 100 ms gives a visibly smooth bar (10 fps
-    /// for progress updates is plenty; the bar interpolates between frames).
-    static let progressEmitInterval: TimeInterval = 0.1
+    /// than the download itself.
+    ///
+    /// 200 ms (5 Hz) is the sweet spot. The eye integrates linear motion
+    /// cleanly at 4-5 Hz — 10 Hz was visibly no smoother — and halving
+    /// the emit rate halves the SwiftUI invalidation work during the 5 min
+    /// download, which matters for hitting 120 fps on the rest of the UI.
+    static let progressEmitInterval: TimeInterval = 0.2
 
     /// Minimum fractional progress delta that forces an emit even if the
     /// last emit was <100 ms ago. On a 2.3 GB download this is ~11 MB of

@@ -268,6 +268,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
             withIntermediateDirectories: true
         )
         try? data.write(to: url, options: .atomic)
+        try? excludeFromBackup(url.deletingLastPathComponent())
     }
 
     private func loadPersistedResumeData() -> Data? {
@@ -318,6 +319,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
         on event: @escaping @Sendable (DownloadEvent) -> Void
     ) async throws {
         try FileManager.default.createDirectory(at: destinationDir, withIntermediateDirectories: true)
+        try excludeFromBackup(destinationDir)
 
         // Plan: identify which files need downloading. Size-match anything
         // already present (trusted because we only move to final dest
@@ -615,6 +617,13 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
         return false
     }
 
+    private func excludeFromBackup(_ url: URL) throws {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableURL = url
+        try mutableURL.setResourceValues(values)
+    }
+
     // MARK: - URLSessionDownloadDelegate
 
     func urlSession(
@@ -625,10 +634,10 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
         totalBytesExpectedToWrite: Int64
     ) {
         let maybeMetrics = lock.withLock { () -> DownloadMetrics? in
-            guard var state = taskStates[downloadTask.taskIdentifier] else { return nil }
-            state.speedWindow.record(totalBytes: totalBytesWritten)
-            state.bytesWrittenThisFile = totalBytesWritten
-            taskStates[downloadTask.taskIdentifier] = state
+            guard taskStates[downloadTask.taskIdentifier] != nil else { return nil }
+            taskStates[downloadTask.taskIdentifier]?.speedWindow.record(totalBytes: totalBytesWritten)
+            taskStates[downloadTask.taskIdentifier]?.bytesWrittenThisFile = totalBytesWritten
+            guard let state = taskStates[downloadTask.taskIdentifier] else { return nil }
 
             // Throttle emission: only update the UI if enough wall-clock
             // time has passed OR enough progress delta has accumulated.
@@ -689,7 +698,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
             }
             return (state, true)
         }
-        guard var state = stateOpt else { return }
+        guard let state = stateOpt else { return }
 
         // Move to an intermediate path inside the destination dir so the
         // async caller can rehash before finalising. We use the destPath
@@ -705,7 +714,6 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
         } catch {
             fireOnce(taskIdentifier: downloadTask.taskIdentifier, result: .failure(error))
         }
-        _ = state // silence "unused" in some code paths
     }
 
     func urlSession(
@@ -753,11 +761,10 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
     /// then didCompleteWithError with no error). Only the first one wins.
     private func fireOnce(taskIdentifier: Int, result: Result<URL, Error>) {
         let cont = lock.withLock { () -> CheckedContinuation<URL, Error>? in
-            guard var state = taskStates[taskIdentifier], !state.didFire else { return nil }
-            state.didFire = true
+            guard let state = taskStates[taskIdentifier], !state.didFire else { return nil }
             let c = state.continuation
-            state.continuation = nil
-            taskStates[taskIdentifier] = state
+            taskStates[taskIdentifier]?.didFire = true
+            taskStates[taskIdentifier]?.continuation = nil
             return c
         }
         guard let cont else { return }

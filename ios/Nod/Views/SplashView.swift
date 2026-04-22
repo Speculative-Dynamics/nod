@@ -5,7 +5,7 @@
 // Seamless with iOS's own launch screen (Info.plist → UILaunchScreen uses
 // the same NodAccent color), so there's no flash when SwiftUI takes over.
 //
-// Total duration: ~3.9s. Plays on every cold launch. Warm launches skip
+// Total duration: ~2.0s. Plays on every cold launch. Warm launches skip
 // this (the view only mounts when isLaunching resets to true, which only
 // happens on app process start).
 
@@ -67,7 +67,7 @@ struct SplashView: View {
         Task { @MainActor in
             // Phase 1 — full orange hold. Longer than strictly needed so the
             // moment settles before motion starts (anticipation).
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await Task.sleep(for: .milliseconds(150))
 
             // Phase 2 — condense. Longer spring response so the shrink is
             // something the user can visually track, not a snap. Slightly
@@ -75,11 +75,11 @@ struct SplashView: View {
             withAnimation(.spring(response: 0.9, dampingFraction: 0.8)) {
                 orangeSize = restingSize
             }
-            try? await Task.sleep(for: .milliseconds(1000))
+            try? await Task.sleep(for: .milliseconds(700))
 
             // Phase 2.5 — empty-square hold. A beat of just the orange icon
             // shape without eyes gives the reveal more weight.
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await Task.sleep(for: .milliseconds(100))
 
             // Phase 3 — eyes open. Bouncy spring so it feels alive. Slightly
             // longer response so the open motion reads clearly.
@@ -87,7 +87,7 @@ struct SplashView: View {
                 eyesScale = 1.0
                 eyesOpacity = 1.0
             }
-            try? await Task.sleep(for: .milliseconds(750))
+            try? await Task.sleep(for: .milliseconds(500))
 
             // Phase 4 — one gentle blink. "Hello, I see you." Blink is a
             // little slower and more deliberate than the incidental blinks.
@@ -98,7 +98,7 @@ struct SplashView: View {
             withAnimation(.easeInOut(duration: 0.20)) {
                 eyesClosedForBlink = false
             }
-            try? await Task.sleep(for: .milliseconds(850))
+            try? await Task.sleep(for: .milliseconds(250))
 
             // Phase 5 — hand back to the app.
             onComplete()

@@ -215,6 +215,13 @@ extension MLXModelSpec {
     // RAM usage is text-only, we just pay the disk cost of the vision
     // bytes included in the download.
     //
+    // Thinking mode: Qwen 3.5's chat_template.jinja defaults
+    // `enable_thinking=true` and prepends `<think>\n` to every reply.
+    // For a listening-mode chat app that burns token budget on reasoning
+    // nobody sees, so `MLXEngineClient.generate` passes
+    // `additionalContext: ["enable_thinking": false]` to flip the
+    // template's else branch and skip thinking entirely.
+    //
     // Source: mlx-community/Qwen3.5-4B-4bit (a re-quantization of
     // Qwen/Qwen3.5-4B). Hashes computed directly from the HF source;
     // user uploads these exact bytes to our R2 bucket.

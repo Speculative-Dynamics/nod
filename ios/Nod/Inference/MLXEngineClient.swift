@@ -30,7 +30,6 @@ import Foundation
 import MLX
 import MLXLLM
 import MLXLMCommon
-import MLXHuggingFace
 import Tokenizers
 import os
 
@@ -40,10 +39,63 @@ import os
 // MLXR2BackgroundSession, so we just hand MLX the URL and let it read
 // config.json, tokenizer.json, etc. directly.
 //
-// `import Tokenizers` + `import MLXHuggingFace` are for the macro
-// `#huggingFaceTokenizerLoader()` used in performLoad — that's how 3.x
-// bridges its internal Tokenizer protocol to swift-transformers'
-// AutoTokenizer.
+// We intentionally avoid mlx-swift-lm's `MLXHuggingFace` macro wrapper
+// here. The macro only expands to a small adapter that bridges MLX's
+// `TokenizerLoader` / `Tokenizer` protocols to swift-transformers'
+// `AutoTokenizer`. Inlining that adapter locally keeps the build graph
+// free of external macro targets, which avoids Xcode's "trust and enable
+// macro" gate for this app.
+
+private struct TransformersTokenizerLoader: TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
+        return TransformersTokenizerBridge(upstream)
+    }
+}
+
+private struct TransformersTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) {
+        self.upstream = upstream
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages,
+                tools: tools,
+                additionalContext: additionalContext
+            )
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
+    }
+}
 
 private let log = Logger(subsystem: "app.usenod.nod", category: "mlx.client")
 
@@ -86,6 +138,7 @@ actor MLXEngineClient: ListeningEngine {
 
     private let listeningPrompt: String
     private let summaryPrompt: String
+    private let extractionPrompt: String
 
     /// Loaded once, reused across calls. Nil until `prepare()` succeeds.
     /// ModelContainer is an actor — safe to hold here.
@@ -99,12 +152,53 @@ actor MLXEngineClient: ListeningEngine {
     /// EngineHolder attaches this to drive the download UI.
     private var stateContinuation: AsyncStream<State>.Continuation?
 
-    /// Cap generation length. Listening-mode replies are a paragraph at most;
-    /// anything longer is Qwen hallucinating. 250 tokens ~ 175-200 words —
-    /// plenty for a warm 2-3 sentence reflection, and the shorter ceiling
-    /// keeps KV cache growth bounded during generation (every extra token
-    /// is ~100 KB of cache on a 28-layer, 8-KV-head model).
-    private static let maxGenerationTokens = 250
+    /// Ceiling for the summary-compression path. summary.md targets ~300
+    /// words ≈ 400 tokens; the previous 250-token cap was truncating
+    /// summaries mid-sentence, which fed a fragmented briefing back into
+    /// every subsequent inference.
+    ///
+    /// Listening replies no longer use a static cap — callers pass a
+    /// per-style `GenerationOptions.maxTokens` (200/300/400 for brief/
+    /// conversational/deeper). Every saved token is ~100 KB of KV on a
+    /// 28-layer / 8-KV-head 4B model, which matters on a 3 GB-budget
+    /// iPhone 15 Pro.
+    private static let maxSummaryTokens = 400
+
+    /// Ceiling for entity extraction. A realistic 8-message batch should
+    /// produce at most ~10 entities, each taking ~25 tokens in our JSON
+    /// wire format — so 300 tokens is ample with headroom to spare. This
+    /// is only used on the MLX fallback path; AFM's @Generable path
+    /// doesn't go through this ceiling.
+    private static let maxExtractionTokens = 300
+
+    // MARK: - KV cache quantization
+    //
+    // mlx-swift-lm 3.31.3 ships affine KV-cache quantization as a public
+    // `GenerateParameters` knob (QuantizedKVCache + maybeQuantizeKVCache
+    // in MLXLMCommon/KVCache.swift). 4-bit @ group-size 64 gives ~4x peak
+    // KV reduction (~185 MB saved per generation on our typical
+    // ~2,500-token inference of system + personalization + summary + 4
+    // recent turns + reply) against the iOS jetsam line.
+    //
+    // Published benchmarks on Qwen3-4B (mlx-lm#1059) show 0.995 logit
+    // cosine similarity to FP16 at 4-bit with perfect top-1 token
+    // accuracy — near-lossless for our use case.
+    //
+    // `quantizedKVStart = 256` keeps the first 256 tokens full-precision.
+    // That window covers the listening_mode.md system prompt and most
+    // personalization blocks, so the instruction-following parts of the
+    // cache never get quantized — only the conversational bulk beyond
+    // them. A small insurance policy against any quality drift.
+    //
+    // Next tier: PolarQuant / TurboQuant (3-bit, 4.6x compression,
+    // 0.957 cosine sim on Qwen3-4B). Swift PR open at
+    // ml-explore/mlx-swift-lm#160 but currently CONFLICTING, ports an
+    // early mlx-vlm snapshot missing later optimizations, and decode
+    // throughput is ~0.5x FP16 without fused Metal kernels. Revisit
+    // when the PR rebases and the Metal kernel follow-ups land.
+    private static let kvBits: Int = 4
+    private static let kvGroupSize: Int = 64
+    private static let quantizedKVStart: Int = 256
 
     // MARK: - R2 download source
     //
@@ -120,8 +214,9 @@ actor MLXEngineClient: ListeningEngine {
 
     init(spec: MLXModelSpec) throws {
         self.spec = spec
-        self.listeningPrompt = try Self.loadPrompt(named: "listening_mode")
-        self.summaryPrompt   = try Self.loadPrompt(named: "summary")
+        self.listeningPrompt  = try Self.loadPrompt(named: "listening_mode")
+        self.summaryPrompt    = try Self.loadPrompt(named: "summary")
+        self.extractionPrompt = try Self.loadPrompt(named: "entity_extraction")
     }
 
     private static func loadPrompt(named name: String) throws -> String {
@@ -203,11 +298,31 @@ actor MLXEngineClient: ListeningEngine {
         try await prepare()
     }
 
+    /// Drop the loaded ModelContainer to reclaim its weight memory
+    /// (~2.3-3.0 GB depending on spec). Two callers today:
+    ///   1. EngineHolder's idle timer — after N minutes of no inference.
+    ///   2. LaunchCrashBreaker on the FIRST memory-warning strike — give
+    ///      the user a chance to stay on their chosen MLX engine by
+    ///      releasing weights instead of immediately falling back to AFM.
+    /// The next `respond()` call transparently re-prepares from the
+    /// already-downloaded files on disk (no re-download). State flips
+    /// to .notLoaded so the UI can reflect the reload.
+    ///
+    /// Safe to call even if nothing is loaded yet; also cancels an
+    /// in-flight load task so we don't race a pending prepare().
+    func releaseContainer() {
+        loadingTask?.cancel()
+        loadingTask = nil
+        guard container != nil else { return }
+        container = nil
+        setState(.notLoaded)
+    }
+
     /// One-shot override: allow cellular for THIS run only. Doesn't touch
     /// the persistent preference. The UI exposes this via "Use cellular
     /// this time" on the .waitingForWifi card.
     func useCellularThisTime() async {
-        await MLXR2BackgroundSession.shared.useCellularThisTime()
+        MLXR2BackgroundSession.shared.useCellularThisTime()
     }
 
     private func performLoad() async throws {
@@ -237,15 +352,15 @@ actor MLXEngineClient: ListeningEngine {
             setState(.loading)
 
             // Phase 2: hand MLX a pre-populated directory. mlx-swift-lm
-            // 3.x requires an explicit TokenizerLoader; the
-            // `#huggingFaceTokenizerLoader()` macro expands at compile
-            // time to an adapter that uses swift-transformers'
-            // AutoTokenizer.from(directory:) under the hood. MLX picks
-            // up config.json and wires the right architecture via the
+            // 3.x requires an explicit TokenizerLoader. We provide a
+            // small local bridge to swift-transformers'
+            // AutoTokenizer.from(modelFolder:) so we don't need the
+            // package's macro-based convenience wrapper. MLX picks up
+            // config.json and wires the right architecture via the
             // registered model types.
             let loaded = try await loadModelContainer(
                 from: modelDir,
-                using: #huggingFaceTokenizerLoader()
+                using: TransformersTokenizerLoader()
             )
             try Task.checkCancellation()
             self.container = loaded
@@ -328,7 +443,9 @@ actor MLXEngineClient: ListeningEngine {
 
     func respond(
         to userMessage: String,
-        context userContext: String
+        context userContext: String,
+        history: [Message],
+        options: GenerationOptions
     ) async throws -> String {
         if container == nil {
             try await prepare()
@@ -344,15 +461,24 @@ actor MLXEngineClient: ListeningEngine {
             instructions = listeningPrompt + "\n\n---\n\n" + userContext
         }
 
-        // Qwen 3 Instruct 2507 is an Instruct-only build with no thinking
-        // mode baked into the chat template, so we send the user message
-        // directly. The `stripThinkingBlock` post-processing stays as a
-        // defensive net in case a future model ships with thinking
-        // re-enabled.
+        // Thinking mode handling, per-model:
+        //   - Qwen 3 Instruct 2507: instruct-only build, no thinking branch
+        //     in its chat template. Zero budget spent on reasoning.
+        //   - Qwen 3.5 4B: template defaults enable_thinking=true. We flip
+        //     it off inside `generate` via additionalContext so the model
+        //     spends its full token budget on the user-visible reply.
+        //   - Gemma 4 E2B: doesn't use the enable_thinking concept; its
+        //     template ignores the flag.
+        //
+        // `stripThinkingBlock` below stays as belt-and-suspenders — with
+        // enable_thinking=false Qwen 3.5 emits `<think>\n\n</think>\n\n`
+        // as a pre-closed prefix, which the strip handles cleanly.
         let raw = try await Self.generate(
             container: container,
             instructions: instructions,
-            userPrompt: userMessage
+            history: history,
+            userPrompt: userMessage,
+            maxTokens: options.maxTokens
         )
         return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -404,9 +530,129 @@ actor MLXEngineClient: ListeningEngine {
         let raw = try await Self.generate(
             container: container,
             instructions: instructionInput,
-            userPrompt: "Produce the updated summary now."
+            history: [],  // summary is self-contained; transcript is in instructions
+            userPrompt: "Produce the updated summary now.",
+            maxTokens: Self.maxSummaryTokens
         )
         return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - EntityExtractor
+
+    /// Extract entities from a batch of messages via MLX. This is the
+    /// fallback path used when AFM is unavailable or refuses — AFM's
+    /// `@Generable` gives us guaranteed-valid JSON; this path has to
+    /// ask the model for JSON text and parse it defensively.
+    ///
+    /// On parse failure we return an empty list rather than throwing.
+    /// The alternative — throwing and letting extraction fail loudly —
+    /// would mean one bad generation wipes out memory for the whole
+    /// compression batch. Returning empty means we just miss a batch
+    /// of entities; the user can keep using the app, and the next
+    /// compression pass has another shot.
+    func extractEntities(from messages: [Message]) async throws -> ExtractedEntities {
+        if container == nil {
+            try await prepare()
+        }
+        guard let container else {
+            throw InferenceError.modelNotReady
+        }
+
+        let transcript = messages.map { m -> String in
+            switch m.role {
+            case .user:      return "User: \(m.text)"
+            case .assistant: return "Nod: \(m.text)"
+            case .nod:       return "(Nod nodded silently.)"
+            }
+        }.joined(separator: "\n")
+
+        // Hard-coded JSON contract because the model can't be trusted to
+        // follow `@Generable`-style shape hints alone. The "EXAMPLE" block
+        // is the most reliable way to get small models to hit the format.
+        let instructions = """
+        \(extractionPrompt)
+
+        ---
+
+        Output format: ONE JSON object with a single key "items" containing
+        a list of entity objects. Each entity has exactly these fields:
+        "type" (string, one of "person"/"place"/"project"/"situation"),
+        "name" (string), "role" (string, empty if unknown),
+        "note" (string, empty if unknown).
+
+        Output ONLY the JSON. No markdown fences, no prose, no commentary.
+        If no entities are present, return {"items":[]}.
+
+        EXAMPLE INPUT:
+        User: M sent another passive-aggressive email today.
+
+        EXAMPLE OUTPUT:
+        {"items":[{"type":"person","name":"M","role":"","note":"sent a passive-aggressive email"}]}
+
+        ---
+
+        CONVERSATION CHUNK TO ANALYZE:
+        \(transcript)
+        """
+
+        let raw = try await Self.generate(
+            container: container,
+            instructions: instructions,
+            history: [],
+            userPrompt: "Return the JSON now.",
+            maxTokens: Self.maxExtractionTokens
+        )
+        let stripped = stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.parseExtractedJSON(stripped)
+    }
+
+    /// Defensive parser for the JSON the model is asked to produce.
+    /// Strips any stray prose around the JSON, parses, and falls back
+    /// to an empty list on any failure. Every failure mode here is
+    /// "return empty" — we never throw — because partial extraction
+    /// data silently corrupts the entity store, but zero extraction
+    /// just means we retry on the next compression.
+    private static func parseExtractedJSON(_ raw: String) -> ExtractedEntities {
+        // Find the first { ... } span. Small models sometimes wrap JSON
+        // in prose ("Here's the output:") or markdown fences (```json).
+        guard let startIdx = raw.firstIndex(of: "{"),
+              let endIdx = raw.lastIndex(of: "}") else {
+            return ExtractedEntities(items: [])
+        }
+        let jsonString = String(raw[startIdx...endIdx])
+        guard let data = jsonString.data(using: .utf8) else {
+            return ExtractedEntities(items: [])
+        }
+
+        // The model's JSON output maps cleanly to ExtractedEntities only
+        // if the fields align. We decode through Foundation's Codable
+        // using a local mirror struct that's the same shape — this
+        // avoids coupling the @Generable wire format to the JSON wire
+        // format (they just happen to match today).
+        struct WireEntity: Decodable {
+            let type: String?
+            let name: String?
+            let role: String?
+            let note: String?
+        }
+        struct WireEntities: Decodable {
+            let items: [WireEntity]?
+        }
+        guard let wire = try? JSONDecoder().decode(WireEntities.self, from: data) else {
+            return ExtractedEntities(items: [])
+        }
+        let items = (wire.items ?? []).compactMap { e -> ExtractedEntity? in
+            guard let type = e.type, let name = e.name, !name.isEmpty else {
+                return nil
+            }
+            return ExtractedEntity(
+                type: type,
+                name: name,
+                role: e.role ?? "",
+                note: e.note ?? ""
+            )
+        }
+        return ExtractedEntities(items: items)
     }
 
     // MARK: - Generation
@@ -414,29 +660,94 @@ actor MLXEngineClient: ListeningEngine {
     /// Runs one generation pass inside the ModelContainer's isolation.
     /// Everything non-Sendable (ModelContext, KV cache, MLXArrays) stays
     /// on the container actor; only the resulting String crosses back.
+    ///
+    /// `history` is an ordered list of prior turns that get inserted
+    /// between the system message and the final user turn as real
+    /// `.user` / `.assistant` `Chat.Message` values. The chat template
+    /// renders them with the model's native turn tokens — way better
+    /// recall than embedding them as narration in the system message.
+    /// `.nod` role maps to `.assistant("(I nodded.)")` so the silent
+    /// acknowledgment stays in context.
     private static func generate(
         container: ModelContainer,
         instructions: String,
-        userPrompt: String
+        history: [Message],
+        userPrompt: String,
+        maxTokens: Int
     ) async throws -> String {
         try await container.perform { context in
-            let chat: [Chat.Message] = [
-                .system(instructions),
-                .user(userPrompt),
-            ]
-            let userInput = UserInput(chat: chat)
+            var chat: [Chat.Message] = [.system(instructions)]
+            for msg in history {
+                switch msg.role {
+                case .user:
+                    chat.append(.user(msg.text))
+                case .assistant:
+                    // Defensive skip of any empty assistant turns that
+                    // slipped past the ConversationStore filter.
+                    if !msg.text.isEmpty {
+                        chat.append(.assistant(msg.text))
+                    }
+                case .nod:
+                    chat.append(.assistant("(I nodded.)"))
+                }
+            }
+            chat.append(.user(userPrompt))
+            // Qwen 3.5's chat_template.jinja defaults `enable_thinking` to
+            // true and prepends `<think>\n` to every generation. For a
+            // listening-mode chat app that's terrible: the model burns
+            // tokens reasoning before producing any user-visible reply,
+            // and on .brief (maxTokens=200) can hit the ceiling mid-think,
+            // leaving us an orphan-<think> buffer that stripThinkingBlock
+            // turns into an empty string ("Something went wrong").
+            //
+            // Passing enable_thinking=false flips to the template's else
+            // branch — `<think>\n\n</think>\n\n` — so the model starts
+            // already past the think window and spends its full budget on
+            // the actual reply.
+            //
+            // Per-model behavior of the flag (verified against each
+            // shipped chat_template.jinja):
+            //   - Qwen 3 Instruct 2507: instruct-only build, template has
+            //     no `enable_thinking` branch at all — key is ignored.
+            //   - Qwen 3.5 4B: default ON, flag flips it OFF. ← the fix.
+            //   - Gemma 4 E2B Text: template DOES reference
+            //     `enable_thinking` (emits `<|think|>\n` when true), but
+            //     default is already OFF. Our flag matches the default,
+            //     so it's a no-op here.
+            // Safe to pass unconditionally for all three.
+            let userInput = UserInput(
+                chat: chat,
+                additionalContext: ["enable_thinking": false]
+            )
             let input = try await context.processor.prepare(input: userInput)
 
             var parameters = GenerateParameters()
-            parameters.maxTokens = Self.maxGenerationTokens
-            let result: GenerateResult = try MLXLMCommon.generate(
+            parameters.maxTokens = maxTokens
+            // KV cache quantization. The token generator (TokenIterator
+            // in MLXLMCommon) calls maybeQuantizeKVCache on every step
+            // once cache.offset > quantizedKVStart, switching the cache
+            // over to a QuantizedKVCache with these parameters.
+            parameters.kvBits = Self.kvBits
+            parameters.kvGroupSize = Self.kvGroupSize
+            parameters.quantizedKVStart = Self.quantizedKVStart
+            let stream = try MLXLMCommon.generate(
                 input: input,
                 parameters: parameters,
                 context: context
-            ) { (_: [Int]) -> GenerateDisposition in .more }
+            )
+
+            var output = ""
+            for try await generation in stream {
+                switch generation {
+                case .chunk(let chunk):
+                    output += chunk
+                case .info, .toolCall:
+                    break
+                }
+            }
 
             Stream.gpu.synchronize()
-            return result.output
+            return output
         }
     }
 

@@ -39,10 +39,9 @@ packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     from: "3.31.3"
-  # swift-transformers provides Tokenizers.AutoTokenizer — required at the
-  # call site by the MLXHuggingFace `#huggingFaceTokenizerLoader()` macro.
-  # 3.x mlx-swift-lm no longer has a hard dep on this, so we pull it in
-  # explicitly.
+  # swift-transformers provides Tokenizers.AutoTokenizer. We bridge it to
+  # MLXLMCommon.TokenizerLoader in app code so we can avoid the package's
+  # macro-based convenience wrapper entirely.
   SwiftTransformers:
     url: https://github.com/huggingface/swift-transformers
     from: "1.3.0"
@@ -104,12 +103,27 @@ targets:
         product: MLXLLM
       - package: MLXSwiftLM
         product: MLXLMCommon
-      # MLXHuggingFace provides the tokenizer-loader macro that bridges
-      # mlx-swift-lm's Tokenizer protocol to swift-transformers'
-      # AutoTokenizer. Required by loadModelContainer(from:using:) in 3.x.
-      - package: MLXSwiftLM
-        product: MLXHuggingFace
       # Tokenizers module from swift-transformers — referenced by the
-      # macro's expanded code. Must be imported in call-site files.
+      # local tokenizer bridge in MLXEngineClient.
       - package: SwiftTransformers
         product: Tokenizers
+
+# Explicit scheme so `xcodebuild -scheme Nod` works from the CLI without
+# relying on xcodebuild's auto-create-scheme-from-target behavior (which
+# turned out to be unreliable across xcodegen versions). Regenerate:
+#   cd ios && xcodegen generate
+schemes:
+  Nod:
+    build:
+      targets:
+        Nod: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

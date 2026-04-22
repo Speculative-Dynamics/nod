@@ -33,7 +33,26 @@ fastlane/test_output
 *.xcconfig.local
 .env
 .env.*
+.envrc
 !.env.example
+
+# Credential / signing file types — defense-in-depth. No current file
+# matches these patterns; they're listed so a future `git add .` can't
+# accidentally commit an Apple App Store Connect key (.p8), a
+# provisioning profile (.mobileprovision / .provisionprofile), a PKCS-12
+# bundle (.p12), a plain private key (.key / .pem), a certificate
+# (.crt / .cer), or a Java keystore (.jks / .keystore) that someone
+# happens to drop into the working tree while integrating CI.
+*.pem
+*.p12
+*.p8
+*.key
+*.crt
+*.cer
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
 
 # Local tooling / machine-specific state (belt-and-suspenders: these
 # aren't tracked today, but listing them prevents a future `git add .`

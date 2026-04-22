@@ -17,6 +17,11 @@ struct SidebarView: View {
     @ObservedObject var engineHolder: EngineHolder
     @EnvironmentObject private var appLock: AppLockManager
     @ObservedObject private var personalization = PersonalizationStore.shared
+    /// Observed separately from `store` so the Memory row's count badge
+    /// updates reactively when entities are added / deleted. Same
+    /// instance as `store.entityStore` — SwiftUI's @ObservedObject needs
+    /// the direct reference to track changes.
+    @ObservedObject var entityStore: EntityStore
     @Environment(\.dismiss) private var dismiss
 
     /// Called after the user confirms "Start fresh." ChatView uses this to
@@ -60,10 +65,37 @@ struct SidebarView: View {
                     Text("Your conversation")
                 }
 
-                // Personalisation section. Right after "Your
-                // conversation" because it's about the USER and how
-                // they want to be heard — thematically part of that
-                // group, not a model-level setting.
+                // Memory section. Own section because "what Nod remembers"
+                // is a top-level product concept, not a sub-feature of
+                // the conversation. Placed between "Your conversation"
+                // (what's in here) and "Personalisation" (how Nod speaks
+                // to you) so the flow reads: content → memory → voice.
+                Section {
+                    NavigationLink {
+                        MemoryView(entityStore: entityStore)
+                    } label: {
+                        HStack {
+                            Text("What Nod knows about you")
+                            Spacer()
+                            Text("\(entityStore.entities.count)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityLabel(
+                        "What Nod knows about you. \(entityStore.entities.count) \(entityStore.entities.count == 1 ? "item" : "items")"
+                    )
+                } header: {
+                    Text("Memory")
+                }
+
+                // Personalisation section. Right after Memory because
+                // both are about customising Nod for this specific user.
+                // Memory is the passive side (what Nod picks up),
+                // Personalisation is the active side (what the user tells
+                // Nod to do).
                 Section {
                     Picker(
                         "Response style",
@@ -78,7 +110,7 @@ struct SidebarView: View {
                     }
 
                     Picker(
-                        "When Nod responds",
+                        "How Nod responds",
                         selection: Binding(
                             get: { personalization.current.nodMode },
                             set: { personalization.current.nodMode = $0 }
@@ -96,8 +128,24 @@ struct SidebarView: View {
                     // 500 chars via onChange (quality over quantity for
                     // the system-prompt budget).
                     VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Anything else")
+                                .font(.subheadline.weight(.medium))
+
+                            Spacer()
+
+                            if !personalization.current.freeFormText.isEmpty {
+                                Button("Clear") {
+                                    personalization.current.freeFormText = ""
+                                }
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .buttonStyle(.plain)
+                            }
+                        }
+
                         TextField(
-                            "Like a friend checking in, not a therapist",
+                            "Anything else you want Nod to keep in mind",
                             text: Binding(
                                 get: { personalization.current.freeFormText },
                                 set: { new in
@@ -112,6 +160,10 @@ struct SidebarView: View {
                         .lineLimit(1...4)
                         .textInputAutocapitalization(.sentences)
                         .accessibilityLabel("Anything else for Nod")
+
+                        Text("A few sentences is enough.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                         // Character counter — only appears past 400 so
                         // the empty / normal-length case stays clean.
@@ -156,6 +208,14 @@ struct SidebarView: View {
                 }
 
                 Section {
+                    Toggle(isOn: Binding(
+                        get: { store.isConversationBackupEnabled },
+                        set: { store.setConversationBackupEnabled($0) }
+                    )) {
+                        Label("Back up conversation and memory", systemImage: "icloud")
+                    }
+                    .tint(Color("NodAccent"))
+
                     Toggle(isOn: $appLock.isEnabled) {
                         Label("Require Face ID", systemImage: "faceid")
                     }
@@ -163,18 +223,13 @@ struct SidebarView: View {
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Ask for Face ID when opening Nod. Your conversation never leaves this device either way.")
+                    Text("Nothing is sent to Nod's servers. When this is on, your messages, the running summary, and everything Nod knows about you are included in your own iCloud backup. Off by default.")
                 }
 
                 Section {
-                    // No `role: .destructive` — the red tint didn't match
-                    // the app's muted palette. `.buttonStyle(.plain)` stops
-                    // SwiftUI from tinting the whole Label in the accent
-                    // color (which was what made the text orange); plain
-                    // preserves Label's default "icon=tint, text=primary",
-                    // giving us the orange counterclockwise icon next to
-                    // white text — matching the rest of the sidebar.
-                    // Same pattern as engineRow() above.
+                    // Plain button keeps the row styling aligned with the
+                    // rest of the sidebar while the alert carries the
+                    // destructive emphasis.
                     Button {
                         showingClearConfirmation = true
                     } label: {
@@ -196,6 +251,11 @@ struct SidebarView: View {
                     Text("About")
                 }
             }
+            // The Personalisation free-form TextField brings up the
+            // keyboard. Interactive-dismiss lets the user swipe down on
+            // the List to dismiss it without navigating away. Matches
+            // the chat input's dismissal pattern in ChatView.
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Nod")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -215,11 +275,10 @@ struct SidebarView: View {
             } message: {
                 Text("This clears every message and Nod's memory of your conversation. It can't be undone.")
             }
-            // Delete Model alert. Same warm "Keep it" / neutral "Delete"
-            // pattern as the download-pause alert in ChatView — the
-            // consequence (re-download) is real but recoverable, so
-            // destructive-red would miscommunicate. Attached here (not
-            // inside engineRow) because SwiftUI's .alert is one-per-view.
+            // Delete Model alert. Match the same cancel/destructive pattern
+            // as "Start fresh" so destructive confirmations read the same
+            // throughout the app. Attached here (not inside engineRow)
+            // because SwiftUI's .alert is one-per-view.
             .alert(
                 deleteTarget.map { "Delete \($0.displayName)?" } ?? "",
                 isPresented: Binding(
@@ -227,8 +286,8 @@ struct SidebarView: View {
                     set: { if !$0 { deleteTarget = nil } }
                 )
             ) {
-                Button("Keep it", role: .cancel) { }
-                Button("Delete") {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete Model", role: .destructive) {
                     if let pref = deleteTarget {
                         engineHolder.deleteDownloadedModel(for: pref)
                         UINotificationFeedbackGenerator().notificationOccurred(.warning)
@@ -267,7 +326,7 @@ struct SidebarView: View {
     /// Layout per design review (`plan-design-review`, April 2026):
     ///
     ///   Line 1:  <displayName>                         ✓  (if active)
-    ///   Line 2:  <metadata-line>                   Delete  (if eligible)
+    ///   Line 2:  <metadata-line>                    trash  (if eligible)
     ///
     /// Metadata line varies by engine kind:
     ///   - AFM:  the static tagline ("Built-in · fast · works offline")
@@ -275,8 +334,8 @@ struct SidebarView: View {
     ///           use" or " · paused" suffix
     ///
     /// Delete shows only for NON-ACTIVE MLX engines with at least partial
-    /// files on disk — there's nothing to delete otherwise. Tapping Delete
-    /// opens the confirmation alert at the view level.
+    /// files on disk — there's nothing to delete otherwise. Tapping the
+    /// trash affordance opens the confirmation alert at the view level.
     ///
     /// Unavailable engines (MLX on an iPhone without enough RAM) render
     /// dimmed with a replacement metadata line ("Needs iPhone 15 Pro or
@@ -296,40 +355,44 @@ struct SidebarView: View {
             // the soft receive-tap used elsewhere.
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                // Line 1: name on left, checkmark on right for active
-                HStack {
+            // Outer HStack so the trailing icon (✓ or 🗑) is vertically
+            // centered against the whole two-line row. Earlier layout put
+            // ✓ on line 1 and 🗑 on line 2 — the icons landed at different
+            // vertical positions across rows and looked off-center. Both
+            // now share the same trailing column, centered in the row,
+            // with a consistent 28pt frame for identical tap targets.
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(pref.displayName)
                         .foregroundStyle(available ? .primary : .secondary)
-                    Spacer()
-                    if isActive {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(Color("NodAccent"))
-                            .font(.body.bold())
-                    }
-                }
-                // Line 2: metadata on left, Delete on right if eligible
-                HStack {
                     Text(metadataLine(for: pref))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                    Spacer()
-                    if canDelete {
-                        // Inline tappable text. Not a nested Button —
-                        // nested Buttons in a List row have a documented
-                        // history of stealing taps from the outer row.
-                        // Using `.onTapGesture` with simultaneousGesture
-                        // on just this text keeps the row-tap working
-                        // while the Delete label becomes its own target.
-                        Text("Delete")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                deleteTarget = pref
-                            }
-                    }
+                }
+                Spacer(minLength: 0)
+                // Active row → checkmark. Inactive + downloaded → trash.
+                // Mutually exclusive (canDelete guards on !isActive), so
+                // at most one icon ever shows per row.
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color("NodAccent"))
+                        .frame(width: 28, height: 28)
+                } else if canDelete {
+                    // Not a nested Button: List rows with multiple buttons
+                    // have a habit of stealing selection taps. Dedicated
+                    // icon target via onTapGesture keeps the row tap
+                    // behaviour intact.
+                    Image(systemName: "trash")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("Delete downloaded model")
+                        .onTapGesture {
+                            deleteTarget = pref
+                        }
                 }
             }
             .contentShape(Rectangle())
@@ -382,8 +445,14 @@ struct SidebarView: View {
 #Preview {
     let db = try! MessageDatabase()
     let holder = EngineHolder()
-    let store = ConversationStore(database: db, summarizer: { [holder] in holder.engine })
-    return SidebarView(store: store, engineHolder: holder, onCleared: {})
+    let entities = EntityStore(database: db)
+    let store = ConversationStore(
+        database: db,
+        entityStore: entities,
+        summarizer: { [holder] in holder.engine },
+        entityFallbackProvider: { [holder] in holder.engine }
+    )
+    SidebarView(store: store, engineHolder: holder, entityStore: entities, onCleared: {})
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }

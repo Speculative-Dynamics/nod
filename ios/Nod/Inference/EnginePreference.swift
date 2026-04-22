@@ -11,6 +11,7 @@
 // exploration. Matches the allCases iteration used by SidebarView.
 
 import Foundation
+import FoundationModels
 
 enum EnginePreference: String, CaseIterable, Sendable {
     case apple      // Apple FoundationModels (AFM). Zero download, gated by Apple Intelligence.
@@ -36,9 +37,16 @@ enum EnginePreference: String, CaseIterable, Sendable {
     /// One-line description. For AFM this is the metadata line (there's
     /// no release month / size to show). For MLX engines, the sidebar
     /// composes date + size instead; tagline is unused there.
+    ///
+    /// AFM tagline says "no download" rather than "works offline." The
+    /// old "fast · works offline" phrasing was misleading — ALL Nod
+    /// engines work offline once loaded; MLX models just download once
+    /// first. The only trait genuinely distinctive about AFM is that it
+    /// ships with iOS and needs no download. That's what the tagline
+    /// says now.
     var tagline: String {
         switch self {
-        case .apple:   return "Built-in · fast · works offline"
+        case .apple:   return "Built-in · no download"
         case .qwen3:   return "Text-only · tuned for chat"
         case .qwen35:  return "Multimodal arch · text-only use"
         case .gemma4:  return "Text-only · fresh training data"
@@ -56,26 +64,42 @@ enum EnginePreference: String, CaseIterable, Sendable {
         }
     }
 
-    /// Whether this engine can run on the current device. AFM is assumed
-    /// available (the runtime check lives in FoundationModelsClient and
-    /// surfaces as a modelNotReady error if Apple Intelligence is off).
+    /// Whether this engine can run on the current device.
+    ///
+    /// AFM: gated on `DeviceCapability.canRunAFM`, which asks iOS at
+    /// runtime whether Apple Intelligence is actually available on this
+    /// specific device. iPhone 15 base (A16, 6 GB RAM) has enough memory
+    /// for MLX but does NOT support AFM — the old hard-coded `true` lied
+    /// about this, causing users to hit a send-time error every first
+    /// message. Now the sidebar row renders dimmed with an honest reason.
+    ///
     /// MLX 4B-class models need ~6 GB resident — we gate on total
     /// physical memory.
     var isAvailable: Bool {
         switch self {
         case .apple:
-            return true
+            return DeviceCapability.canRunAFM
         case .qwen3, .qwen35, .gemma4:
             return DeviceCapability.canRunMLX4BClass
         }
     }
 
     /// One-line reason shown when the engine row is disabled. nil if available.
+    ///
+    /// For AFM, the reason is branched on the actual availability reason
+    /// iOS reports: "not supported on this device" vs "turned off in
+    /// Settings." Users in the second group can fix it; users in the
+    /// first can't, and should be told so directly instead of being
+    /// pointed at a Settings pane that doesn't exist on their iPhone.
     var unavailabilityReason: String? {
         guard !isAvailable else { return nil }
         switch self {
         case .apple:
-            return nil
+            switch DeviceCapability.afmStatus {
+            case .available:           return nil  // (unreachable — we're !isAvailable)
+            case .disabledInSettings:  return "Turn on in Settings → Apple Intelligence"
+            case .notSupported:        return "Not supported on this iPhone"
+            }
         case .qwen3, .qwen35, .gemma4:
             return "Needs iPhone 15 Pro or newer"
         }
@@ -97,6 +121,69 @@ enum DeviceCapability {
     /// all target iPhone 15 Pro as the baseline.
     static var canRunMLX4BClass: Bool {
         ProcessInfo.processInfo.physicalMemory >= mlx4BMemoryBytes
+    }
+
+    /// Tri-state for Apple FoundationModels availability on this
+    /// device. Distinguishing "hardware doesn't support AFM" from "user
+    /// disabled AFM in Settings" matters because the onboarding flow
+    /// and error messages differ: the first group has to pick an MLX
+    /// model (no Settings path exists for them); the second can flip a
+    /// toggle in Settings and come right back.
+    ///
+    /// - `available`: AFM is ready to generate.
+    /// - `disabledInSettings`: device supports AFM but the user hasn't
+    ///   turned on Apple Intelligence. Also covers the transient
+    ///   "model still downloading" case on first enable (iOS reports
+    ///   `modelNotReady` for a few minutes after the toggle flips).
+    /// - `notSupported`: hardware can't run AFM (A16 and older, iPhone
+    ///   15 base, any iPad without M-series silicon).
+    enum AFMStatus: Equatable {
+        case available
+        case disabledInSettings
+        case notSupported
+    }
+
+    /// Ask iOS at runtime whether Apple Intelligence is usable. Maps
+    /// `SystemLanguageModel.default.availability` into our three-branch
+    /// enum. Called from the UI on every body eval (sync, sub-ms), and
+    /// at send-time in `respond()` for the error-copy conditional.
+    ///
+    /// Uses switch-case unwrap for the `.unavailable(reason)` case
+    /// because `SystemLanguageModel.UnavailabilityReason` is an enum
+    /// with associated values in later iOS betas — pattern matching is
+    /// more future-proof than `==` equality.
+    static var afmStatus: AFMStatus {
+        switch SystemLanguageModel.default.availability {
+        case .available:
+            return .available
+        case .unavailable(let reason):
+            switch reason {
+            case .deviceNotEligible:
+                return .notSupported
+            case .appleIntelligenceNotEnabled:
+                return .disabledInSettings
+            case .modelNotReady:
+                // Transient: iOS reports this while the device is
+                // finishing the initial AFM model download after the
+                // user just flipped the Settings toggle. From the
+                // user's perspective they enabled it, so surface this
+                // as "disabled" so the onboarding guidance still
+                // matches their mental model.
+                return .disabledInSettings
+            @unknown default:
+                // New availability reason we haven't mapped. Treat as
+                // unsupported (more conservative than "probably just
+                // disabled") so the user doesn't get pointed at a
+                // Settings path that might not apply.
+                return .notSupported
+            }
+        }
+    }
+
+    /// Shorthand boolean for callers that only care "can we use AFM
+    /// right now?" — row availability, send-button gating, etc.
+    static var canRunAFM: Bool {
+        afmStatus == .available
     }
 }
 

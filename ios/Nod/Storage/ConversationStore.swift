@@ -17,23 +17,48 @@ import SwiftUI
 @MainActor
 final class ConversationStore: ObservableObject {
 
+    private enum PendingDiskWrite: Codable, Sendable {
+        case insert(Message)
+        case updateText(id: UUID, text: String)
+
+        func apply(to database: MessageDatabase) throws {
+            switch self {
+            case .insert(let message):
+                try database.insert(message)
+            case .updateText(let id, let text):
+                try database.updateText(id: id, text: text)
+            }
+        }
+    }
+
     @Published private(set) var messages: [Message] = []
 
+    /// Flips to true after `hydrate()` completes. Drives the send-button
+    /// gate in ChatView: sending before hydrate would build inference
+    /// inputs from the still-empty `messages` array, seeding an AFM
+    /// session with wrong context. In practice hydrate finishes during
+    /// the splash, so users never see a disabled send.
+    @Published private(set) var isHydrated: Bool = false
+
     // Compression tuning. High-water kicks compression; batch-size is how
-    // many we eat on each compression pass. The gap between them (6) is how
-    // many full-fidelity recent turns are always available to the LLM after
-    // compression settles.
+    // many we eat on each compression pass. The gap between them is how
+    // many full-fidelity recent turns are always available to the LLM
+    // after compression settles.
     //
     // Why these specific numbers: on iPhone 15 Pro, passing 20 full-fidelity
     // recent turns plus the summary plus the system prompt to Qwen 3 4B
     // blows the KV cache past the jetsam line — we saw this empirically as
-    // a second-message crash. Dropping to 6 recent turns after compression
-    // keeps effective context under ~2 k tokens, which is what MLX Swift
-    // can actually fit alongside a 2.3 GB model and a 3 GB memory budget
-    // (or 6 GB with the increased-memory-limit entitlement; the tighter
-    // cap is still the safer default).
-    private let HIGH_WATER_MARK = 16
-    private let BATCH_SIZE = 10
+    // a second-message crash. Dropping to 4 recent turns after compression
+    // keeps effective context under ~1.5 k tokens, which gives MLX Swift
+    // meaningful headroom alongside a 2.3-3.0 GB model on a 3-6 GB memory
+    // budget (increased-memory-limit entitlement in play).
+    //
+    // Tightened from 16/10 (6 recent) to 12/8 (4 recent) during the
+    // memory-optimization pass — each dropped full-fidelity turn saves
+    // roughly 100-150 tokens of prompt, which is ~10-15 MB of peak KV
+    // per generation.
+    private let HIGH_WATER_MARK = 12
+    private let BATCH_SIZE = 8
 
     private let database: MessageDatabase
     private let summarizer: () -> ConversationSummarizer?
@@ -45,31 +70,89 @@ final class ConversationStore: ObservableObject {
     /// Compression runs on a background task. We hold the handle so we don't
     /// fire a second one while the first is still running.
     private var compressionTask: Task<Void, Never>?
+    private var pendingDiskWrites: [PendingDiskWrite] = []
 
-    init(database: MessageDatabase, summarizer: @escaping () -> ConversationSummarizer?) {
+    /// Structured memory (people, places, projects, situations). Writes
+    /// run alongside compression (same batch, same task); reads run
+    /// per-turn inside `buildInferenceInputs` to inject entity context
+    /// when the user's current message references a known entity.
+    ///
+    /// Owned by the view layer (ChatView) so SwiftUI observes changes to
+    /// its published disambiguation queue without going through this
+    /// store. We keep the reference here so compression can ingest.
+    let entityStore: EntityStore
+
+    /// AFM-primary extraction orchestrator. Lazy-constructed with a
+    /// closure that reaches back for the CURRENT listening engine as
+    /// fallback — so switching engines doesn't strand extraction.
+    private let entityExtractor: EntityExtractorService
+
+    init(
+        database: MessageDatabase,
+        entityStore: EntityStore,
+        summarizer: @escaping () -> ConversationSummarizer?,
+        entityFallbackProvider: @escaping () -> (any ListeningEngine)?
+    ) {
         self.database = database
+        self.entityStore = entityStore
         self.summarizer = summarizer
-        loadFromDisk()
+        self.entityExtractor = EntityExtractorService(fallbackProvider: entityFallbackProvider)
+        // NOTE: No disk work here. All fetches + WAL replay moved to
+        // `hydrate()` so ChatView.init can stay lightweight and the
+        // splash animation isn't blocked by main-thread SQLite work
+        // during cold launch. Caller (ChatView `.task`) invokes
+        // hydrate() post-mount.
     }
 
-    private func loadFromDisk() {
-        do {
-            messages = try database.fetchAllMessages()
-            summary = try database.fetchSummary()
-        } catch {
-            // DB read failures aren't user-visible — start with an empty
-            // in-memory state and let the next write heal it.
-        }
+    /// Bring in-memory state into sync with disk. Called once from
+    /// ChatView's `.task` on cold launch (post-mount, so it runs
+    /// concurrently with the splash animation without blocking it).
+    ///
+    /// Runs the SQLite fetches on a detached task so the main actor
+    /// isn't blocked. Main-actor work (assigning `@Published` state,
+    /// WAL replay which mutates `messages`) happens after the fetches
+    /// return.
+    ///
+    /// Idempotent: calling twice is a no-op. The guard matches the
+    /// self-guarding pattern in `EngineHolder.startEagerPrepareIfNeeded`.
+    func hydrate() async {
+        guard !isHydrated else { return }
+
+        // Off-main fetches. `database` is Sendable (MessageDatabase is
+        // `@unchecked Sendable`; its internals — a GRDB DatabaseQueue
+        // and an immutable URL — are thread-safe). `walURL` is a value
+        // type, trivially Sendable.
+        let db = self.database
+        let walURL = database.pendingWritesURL
+        async let fetchedMessages: [Message] = Task.detached {
+            (try? db.fetchAllMessages()) ?? []
+        }.value
+        async let fetchedSummary: String = Task.detached {
+            (try? db.fetchSummary()) ?? ""
+        }.value
+        async let fetchedWAL: [PendingDiskWrite] = Task.detached {
+            Self.loadPendingDiskWritesFromURL(walURL)
+        }.value
+
+        let loadedMessages = await fetchedMessages
+        let loadedSummary = await fetchedSummary
+        let loadedWAL = await fetchedWAL
+
+        // Back on MainActor — apply to published state.
+        self.messages = loadedMessages
+        self.summary = loadedSummary
+        self.pendingDiskWrites = loadedWAL
+        applyPendingWritesToMemory()
+        flushPendingDiskWrites()
+
+        self.isHydrated = true
     }
 
     // MARK: - Appending messages
 
     func append(_ message: Message) {
         messages.append(message)
-        // Silent-fail: if the insert fails, the in-memory message is still
-        // appended and the user sees their message on screen. The write
-        // will be retried on next `append`.
-        try? database.insert(message)
+        enqueueDiskWrite(.insert(message))
         // Only trigger compression on messages with actual text — skip the
         // empty assistant placeholder that ChatView inserts before streaming
         // tokens in, and skip nod (silent acknowledgment) messages.
@@ -85,26 +168,47 @@ final class ConversationStore: ObservableObject {
         let current = messages[lastIndex]
         let updated = Message(id: current.id, role: .assistant, text: text, createdAt: current.createdAt)
         messages[lastIndex] = updated
-        try? database.updateText(id: updated.id, text: text)
+        enqueueDiskWrite(.updateText(id: updated.id, text: text))
     }
 
     // MARK: - Context for the LLM
 
-    /// Builds the context snippet that gets prepended to the system prompt
-    /// for each LLM call. Shape: [running summary if any] + [un-summarized
-    /// messages formatted as a transcript].
+    /// Bundle of inputs for an inference call.
     ///
-    /// Excludes:
+    /// Split in two on purpose: `systemBlock` is what frames who Nod is and
+    /// what it knows (personalization + running summary). `history` is the
+    /// recent un-summarized conversation as actual `Message` values so
+    /// engines can pass them to the LLM as real chat turns — NOT narrated
+    /// into a system-message paragraph. Chat-tuned models attend to turn
+    /// structure; flat-text history is why 4B models lose recall.
+    ///
+    /// `history` excludes:
     ///   - the in-flight empty assistant placeholder (not real history)
-    ///   - the most recent user message (it's being passed as the current
-    ///     query, not as context — sending it twice would confuse the model)
-    func contextForInference() -> String {
+    ///   - the most recent user message (it's the current query, passed
+    ///     separately to `respond(to:)`; embedding it twice confuses the
+    ///     model)
+    struct InferenceInputs {
+        var systemBlock: String
+        var history: [Message]
+    }
+
+    /// Primary input-builder for inference. Returns a structured
+    /// `InferenceInputs` so engines can consume `systemBlock` as a
+    /// system-message string and `history` as real chat turns.
+    ///
+    /// When `currentUserMessage` is non-nil, the system block will also
+    /// include a "PEOPLE AND SITUATIONS YOU KNOW ABOUT" section with the
+    /// entities this message references — by name, alias, or semantic
+    /// paraphrase. This is the memory-injection path: the model sees
+    /// context about "M" only when the user is actually talking about M.
+    /// Without that filter we'd risk Nod lapsing into pattern-surfacing
+    /// ("you've mentioned M a lot recently"), which the design explicitly
+    /// forbids.
+    func buildInferenceInputs(currentUserMessage: String? = nil) -> InferenceInputs {
         var parts: [String] = []
 
-        // Personalisation goes FIRST so it frames how the rest of the
-        // context should be interpreted. The block is empty when the
-        // user hasn't set any preferences (isActive = false) — we skip
-        // adding a useless stub then.
+        // Personalisation first so it frames how the rest of the context
+        // should be interpreted. Empty when the user has kept all defaults.
         let personalization = PersonalizationStore.shared.current.promptBlock
         if !personalization.isEmpty {
             parts.append(personalization)
@@ -114,40 +218,46 @@ final class ConversationStore: ObservableObject {
             parts.append("WHAT YOU KNOW FROM EARLIER IN THIS ONGOING CONVERSATION:\n\(summary)")
         }
 
+        // Entity injection — only when the current user message is
+        // provided AND we find entities it references. Empty set is the
+        // common case (user didn't mention any known entity), and the
+        // block is simply omitted in that case.
+        if let msg = currentUserMessage {
+            let relevant = entityStore.retrieveRelevant(for: msg)
+            if !relevant.isEmpty {
+                let lines = relevant.map { "- \($0.contextLine)" }.joined(separator: "\n")
+                parts.append("PEOPLE AND SITUATIONS YOU KNOW ABOUT (reference naturally if the user brings them up; never volunteer):\n\(lines)")
+            }
+        }
+
+        var history: [Message] = []
         do {
             var recent = try database.fetchUnsummarizedMessages()
-
-            // Drop the empty assistant placeholder (ChatView inserts one
-            // before streaming tokens back into it).
+            // Drop the empty assistant placeholder that ChatView inserts
+            // before streaming tokens back in.
             recent = recent.filter { !($0.role == .assistant && $0.text.isEmpty) }
-
             // Drop the most recent user message — it's the current query.
             if let lastIndex = recent.lastIndex(where: { $0.role == .user }) {
                 recent.remove(at: lastIndex)
             }
-
-            let formatted = recent.map(formatMessage).joined(separator: "\n")
-            if !formatted.isEmpty {
-                parts.append("RECENT EXCHANGES:\n\(formatted)")
-            }
+            history = recent
         } catch {
-            // Fall through: the model just sees the summary (or empty context).
+            // DB read failure: engines still see personalization + summary.
             // Worse answer this turn, but not a crash.
         }
 
-        return parts.joined(separator: "\n\n")
+        return InferenceInputs(
+            systemBlock: parts.joined(separator: "\n\n"),
+            history: history
+        )
     }
 
-    private func formatMessage(_ m: Message) -> String {
-        switch m.role {
-        case .user:
-            return "User: \(m.text)"
-        case .assistant:
-            return "You (Nod): \(m.text)"
-        case .nod:
-            return "(You nodded silently.)"
-        }
-    }
+    // Note: an older `contextForInference()` method narrated history as
+    // flat text into a RECENT EXCHANGES section. That single-string shape
+    // is no longer used — both engines consume `buildInferenceInputs()`
+    // above and handle history their own way (MLX as real chat turns,
+    // AFM as a seed for `LanguageModelSession`). Deleted to avoid dead
+    // code drift.
 
     // MARK: - Compression
 
@@ -175,17 +285,26 @@ final class ConversationStore: ObservableObject {
             guard !oldest.isEmpty else { return }
 
             let existingSummary = try database.fetchSummary()
-            let newSummary = try await summarizer.summarize(
+
+            // Run summary + entity extraction in parallel over the SAME
+            // batch of messages. Both read-only against `oldest`, so no
+            // contention. Extraction is best-effort and never throws
+            // (EntityExtractorService swallows errors), so it won't take
+            // down summarization.
+            async let newSummary = summarizer.summarize(
                 messages: oldest,
                 existingSummary: existingSummary
             )
+            async let extracted = entityExtractor.extract(from: oldest)
 
-            try database.setSummary(newSummary)
+            let resolvedSummary = try await newSummary
+            let resolvedExtracted = await extracted
+
+            try database.setSummary(resolvedSummary)
             try database.markSummarized(ids: oldest.map(\.id))
 
-            await MainActor.run {
-                self.summary = newSummary
-            }
+            self.summary = resolvedSummary
+            self.entityStore.ingest(resolvedExtracted)
         } catch {
             // Compression is best-effort — if it fails this pass, the
             // un-summarized backlog grows by one batch and we retry on
@@ -219,9 +338,104 @@ final class ConversationStore: ObservableObject {
             return
         }
 
+        pendingDiskWrites.removeAll()
         // Reset in-memory state so the UI flips to the empty state.
         messages.removeAll()
         summary = ""
+        // `database.clearAll()` already wiped the entity rows; this
+        // resets the EntityStore's in-memory cache and published
+        // disambiguation queue to match, keeping UI consistent.
+        entityStore.resetInMemory()
+    }
+
+    var isConversationBackupEnabled: Bool {
+        database.isICloudBackupEnabled
+    }
+
+    func setConversationBackupEnabled(_ enabled: Bool) {
+        do {
+            try database.setICloudBackupEnabled(enabled)
+            objectWillChange.send()
+        } catch {
+            return
+        }
+    }
+
+    private func enqueueDiskWrite(_ write: PendingDiskWrite) {
+        pendingDiskWrites.append(write)
+        persistPendingDiskWrites()
+        flushPendingDiskWrites()
+    }
+
+    private func flushPendingDiskWrites() {
+        var didChange = false
+        while let write = pendingDiskWrites.first {
+            do {
+                try write.apply(to: database)
+                pendingDiskWrites.removeFirst()
+                didChange = true
+            } catch {
+                if didChange {
+                    persistPendingDiskWrites()
+                }
+                return
+            }
+        }
+        if didChange || pendingDiskWrites.isEmpty {
+            persistPendingDiskWrites()
+        }
+    }
+
+    private func applyPendingWritesToMemory() {
+        for write in pendingDiskWrites {
+            switch write {
+            case .insert(let message):
+                if let existingIndex = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[existingIndex] = message
+                } else {
+                    messages.append(message)
+                }
+            case .updateText(let id, let text):
+                guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
+                let current = messages[index]
+                messages[index] = Message(
+                    id: current.id,
+                    role: current.role,
+                    text: text,
+                    createdAt: current.createdAt
+                )
+            }
+        }
+        messages.sort { $0.createdAt < $1.createdAt }
+    }
+
+    /// Static variant used by `hydrate()` from a detached Task. Captures
+    /// only a URL (value type, trivially Sendable) — no `self` capture,
+    /// so it's safe to call from outside the main actor.
+    ///
+    /// Marked `nonisolated` so it doesn't inherit ConversationStore's
+    /// `@MainActor` isolation. Without this, Swift 6 strict concurrency
+    /// correctly complains: "main actor-isolated static method cannot
+    /// be called from outside of the actor." The function's body only
+    /// touches value types (URL, Data, JSONDecoder result), so running
+    /// off-actor is safe.
+    private nonisolated static func loadPendingDiskWritesFromURL(_ url: URL) -> [PendingDiskWrite] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([PendingDiskWrite].self, from: data)) ?? []
+    }
+
+    private func persistPendingDiskWrites() {
+        let url = database.pendingWritesURL
+        if pendingDiskWrites.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(pendingDiskWrites) else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url, options: .atomic)
     }
 }
 

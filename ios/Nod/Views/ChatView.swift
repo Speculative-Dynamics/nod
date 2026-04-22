@@ -23,6 +23,21 @@ import os
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
+    /// EntityStore is observed separately so SwiftUI picks up changes to
+    /// its `@Published pendingDisambiguations`. It's actually owned by
+    /// `store` (same instance); exposing it here lets the view render
+    /// the disambiguation banner reactively.
+    @StateObject private var entityStore: EntityStore
+    @ObservedObject private var crashBreaker = LaunchCrashBreaker.shared
+    // `personalization` is intentionally NOT observed here. PersonalizationStore
+    // fires `@Published current` on every sidebar picker tick AND every
+    // keystroke in the 400-char free-form text field. Observing it would
+    // invalidate ChatView's body on every keystroke a user types in settings.
+    // ChatView only reads the preference once per send (see `respond(to:)`),
+    // so we read on-demand via `PersonalizationStore.shared.current.*` at
+    // that point instead. SidebarView still observes — its pickers bind to
+    // the store via Binding(get:set:).
+    @Environment(\.scenePhase) private var scenePhase
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
@@ -36,6 +51,53 @@ struct ChatView: View {
     // updates; we use it to decide whether auto-scroll should follow new
     // messages or leave the user reading history undisturbed.
     @State private var scrollAnchorId: UUID?
+    /// Shows a floating "↓ New message" pill at the bottom-right when a
+    /// new assistant reply arrives while the user is scrolled up reading
+    /// history. Standard Discord/Slack/Telegram pattern — without it,
+    /// new replies slide in silently off-screen.
+    @State private var hasNewMessageBelow: Bool = false
+    /// Memoized chat-row derivation. `Self.chatRows(from:)` is O(N) with
+    /// Calendar day checks per message; running it fresh on every body
+    /// evaluation (of which there are many triggered by scroll, focus,
+    /// personalization reads) wastes real CPU at 100+ message histories.
+    /// Rebuild only when the message set actually changes — keyed below
+    /// via `.task(id:)` on the count + last-id composite.
+    @State private var cachedRows: [ChatView.ChatRow] = []
+
+    /// True when the scroll view's visible area reaches the bottom of
+    /// the content. Measured via `.onScrollGeometryChange` below, so
+    /// it reflects REAL layout (content offset + container height vs
+    /// content height), not SwiftUI's `.scrollPosition` binding.
+    ///
+    /// That distinction matters: the binding is unreliable during
+    /// animations, keyboard transitions, and especially when content
+    /// doesn't fill the viewport (short conversations). It could
+    /// report an adjacent message's id or `nil` at arbitrary moments,
+    /// which caused the jump-to-bottom pill to misfire. Geometry is
+    /// immune to all of that — it just asks "is the visible bottom at
+    /// or past the content bottom?"
+    ///
+    /// Every "is the user at the bottom?" decision below reads from
+    /// this value. Starts at true (fresh chat, empty content, no
+    /// scrolling possible = user is implicitly at bottom).
+    @State private var isAtBottom: Bool = true
+
+    /// True when the AFM-unavailable onboarding card should take over
+    /// the screen in place of the normal empty state. This happens when
+    /// the user's stored engine preference is Apple Intelligence but
+    /// this device can't actually run AFM, AND there's no existing
+    /// chat history (the history case is handled by a persistent
+    /// banner above messageList instead).
+    ///
+    /// The onboarding is a full-screen takeover: while it's showing,
+    /// the input bar is hidden (there's no model to send to yet) so
+    /// the surface doesn't look like a half-loaded chat. This property
+    /// is also the single source of truth for that hide.
+    private var isShowingAFMOnboarding: Bool {
+        engineHolder.preference == .apple
+            && !DeviceCapability.canRunAFM
+            && store.messages.isEmpty
+    }
     @FocusState private var inputFocused: Bool
 
     // EngineHolder owns the live engine. Holding it as @StateObject means
@@ -55,12 +117,25 @@ struct ChatView: View {
         // than "app never opens again, user must delete and reinstall."
         let db = Self.openOrQuarantineDatabase()
 
+        // EntityStore is created first so ConversationStore can receive
+        // a reference. Both are wrapped in their own StateObjects so
+        // SwiftUI observes them independently — ChatView renders the
+        // disambiguation banner off EntityStore's queue while the rest
+        // of the chat runs off ConversationStore.
+        let entities = EntityStore(database: db)
+        self._entityStore = StateObject(wrappedValue: entities)
+
         // Capture the holder (not a specific engine) so compression always
         // uses whichever engine is current when it fires — even if the user
         // switched between append and the compression task starting.
+        // Same rationale for the entity fallback: extraction prefers AFM,
+        // but falls back to the active listening engine if AFM refuses
+        // or is unavailable, and the "active" engine can change.
         self._store = StateObject(wrappedValue: ConversationStore(
             database: db,
-            summarizer: { [holder] in holder.engine }
+            entityStore: entities,
+            summarizer: { [holder] in holder.engine },
+            entityFallbackProvider: { [holder] in holder.engine }
         ))
     }
 
@@ -96,12 +171,100 @@ struct ChatView: View {
     }
 
     var body: some View {
+        // Root-level split: the AFM-unavailable onboarding is a full-
+        // screen takeover, NOT a view stuffed inside the chat UI. That
+        // means no nav bar (no small mascot to open the sidebar), no
+        // input bar, no chat scaffolding at all — just the pick-a-
+        // model surface. Rationale: the user on this branch hasn't
+        // chosen to be in a chat yet. Rendering the chat chrome
+        // behind it makes it look half-loaded and gives them a
+        // sidebar affordance that would just loop back to this same
+        // screen (since AFM is the selected-but-unusable engine).
+        //
+        // The mid-conversation banner (restore-migration case, where
+        // messages ARE non-empty) still renders inside the normal
+        // NavigationStack below — that user DOES have a chat to see.
+        if isShowingAFMOnboarding {
+            AFMUnavailableOnboarding(
+                afmStatus: DeviceCapability.afmStatus,
+                canRunMLX: DeviceCapability.canRunMLX4BClass,
+                onPickModel: { pref in
+                    engineHolder.setPreference(pref)
+                }
+            )
+            .background(Color(.systemBackground))
+            // Status bar stays visible (default). Input accessory
+            // would also stay if the onboarding had a TextField, but
+            // it doesn't — so no keyboard surfaces from this view.
+        } else {
+            normalChat
+        }
+    }
+
+    private var normalChat: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // One-shot banner when the breaker flipped us to Apple
+                // Intelligence — either because iOS issued a memory
+                // warning during a chat, or because the previous launch
+                // didn't complete. User can dismiss; never auto-shown
+                // after a clean launch.
+                if crashBreaker.didAutoFallback {
+                    fallbackBanner
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Entity disambiguation prompts. Entity extraction can
+                // produce a new name that fuzzy-matches an existing
+                // entity (e.g. "Mark" and we already know "M, manager").
+                // Rather than guess, we ask the user. One banner per
+                // pending prompt, queued in order.
+                if let pending = entityStore.pendingDisambiguations.first {
+                    disambiguationBanner(for: pending)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .id(pending.id)
+                }
+
+                // Persistent "AFM not available" banner. Only shown when
+                // the user's active preference is Apple Intelligence,
+                // AFM can't run on this device, AND there's existing
+                // history (messages non-empty). Fresh empty state with
+                // no AFM is handled by `afmOnboarding` below, not a
+                // banner. The banner shape is the restore-migration
+                // case: user had history on an AFM-capable phone,
+                // restored onto a weaker one.
+                if engineHolder.preference == .apple,
+                   !DeviceCapability.canRunAFM,
+                   !store.messages.isEmpty {
+                    AFMUnavailableBanner()
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Note: when `isShowingAFMOnboarding` is true, this whole
+                // NavigationStack is replaced at the root of `body` by
+                // the full-screen onboarding takeover. So here we only
+                // handle the normal chat states: empty → EmptyStateView,
+                // populated → messageList.
                 if store.messages.isEmpty {
                     EmptyStateView()
                 } else {
                     messageList
+                        // Tail gap OUTSIDE the scroll view. See the
+                        // long comment inside messageList's body for
+                        // the rationale — short version: putting the
+                        // gap here instead of as LazyVStack bottom
+                        // padding makes programmatic scroll-to-bottom
+                        // and manual-scroll-to-end behave identically.
+                        // The gap is always visible between the last
+                        // message and whatever's below (NodAnimation,
+                        // MLXReadinessBar, or inputBar).
+                        .padding(.bottom, 16)
                 }
 
                 if isInferring {
@@ -116,12 +279,27 @@ struct ChatView: View {
                 // MLX engines (Qwen 3, Qwen 3.5, Gemma 4) all have a
                 // pre-send readiness step (download + load). AFM is
                 // ready as soon as it exists.
+                //
+                // The bar is its own subview that observes `engineHolder.
+                // downloadObserver` directly — NOT `engineHolder`. That
+                // split is the perf fix: during a 5 min download, progress
+                // changes ~1500 times. If ChatView observed those changes
+                // (as it used to, via `@Published mlxEngineLoadState` on
+                // EngineHolder), the entire body would re-evaluate 1500
+                // times, murdering 120 fps. Now only this subview reacts
+                // to the 5 Hz flood; ChatView stays at rest.
                 if engineHolder.preference.mlxSpec != nil {
-                    mlxReadinessBar
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        .animation(.easeInOut(duration: 0.25), value: engineHolder.mlxEngineLoadState)
+                    MLXReadinessBar(
+                        observer: engineHolder.downloadObserver,
+                        modelDisplayName: activeModelDisplayName,
+                        totalBytes: activeModelTotalBytes,
+                        onRetry: { engineHolder.retryMLXLoad() },
+                        onResume: { engineHolder.resumeMLXDownload() },
+                        onUseCellular: { engineHolder.useCellularThisTime() },
+                        onRequestCancel: { showingCancelDownloadAlert = true }
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
                 }
 
                 inputBar
@@ -157,7 +335,11 @@ struct ChatView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showingSidebar) {
-                SidebarView(store: store, engineHolder: engineHolder) {
+                SidebarView(
+                    store: store,
+                    engineHolder: engineHolder,
+                    entityStore: entityStore
+                ) {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
                     isInferring = false
@@ -179,36 +361,133 @@ struct ChatView: View {
             } message: {
                 Text("Your progress is saved — you can resume anytime.")
             }
-            // Keep the screen awake while Qwen is mid-download or mid-load.
-            // A foreground URLSession dies when iOS suspends the app after
-            // screen lock, and a 2 GB model takes 5+ minutes — a default
-            // screen timeout would kill the transfer. Idle-timer-disabled
-            // is the standard iOS affordance for "user is watching a
-            // long-running operation." Released back to the system once
-            // the model is ready or the transfer fails, so we don't drain
-            // the battery during normal chat.
-            .onChange(of: engineHolder.mlxEngineLoadState) { _, newValue in
-                // Keep the screen awake while bytes are actively moving OR
-                // MLX is loading. In waiting/paused states the download
-                // isn't progressing, so a sleeping screen costs us nothing.
-                switch newValue {
-                case .downloading, .loading:
-                    UIApplication.shared.isIdleTimerDisabled = true
-                case .ready, .failed, .notLoaded,
-                     .waitingForNetwork, .waitingForWifi, .paused:
-                    UIApplication.shared.isIdleTimerDisabled = false
-                }
-            }
+            // Note: the `.onChange(of: mlxEngineLoadState)` that drove
+            // `UIApplication.shared.isIdleTimerDisabled` used to live here,
+            // but that observation counted as a ChatView-body dependency on
+            // the 5 Hz download stream — the root cause of the 120 fps drop
+            // during downloads. The idle-timer toggling now happens inside
+            // EngineHolder's stream observer task, off the SwiftUI graph.
             .onDisappear {
                 // Belt-and-suspenders: if the view goes away mid-download
                 // (shouldn't happen — ChatView is the root — but defensive),
                 // release the idle lock so we don't drain battery forever.
                 UIApplication.shared.isIdleTimerDisabled = false
             }
-            // Swipe gestures to manage the keyboard without reaching for the
-            // input field: swipe up anywhere to open, swipe down to close.
-            // Uses simultaneousGesture so it doesn't steal events from the
-            // scroll view's own drag.
+            // Cold-launch pipeline. Three things happen in parallel so
+            // the splash window (~1.9 s) covers all of them:
+            //
+            //   1. Engine warmup (AFM prewarm or MLX prepare) fires
+            //      immediately. Runs on .utility priority inside
+            //      EngineHolder so UI work wins scheduler contention.
+            //   2. Both stores hydrate off-main (SQLite fetch in a
+            //      Task.detached, state assigned back on MainActor).
+            //      async let runs them concurrently. On a typical chat
+            //      both complete in 50-300 ms — well inside the splash.
+            //   3. Crash-breaker markLaunchSettled ticks at 15 s. If
+            //      we got this far the launch wasn't the kind the
+            //      breaker needs to protect against.
+            //
+            // Removed the old 500 ms pre-prepare sleep: with hydrate
+            // moved off-main, there's no main-thread work to let
+            // "settle" before kicking off warmup. Earlier warmup start
+            // = warmer model by the time user sends.
+            //
+            // .task cancels automatically if the view disappears.
+            .task {
+                engineHolder.startEagerPrepareIfNeeded()
+
+                async let messagesHydrate: Void = store.hydrate()
+                async let entitiesHydrate: Void = entityStore.hydrate()
+                _ = await (messagesHydrate, entitiesHydrate)
+
+                try? await Task.sleep(for: .seconds(15))
+                LaunchCrashBreaker.shared.markLaunchSettled()
+            }
+            // Idle-unload on background. If the user sends the app to
+            // background, we don't need to keep 2-3 GB of weights
+            // resident — iOS is aggressive about jetsam on suspended
+            // apps holding that much memory. noteBackgrounded() arms a
+            // 60s fuse; coming back to foreground cancels it and the
+            // eager-prepare path re-loads as needed.
+            //
+            // Backgrounding also counts as a "settled" signal for the
+            // crash breaker — if we got this far we clearly survived
+            // launch. Without this, a user who backgrounds within the
+            // 15 s settle window above would leave launchInProgress=true
+            // and trigger a false-positive crash detection on the next
+            // cold launch.
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .background:
+                    engineHolder.noteBackgrounded()
+                    LaunchCrashBreaker.shared.markLaunchSettled()
+                case .active:
+                    engineHolder.noteForegrounded()
+                    // If the container was unloaded while we were away,
+                    // start reloading now so the first send isn't slow.
+                    engineHolder.startEagerPrepareIfNeeded()
+                    // Nudge the scroll anchor to the last message so when
+                    // the user comes back they land at the latest turn,
+                    // not wherever they scrolled to before leaving. This
+                    // is the same intent as the `.onAppear` scroll on
+                    // messageList, but SwiftUI doesn't re-fire onAppear
+                    // on a background→foreground transition. Matching
+                    // iMessage / WhatsApp behaviour.
+                    if let lastId = store.messages.last?.id {
+                        scrollAnchorId = lastId
+                    }
+                case .inactive:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+            // Chat-row cache rebuild — at ChatView root (not on
+            // messageList) so it fires even when messageList is NOT in
+            // the tree. Specifically, after Start Fresh the view swaps
+            // to EmptyStateView; if we only invalidated from within
+            // messageList, the cache would keep stale deleted rows and
+            // briefly flash them when a new message triggers remount.
+            // Rebuilding here means cachedRows is always consistent with
+            // store.messages.count regardless of which branch is showing.
+            .onChange(of: store.messages.count) { _, _ in
+                cachedRows = Self.chatRows(from: store.messages)
+            }
+            // ALSO rebuild on text change of the last message. Critical
+            // for the assistant-reply flow: `respond(to:)` appends an
+            // empty placeholder (count change → cache rebuild), then
+            // `replaceLastAssistantMessage(with: reply)` mutates text
+            // in place (count UNCHANGED). Without this second trigger,
+            // `cachedRows` keeps the empty-text snapshot of the
+            // placeholder; the reply doesn't render until the NEXT
+            // count-changing event (usually the user's next send),
+            // which is exactly the "my replies show up one send late"
+            // bug the memoization introduced.
+            .onChange(of: store.messages.last?.text) { _, _ in
+                cachedRows = Self.chatRows(from: store.messages)
+            }
+            // Two-strike memory-warning handler. LaunchCrashBreaker runs
+            // the state machine (strike 1 → emit firstStrike, strike 2 →
+            // flip to Apple). We observe the reason here and actually
+            // route the MLX-container release, since the breaker
+            // singleton doesn't hold an engine reference.
+            .onChange(of: crashBreaker.fallbackReason) { _, newReason in
+                if newReason == .memoryPressureFirstStrike {
+                    engineHolder.releaseActiveMLXContainer()
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: crashBreaker.didAutoFallback)
+            // Swipe-down-to-dismiss-keyboard gesture. Swipe-up-to-open
+            // was removed — it triggered on normal upward scrolling
+            // through chat history, which made keyboard open
+            // unexpectedly. WhatsApp / iMessage don't do it, and neither
+            // do we. Keyboard dismiss via downward swipe stays because
+            // it's intentional and matches iOS conventions (plus
+            // `.scrollDismissesKeyboard(.interactively)` on the
+            // scroll view handles the in-scroll drag down).
+            //
+            // Uses simultaneousGesture so it doesn't steal events from
+            // the scroll view's own drag.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30)
                     .onEnded { value in
@@ -218,9 +497,8 @@ struct ChatView: View {
                         guard abs(dy) > dx else { return }
                         if dy > 40 {
                             inputFocused = false    // swipe down → dismiss keyboard
-                        } else if dy < -40 {
-                            inputFocused = true     // swipe up → open keyboard
                         }
+                        // Intentionally no swipe-up branch.
                     }
             )
             // iPad keyboard shortcuts. On iPhone these are harmless — no
@@ -253,75 +531,223 @@ struct ChatView: View {
                 // feel unified, the shift to the other voice has room to
                 // breathe. Nod-blink rows get a little extra breathing room
                 // since the eyes are visually weighty.
+                //
+                // Between messages we interleave "breakpoints" — a date
+                // separator when the calendar day changes ("Today",
+                // "Yesterday", "Mon, Mar 15") and a time label when the
+                // same-day gap between messages exceeds 10 minutes
+                // ("2:30 PM"). iMessage does the same thing; without
+                // them, a multi-day conversation reads as one endless
+                // wall of text with no temporal structure.
+                // Read the memoized cache (rebuilt on count changes below).
+                // Fallback-compute on first render: `.onAppear` fires AFTER
+                // the first body pass, so on cold launch with history the
+                // cache is empty but messages exist — without this one-off
+                // compute the user would see a blank list for one frame.
+                // Steady-state body evals (scroll, focus) use the cache.
+                let rows: [ChatRow] = cachedRows.isEmpty && !store.messages.isEmpty
+                    ? Self.chatRows(from: store.messages)
+                    : cachedRows
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(store.messages.enumerated()), id: \.element.id) { index, msg in
-                        let prev = index > 0 ? store.messages[index - 1] : nil
-                        MessageBubble(message: msg)
-                            .id(msg.id)
-                            .padding(.top, Self.topPadding(for: msg, prev: prev, isFirst: index == 0))
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        let prevRow = index > 0 ? rows[index - 1] : nil
+                        switch row {
+                        case .breakpoint(_, let label, let isDate):
+                            BreakpointView(label: label, isDate: isDate)
+                        case .message(let msg):
+                            MessageBubble(message: msg)
+                                .id(msg.id)
+                                .padding(.top, Self.topPadding(for: msg,
+                                                               prevRow: prevRow))
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
-                // Breathing room between the last message and whatever sits
-                // directly below: the download readiness card or the input
-                // bar. Without this, the final bubble visually collides
-                // with the chrome underneath.
-                .padding(.bottom, 16)
+                // NOTE: no .padding(.bottom) here. The tail gap between
+                // the last message and the input bar is applied to the
+                // ScrollView's outer frame instead (see
+                // `.padding(.bottom, 16)` further down). Reason:
+                // programmatic `proxy.scrollTo(id, anchor: .bottom)`
+                // aligns the target id's bottom edge with the
+                // VIEWPORT's bottom, NOT the scroll content's bottom.
+                // If the tail gap lives INSIDE the scroll content as
+                // bottom padding, programmatic scroll-to-bottom hides
+                // it (it sits just below the viewport edge), while
+                // manual-scroll-to-end shows it. That mismatch is what
+                // produced the "last message touches keyboard on
+                // auto-scroll but has a gap on manual-scroll" bug.
+                // Moving the gap outside the scroll view makes it
+                // always visually present, scroll-method-agnostic.
             }
             // Interactive keyboard dismiss: dragging down on messages pulls
             // the keyboard down with the finger, iOS-native feel.
             .scrollDismissesKeyboard(.interactively)
-            // Track which message is at the bottom of the visible area so
-            // we can decide whether the user is "pinned to bottom" or
-            // "reading history" when new messages arrive.
+            // Keep the scrollPosition binding — we still use it to
+            // programmatically scroll via `proxy.scrollTo` plus setting
+            // the binding. BUT we no longer use its value to decide
+            // "is the user at the bottom." That decision is driven by
+            // `isAtBottom` (measured via geometry below), which is
+            // immune to the binding's quirks on short content and
+            // during animations.
             .scrollPosition(id: $scrollAnchorId, anchor: .bottom)
+            // Real-geometry "at bottom" detector. iOS 18+ API; app
+            // targets iOS 26 so always available. Fires on every scroll
+            // delta and on content-size changes. We collapse the
+            // geometry to a single Bool via the `for:` projection, so
+            // the `action` closure only fires when the Bool transitions
+            // (not on every sub-pixel scroll) — that's the right
+            // granularity for flipping UI state.
+            //
+            // 40pt tolerance absorbs the 16pt bottom padding inside
+            // the LazyVStack, sub-pixel drift, and safe-area shifts
+            // during keyboard transitions.
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let visibleBottom = geometry.contentOffset.y
+                    + geometry.containerSize.height
+                    - geometry.contentInsets.bottom
+                let contentBottom = geometry.contentSize.height
+                return visibleBottom >= contentBottom - 40
+            } action: { _, newAtBottom in
+                isAtBottom = newAtBottom
+                // When we settle back at the bottom, the jump-to-bottom
+                // pill is no longer meaningful — clear it. Covers:
+                // user manually scrolled down, content grew to fit,
+                // user tapped the pill (which scrolls to bottom).
+                if newAtBottom && hasNewMessageBelow {
+                    hasNewMessageBelow = false
+                }
+            }
             .onChange(of: store.messages.count) { oldCount, newCount in
                 guard newCount > 0 else { return }
                 let msgs = store.messages
                 let newLastId = msgs.last?.id
-                // The message that was previously the bottom of the list
-                // (i.e., what the user was looking at if they were at the
-                // bottom before this new one arrived).
-                let prevLastId = msgs.count >= 2 ? msgs[msgs.count - 2].id : nil
 
-                // Follow the new message IF the user was at the bottom, or
-                // if this is the very first message ever, or if the
-                // scrollPosition binding hasn't had a chance to sync yet
-                // (scrollAnchorId == nil). If they scrolled up to read
-                // history, leave them alone.
-                let wasAtBottom = scrollAnchorId == prevLastId
-                    || prevLastId == nil
-                    || scrollAnchorId == nil
-                if wasAtBottom, let newLastId {
+                // Follow the new message if the user is at the bottom,
+                // or if they JUST sent (user send = strong signal they
+                // want to participate in the current flow). `isAtBottom`
+                // reflects the layout BEFORE the new row was inserted —
+                // so if the user could see the last bubble when they
+                // sent, we follow them to the new one.
+                let userJustSent = newCount > oldCount
+                    && msgs.last?.role == .user
+                if (isAtBottom || userJustSent), let newLastId {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(newLastId, anchor: .bottom)
                     }
-                    // Belt-and-suspenders: scrollPosition binding SHOULD
-                    // update after proxy.scrollTo, but we've seen enough
-                    // SwiftUI scroll quirks to not trust it implicitly.
-                    // Explicit sync keeps subsequent was-at-bottom checks
-                    // correct.
                     scrollAnchorId = newLastId
+                } else if newCount > oldCount,
+                          msgs.last?.role == .assistant,
+                          !(msgs.last?.text.isEmpty ?? true) {
+                    // User was scrolled up AND a fresh assistant message
+                    // arrived with non-empty text (skip placeholder).
+                    hasNewMessageBelow = true
                 }
             }
-            // When the in-flight assistant message's text fills in, also
-            // follow to bottom (if we were there). Count doesn't change on
-            // replaceLastAssistantMessage, so we need a separate trigger.
+            // Raise the pill flag when the last assistant message's
+            // text goes from empty to non-empty while user is scrolled
+            // up — catches the placeholder-to-reply fill-in case
+            // (count doesn't change, so the handler above won't fire).
+            .onChange(of: store.messages.last?.text) { oldText, newText in
+                guard let last = store.messages.last,
+                      last.role == .assistant,
+                      (oldText?.isEmpty ?? true),
+                      let newText, !newText.isEmpty,
+                      !isAtBottom
+                else { return }
+                hasNewMessageBelow = true
+            }
+            // When the in-flight assistant message's text fills in,
+            // also follow to bottom if the user was at the bottom.
+            // Count doesn't change on replaceLastAssistantMessage, so
+            // we need a separate trigger from count-onChange.
             .onChange(of: store.messages.last?.text) { _, _ in
-                guard let newLastId = store.messages.last?.id else { return }
-                // Was-at-bottom check: scrollAnchor still points at the
-                // last message (since count hasn't changed). If it matches,
-                // we're at bottom. Also accept nil anchor as "at bottom"
-                // because scrollPosition may not have settled yet for the
-                // fresh message.
-                if scrollAnchorId == newLastId || scrollAnchorId == nil {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(newLastId, anchor: .bottom)
+                guard let newLastId = store.messages.last?.id,
+                      isAtBottom
+                else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(newLastId, anchor: .bottom)
+                }
+                scrollAnchorId = newLastId
+            }
+            // Keyboard-open → scroll to bottom. Standard chat-app behavior:
+            // when the user taps the input, they want to compose the NEXT
+            // message, not stay wherever they were reading. Without this,
+            // the input field pops up and the latest message is hidden
+            // under the keyboard.
+            .onChange(of: inputFocused) { _, focused in
+                guard focused, let lastId = store.messages.last?.id else { return }
+                // Slight delay so our scroll animates alongside the
+                // keyboard, not before it. iOS's keyboard animation is
+                // ~0.25s; firing our scroll with easeOut(0.3) after a
+                // 50ms delay lets the safe-area shift settle first, then
+                // we scroll the now-visible bottom into view.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(lastId, anchor: .bottom)
                     }
-                    scrollAnchorId = newLastId
+                    scrollAnchorId = lastId
                 }
             }
+            // On first render (cold launch with existing history, or
+            // re-entering after being away from the tab), land at the
+            // bottom. SwiftUI's default is to scroll-top; with a long
+            // history, users would see their oldest messages first and
+            // have to scroll to find today's. That's the opposite of
+            // what every chat app does.
+            .onAppear {
+                // Initial chat-row cache population. Synchronous here so
+                // the very first render has the full row set — critical
+                // because the scrollTo(lastId) below depends on the row
+                // with that id actually existing in the list.
+                cachedRows = Self.chatRows(from: store.messages)
+                if let lastId = store.messages.last?.id {
+                    // No animation on first appear — instant jump is
+                    // what the user expects when opening a chat they've
+                    // had for a while.
+                    proxy.scrollTo(lastId, anchor: .bottom)
+                    scrollAnchorId = lastId
+                }
+            }
+            // Jump-to-bottom pill. Floats at the bottom-right corner of
+            // the message list when a new assistant reply arrives while
+            // the user is scrolled up reading history. Tap scrolls to
+            // bottom and clears the flag. Discord / Slack / Telegram
+            // all do this; without it, new replies land off-screen with
+            // no indicator.
+            .overlay(alignment: .bottomTrailing) {
+                if hasNewMessageBelow {
+                    Button {
+                        if let lastId = store.messages.last?.id {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
+                            scrollAnchorId = lastId
+                            hasNewMessageBelow = false
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down")
+                                .font(.caption.weight(.bold))
+                            Text("New message")
+                                .font(.caption.weight(.medium))
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color("NodAccent"))
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel("Jump to new message")
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: hasNewMessageBelow)
         }
     }
 
@@ -362,353 +788,123 @@ struct ChatView: View {
     private var sendEnabled: Bool {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         guard !isInferring else { return false }
-        if engineHolder.preference.mlxSpec != nil {
-            if case .ready = engineHolder.mlxEngineLoadState { return true }
-            return false
-        }
-        return true
+        // Gate on store hydration. Pre-hydrate, `store.messages` is
+        // empty because the SQLite fetch is still in flight from
+        // `.task`. Sending in that window would seed the AFM session
+        // with empty history (since `buildInferenceInputs` reads
+        // `store.messages`) and misfeed the model. Hydrate completes
+        // in 50-300 ms during the splash, so users typically never
+        // see a disabled send. The edge case is covered defensively.
+        guard store.isHydrated else { return false }
+        // Was `if case .ready = engineHolder.mlxEngineLoadState`, which is
+        // backed by the fine-grained 5 Hz download observer. Reading that
+        // here would cause ChatView's body to re-evaluate on every progress
+        // tick. The coarse `isModelReady` @Published flips only on actual
+        // ready/not-ready transitions, so reading it is nearly free.
+        return engineHolder.isModelReady
     }
 
-    // MARK: - Qwen readiness bar
+    // MARK: - Entity disambiguation banner
     //
-    // All download-ish states reuse the same `readinessCard` chrome —
-    // only headers, metadata, and actions vary. The state taxonomy:
+    // Shown when entity extraction produced a name that fuzzy-matches an
+    // existing entity — the model thinks it might be the same thing but
+    // isn't sure. Rather than guessing and polluting memory with a wrong
+    // merge, we ask the user.
     //
-    //   .downloading(m)           → animated bar, live bytes/speed/ETA, Cancel
-    //   .waitingForNetwork(m)     → frozen bar, "we'll pick up when you're online", Cancel
-    //   .waitingForWifi(m)        → frozen bar, "Use cellular this time" + Cancel
-    //   .paused(m)                → frozen bar, centered [Resume download] button
-    //   .loading                  → spinner + "Loading Qwen into memory…"
-    //   .failed(msg)              → typed error title + body + Try again
-    //   .notLoaded / .ready       → card hidden
-    //
-    // Variant B layout: stacked hierarchy. Bytes get their own line
-    // (the primary "how far along am I" signal). Speed + ETA share the
-    // second metadata line in secondary. Cancel is bottom-right, plain
-    // text, not a button.
+    // Copy: plain and direct. Same tone as Nod's other UI — not a modal
+    // dialog, just a quiet question between messages.
     @ViewBuilder
-    private var mlxReadinessBar: some View {
-        switch engineHolder.mlxEngineLoadState {
-        case .notLoaded, .ready:
-            EmptyView()
-
-        case .downloading(let metrics):
-            readinessCard {
-                downloadingCardContent(metrics: metrics, isActive: true)
-            }
-
-        case .waitingForNetwork(let metrics):
-            readinessCard {
-                waitingCardContent(
-                    metrics: metrics,
-                    header: "Waiting for the network…",
-                    body: "We'll pick up when you're back online.",
-                    showCellularLink: false
-                )
-            }
-
-        case .waitingForWifi(let metrics):
-            readinessCard {
-                waitingCardContent(
-                    metrics: metrics,
-                    header: "Waiting for Wi-Fi…",
-                    body: "Nod will continue when you're back on Wi-Fi.",
-                    showCellularLink: true
-                )
-            }
-
-        case .paused(let metrics):
-            readinessCard {
-                pausedCardContent(metrics: metrics)
-            }
-
-        case .loading:
-            readinessCard {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Loading \(activeModelDisplayName) into memory…")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-            }
-
-        case .failed:
-            readinessCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(mlxFailureTitle)
-                        .font(.subheadline.weight(.medium))
-                    Text(mlxFailureBody)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Try again") {
-                        engineHolder.retryMLXLoad()
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color("NodAccent"))
-                    .padding(.top, 2)
-                }
-            }
-        }
-    }
-
-    /// Active downloading card: live bytes + speed + ETA + Cancel.
-    @ViewBuilder
-    private func downloadingCardContent(metrics: DownloadMetrics, isActive: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Downloading \(activeModelDisplayName)…")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Text("\(Int(metrics.fraction * 100))%")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-
-            ProgressView(value: metrics.fraction)
-                .tint(Color("NodAccent"))
-
-            // Line 1: byte count — the primary "how far along" signal.
-            Text(formatByteProgress(written: metrics.bytesWritten,
-                                     total: metrics.totalBytes))
-                .font(.subheadline)
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-
-            // Line 2: speed · ETA (caption secondary). Hidden until we
-            // have a stable rate reading; otherwise we'd show "0 MB/s"
-            // for the first second which looks like something's wrong.
-            if isActive, let subtitle = formatSpeedAndETA(metrics: metrics) {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-
-            // Cancel link. Plain text, right-aligned. Pressing it opens
-            // the "Pause download?" confirmation alert rather than
-            // cancelling immediately.
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    showingCancelDownloadAlert = true
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// Waiting-for-something card. Same chrome as downloading, bar frozen,
-    /// rate/ETA line hidden. Optionally shows "Use cellular this time".
-    @ViewBuilder
-    private func waitingCardContent(
-        metrics: DownloadMetrics,
-        header: String,
-        body: String,
-        showCellularLink: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(header)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-            }
-
-            ProgressView(value: metrics.fraction)
-                .tint(Color("NodAccent"))
-
-            Text(formatByteProgress(written: metrics.bytesWritten,
-                                     total: metrics.totalBytes))
-                .font(.subheadline)
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-
-            Text(body)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                if showCellularLink {
-                    Button("Use cellular this time") {
-                        engineHolder.useCellularThisTime()
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(Color("NodAccent"))
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-                Button("Cancel") {
-                    showingCancelDownloadAlert = true
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// Paused card: user tapped Cancel earlier; resume data on disk.
-    /// Presents a filled [Resume download] button, centered, NodAccent
-    /// fill — a positive action deserves visual weight that a link wouldn't.
-    @ViewBuilder
-    private func pausedCardContent(metrics: DownloadMetrics) -> some View {
+    private func disambiguationBanner(for pending: PendingDisambiguation) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(activeModelDisplayName) download paused")
+            Text("Is this the same as someone you mentioned before?")
                 .font(.subheadline.weight(.medium))
 
-            ProgressView(value: metrics.fraction)
-                .tint(Color("NodAccent"))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("New: \(pending.candidate.canonicalName)" +
+                     (pending.candidate.role.flatMap { $0.isEmpty ? nil : " (\($0))" } ?? ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Known: \(pending.existing.canonicalName)" +
+                     (pending.existing.role.flatMap { $0.isEmpty ? nil : " (\($0))" } ?? ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
-            Text("\(formatByteProgress(written: metrics.bytesWritten, total: metrics.totalBytes)) downloaded")
-                .font(.subheadline)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Spacer()
+            HStack(spacing: 10) {
                 Button {
-                    engineHolder.resumeMLXDownload()
+                    entityStore.resolve(pending, as: .same)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
-                    Text("Resume download")
+                    Text("Same person")
                         .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
                         .background(Color("NodAccent"))
                         .foregroundStyle(.black)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                Spacer()
+
+                Button {
+                    entityStore.resolve(pending, as: .new)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Text("New")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color(.tertiarySystemFill))
+                        .foregroundStyle(.primary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
             }
-            .padding(.top, 2)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    // MARK: - Download formatters
+    // MARK: - Fallback banner
     //
-    // The bar and percentage update every 100 ms — they're the "is this
-    // alive" signal and need frequent motion. The byte count and speed
-    // numbers DO NOT get that treatment. At 3 MB/s emitting "721 MB,
-    // 722 MB, 725 MB" 10 times per second reads as nervous, twitchy
-    // noise — the exact opposite of what a 5-minute "just let it run"
-    // transfer should feel like.
-    //
-    // Fix: round the display values to coarse increments. Bytes snap to
-    // the nearest 10 MB (or 0.1 GB once we cross 1 GB); speed rounds to
-    // the nearest 1 MB/s. The underlying metrics still arrive at full
-    // precision — we only round at the format boundary.
-
-    /// "720 MB of 2.3 GB". Rounded to nearest 10 MB under 1 GB, nearest
-    /// 0.1 GB over. Deliberately NOT `ByteCountFormatter.file` because
-    /// that style switches units at awkward boundaries (998 MB → 1.0 GB)
-    /// and changes visual width unpredictably.
-    private func formatByteProgress(written: Int64, total: Int64) -> String {
-        "\(formatCoarseBytes(written)) of \(formatCoarseBytes(total))"
+    // Shown when LaunchCrashBreaker flipped the engine to Apple
+    // Intelligence. Dismissable — the user sees it once per fallback
+    // event, never on a clean launch. Tone: explain what happened,
+    // reassure it's reversible, point them at the menu.
+    private var fallbackBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text(crashBreaker.bannerText)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                crashBreaker.dismissBanner()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func formatCoarseBytes(_ bytes: Int64) -> String {
-        let oneGB: Int64 = 1_000_000_000
-        if bytes >= oneGB {
-            let gb = (Double(bytes) / Double(oneGB))
-            // One decimal ("2.3 GB"). At download speeds that cross
-            // 0.1 GB takes ~30 s — calm.
-            return String(format: "%.1f GB", gb)
-        } else {
-            // Round to nearest 10 MB. At 3 MB/s that's one visible
-            // update every ~3 s.
-            let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
-            return "\(mb) MB"
-        }
-    }
-
-    /// "3 MB/s  ·  about 8 min remaining". Speed rounds to nearest whole
-    /// MB/s. That plus the widened 10-second speed window (see
-    /// DownloadTuning.speedWindowSeconds) means the speed number rarely
-    /// flips between two neighbouring integers mid-download.
-    ///
-    /// Returns nil when we don't have a stable rate yet — the caller
-    /// shows only the byte line during that first ~1-2 s.
-    private func formatSpeedAndETA(metrics: DownloadMetrics) -> String? {
-        let rate = metrics.bytesPerSecond
-        guard rate > 0 else { return nil }
-
-        let rateString = formatCoarseSpeed(rate)
-
-        guard let seconds = metrics.secondsRemaining, seconds.isFinite, seconds > 0 else {
-            return rateString
-        }
-
-        let etaString: String
-        if seconds < 60 {
-            etaString = "less than a minute remaining"
-        } else if seconds < 3600 {
-            let minutes = Int((seconds / 60).rounded())
-            etaString = "about \(minutes) min remaining"
-        } else {
-            let hours = Int((seconds / 3600).rounded())
-            etaString = "about \(hours) hr remaining"
-        }
-        return "\(rateString)  ·  \(etaString)"
-    }
-
-    private func formatCoarseSpeed(_ bytesPerSec: Double) -> String {
-        let mbPerSec = bytesPerSec / 1_000_000
-        if mbPerSec >= 1.0 {
-            // Integer MB/s. "3 MB/s" not "3.42 MB/s".
-            return "\(Int(mbPerSec.rounded())) MB/s"
-        }
-        // Under 1 MB/s: show KB/s rounded to nearest 50. A dying
-        // connection this slow deserves a calm readout too.
-        let kbPerSec = bytesPerSec / 1000
-        let rounded = Int((kbPerSec / 50).rounded()) * 50
-        return "\(max(50, rounded)) KB/s"
-    }
-
-    /// Shared card chrome for the readiness states so we only edit one place
-    /// when the look changes.
-    @ViewBuilder
-    private func readinessCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        content()
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    /// Pull apart the `.failed(String)` payload to decide what to show.
-    /// We match on the raw description rather than re-typing because
-    /// MLXEngineClient stores the error's description in the state, not the
-    /// original Error. Crude but serviceable.
-    private var mlxFailureTitle: String {
-        guard case .failed(let msg) = engineHolder.mlxEngineLoadState else {
-            return "\(activeModelDisplayName) failed to load"
-        }
-        if msg.contains("downloadFailedNoNetwork") {
-            return "Can't reach the download server"
-        }
-        if msg.contains("downloadFailedDiskFull") {
-            return "Not enough space for \(activeModelDisplayName)"
-        }
-        return "\(activeModelDisplayName) failed to load"
-    }
-
-    private var mlxFailureBody: String {
-        guard case .failed(let msg) = engineHolder.mlxEngineLoadState else {
-            return "Tap Try again below."
-        }
-        let sizeGB = String(format: "%.1f", Double(activeModelTotalBytes) / 1_000_000_000)
-        if msg.contains("downloadFailedNoNetwork") {
-            return "Connect to Wi-Fi and try again. The download is ~\(sizeGB) GB."
-        }
-        if msg.contains("downloadFailedDiskFull") {
-            return "Free up ~\(sizeGB) GB on your device, then try again."
-        }
-        return "Something went wrong. Try again, or switch back to Apple Intelligence in the menu."
-    }
+    // The readiness-bar UI lives in the `MLXReadinessBar` struct at the
+    // bottom of this file. It observes `engineHolder.downloadObserver`
+    // directly (not `engineHolder`), so only that subview re-renders on
+    // progress ticks. ChatView stays at rest during a download.
 
     /// Display name of the currently-active MLX engine, or an empty
     /// string when we're on AFM. Used throughout the readiness-card
@@ -751,13 +947,48 @@ struct ChatView: View {
         // Insert an empty assistant message. Filtered out of context we
         // build for the model; filled with the reply when it arrives.
         store.append(Message(role: .assistant, text: ""))
-        let context = store.contextForInference()
+
+        // Split inputs: systemBlock (personalization + summary + entity
+        // context for entities this message references) goes into the
+        // engine's system message. `history` is the un-summarized recent
+        // turns — the engine passes these as real chat turns so the
+        // model's multi-turn attention actually engages.
+        //
+        // Passing the current user message enables entity retrieval: if
+        // the user says "did M ever reply?" and M is stored, the system
+        // block will include "M (manager): ..." so the model has context
+        // without the user re-explaining. If no known entities are
+        // referenced, nothing gets injected (the "nod, not interruption"
+        // guardrail).
+        let inputs = store.buildInferenceInputs(currentUserMessage: text)
+
+        // Token budget sized to this user's response-style preference.
+        // Brief replies don't need 400 tokens of KV headroom; every
+        // token saved is ~100 KB off the per-generation peak.
+        //
+        // Read on-demand (not via @ObservedObject) so ChatView's body
+        // doesn't invalidate on every keystroke in the sidebar's free-form
+        // text field. See the `personalization` comment at the top of the
+        // struct for the rationale.
+        let options = GenerationOptions.forResponseStyle(
+            PersonalizationStore.shared.current.responseStyle
+        )
+
+        // Reset the idle-unload timer. While the user is actively chatting
+        // we hold the weights; the timer only fires after 10 quiet
+        // minutes (or a background transition — see .onChange below).
+        engineHolder.noteActivity()
 
         Task {
             let reply: String
             var wasError = false
             do {
-                let rawReply = try await engine.respond(to: text, context: context)
+                let rawReply = try await engine.respond(
+                    to: text,
+                    context: inputs.systemBlock,
+                    history: inputs.history,
+                    options: options
+                )
                 // Guard against empty replies (e.g. Qwen burns all its tokens
                 // inside a <think> block and never emits a final response).
                 // Without this, the placeholder message stays empty and the
@@ -769,11 +1000,26 @@ struct ChatView: View {
                     reply = rawReply
                 }
             } catch InferenceError.modelNotReady {
-                // Engine-specific: AFM is settings-gated; MLX engines are
-                // download-gated (all three: Qwen 3, Qwen 3.5, Gemma 4).
+                // Engine-specific. For AFM the message branches on the
+                // exact runtime availability reason — users whose
+                // hardware can't run Apple Intelligence should NOT be
+                // pointed at a Settings pane that doesn't exist on
+                // their device. Users who just have it toggled off
+                // get the Settings path. MLX engines are download-
+                // gated (all three: Qwen 3, Qwen 3.5, Gemma 4).
                 switch EnginePreferenceStore.current {
                 case .apple:
-                    reply = "Apple Intelligence isn't ready on this device. Check Settings → Apple Intelligence."
+                    switch DeviceCapability.afmStatus {
+                    case .notSupported:
+                        reply = "Your iPhone doesn't support Apple Intelligence. Tap the menu to pick an on-device model instead."
+                    case .disabledInSettings:
+                        reply = "Apple Intelligence is turned off. Flip it on in Settings → Apple Intelligence, or switch to an on-device model from the menu."
+                    case .available:
+                        // We got modelNotReady but availability now
+                        // says .available. Race with the user flipping
+                        // the Settings toggle; tell them to try again.
+                        reply = "Apple Intelligence is warming up. Try sending again in a moment."
+                    }
                 case .qwen3, .qwen35, .gemma4:
                     reply = "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
                 }
@@ -804,13 +1050,140 @@ struct ChatView: View {
 
     /// Top padding between message bubbles. Tight for same-sender follow-ups
     /// so a block of thought reads as one block; wider when the speaker
-    /// changes so the exchange has visible rhythm. Nod-blink rows get a bit
-    /// more breathing room because the eyes are visually heavy.
-    private static func topPadding(for msg: Message, prev: Message?, isFirst: Bool) -> CGFloat {
-        if isFirst { return 0 }
-        guard let prev else { return 0 }
-        if msg.role == .nod || prev.role == .nod { return 16 }
-        return msg.role == prev.role ? 4 : 14
+    /// changes so the exchange has visible rhythm. Nod-blink rows get a
+    /// bit more breathing room because the eyes are visually heavy.
+    ///
+    /// Breakpoint-aware: if the previous row is a breakpoint (date separator
+    /// or time gap), the breakpoint itself provides the vertical space —
+    /// no top padding on the message that follows it.
+    private static func topPadding(for msg: Message, prevRow: ChatRow?) -> CGFloat {
+        switch prevRow {
+        case .none:                             return 0
+        case .breakpoint:                       return 0
+        case .message(let prev):
+            if msg.role == .nod || prev.role == .nod { return 16 }
+            return msg.role == prev.role ? 4 : 14
+        }
+    }
+
+    // MARK: - Chat row composition
+
+    /// One renderable item in the message list — either a message bubble
+    /// or a visual breakpoint (date separator / time gap). Breakpoints
+    /// are derived from adjacent messages' `createdAt`, not persisted.
+    enum ChatRow: Identifiable {
+        /// Visual separator. `isDate` distinguishes a day-level label
+        /// ("Today", "Yesterday", "Mon Mar 15") from a time-only label
+        /// inserted on same-day gaps ("2:30 PM"). The id is derived
+        /// deterministically from the message that follows it, so
+        /// SwiftUI can diff stably across re-renders.
+        case breakpoint(id: String, label: String, isDate: Bool)
+        case message(Message)
+
+        var id: String {
+            switch self {
+            case .breakpoint(let id, _, _): return id
+            case .message(let m):           return m.id.uuidString
+            }
+        }
+    }
+
+    /// Walk the messages and emit a row sequence with date separators
+    /// and time gaps interleaved. Rules:
+    ///   - First message in history → preceded by a date separator.
+    ///   - Calendar-day change → date separator.
+    ///   - Same-day gap over 10 minutes → time-only separator.
+    ///   - Otherwise → no separator.
+    ///
+    /// The 10-minute threshold matches iMessage's default (it uses
+    /// somewhere around 7-15 minutes depending on context). Short
+    /// enough to mark genuine pauses, long enough to avoid cluttering
+    /// a normal back-and-forth with timestamps every turn.
+    static func chatRows(from messages: [Message]) -> [ChatRow] {
+        guard !messages.isEmpty else { return [] }
+        var rows: [ChatRow] = []
+        let calendar = Calendar.current
+        let gapThreshold: TimeInterval = 10 * 60
+
+        for (i, msg) in messages.enumerated() {
+            if i == 0 {
+                rows.append(.breakpoint(
+                    id: "break-before-\(msg.id.uuidString)",
+                    label: dayLabel(for: msg.createdAt),
+                    isDate: true
+                ))
+            } else {
+                let prev = messages[i - 1]
+                if !calendar.isDate(prev.createdAt, inSameDayAs: msg.createdAt) {
+                    rows.append(.breakpoint(
+                        id: "break-before-\(msg.id.uuidString)",
+                        label: dayLabel(for: msg.createdAt),
+                        isDate: true
+                    ))
+                } else if msg.createdAt.timeIntervalSince(prev.createdAt) > gapThreshold {
+                    rows.append(.breakpoint(
+                        id: "break-before-\(msg.id.uuidString)",
+                        label: timeLabel(for: msg.createdAt),
+                        isDate: false
+                    ))
+                }
+            }
+            rows.append(.message(msg))
+        }
+        return rows
+    }
+
+    /// "Today" / "Yesterday" / "Monday" (this week) / "Mar 15" (same
+    /// year) / "Mar 15, 2025" (older). iMessage-style.
+    private static func dayLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date)     { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+
+        // "This week" window: last 6 days → just the weekday name.
+        let daysAgo = calendar.dateComponents([.day], from: date, to: Date()).day ?? 0
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        if daysAgo < 7 {
+            formatter.dateFormat = "EEEE"       // "Monday"
+            return formatter.string(from: date)
+        }
+
+        let sameYear = calendar.component(.year, from: date)
+            == calendar.component(.year, from: Date())
+        formatter.dateFormat = sameYear ? "MMM d" : "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
+    /// Locale-aware time-only label ("2:30 PM" or "14:30" depending on
+    /// user's settings).
+    private static func timeLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - BreakpointView
+
+/// Centered separator shown between messages when the day changes or
+/// after a long same-day gap. Caption typography, secondary foreground,
+/// modest vertical padding — a gentle interruption of the bubble flow,
+/// not a section heading.
+private struct BreakpointView: View {
+    let label: String
+    let isDate: Bool
+
+    var body: some View {
+        Text(label)
+            .font(isDate ? .caption.weight(.semibold) : .caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, isDate ? 16 : 12)
+            .padding(.bottom, isDate ? 8 : 4)
+            .accessibilityLabel(isDate ? "Date: \(label)" : "Time: \(label)")
     }
 }
 
@@ -901,6 +1274,666 @@ struct MessageBubble: View {
 private struct MascotButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+    }
+}
+
+// MARK: - MLXReadinessBar (isolated subview)
+//
+// The download/load readiness card. Lives as a standalone view so it can
+// observe the fine-grained `DownloadStateObserver` in isolation. During
+// an active download, `observer.state` changes ~5 times per second, which
+// invalidates this subview 5 Hz. ChatView — which observes `engineHolder`
+// (coarse) but NOT `observer` (fine) — is unaffected and stays at 120 fps.
+//
+// State taxonomy:
+//   .downloading(m)         → animated bar, live bytes/speed/ETA, Cancel
+//   .waitingForNetwork(m)   → frozen bar, "we'll pick up when you're online", Cancel
+//   .waitingForWifi(m)      → frozen bar, "Use cellular this time" + Cancel
+//   .paused(m)              → frozen bar, centered [Resume download] button
+//   .loading                → spinner + "Loading <model> into memory…"
+//   .failed(msg)            → typed error title + body + Try again
+//   .notLoaded / .ready     → card hidden
+//
+// Variant B layout: stacked hierarchy. Bytes get their own line (the
+// primary "how far along am I" signal). Speed + ETA share the second
+// metadata line in secondary. Cancel is bottom-right, plain text.
+//
+// Action handlers are passed in as closures rather than handing over the
+// full `EngineHolder` reference — that way, this view has no
+// @ObservedObject dependency on EngineHolder and its own body
+// invalidations don't escape upward.
+private struct MLXReadinessBar: View {
+    @ObservedObject var observer: DownloadStateObserver
+    let modelDisplayName: String
+    let totalBytes: Int64
+    let onRetry: () -> Void
+    let onResume: () -> Void
+    let onUseCellular: () -> Void
+    let onRequestCancel: () -> Void
+
+    var body: some View {
+        content
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+            // State-transition animation is scoped to this subview — so it
+            // doesn't trip invalidation of ChatView. Keyed on the coarse
+            // case identity, not the associated metrics, so live progress
+            // updates within .downloading don't cause the whole card to
+            // cross-fade every tick.
+            .animation(.easeInOut(duration: 0.25), value: stateCaseKey)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch observer.state {
+        case .notLoaded, .ready:
+            EmptyView()
+
+        case .downloading(let metrics):
+            card {
+                downloadingCard(metrics: metrics)
+            }
+
+        case .waitingForNetwork(let metrics):
+            card {
+                waitingCard(
+                    metrics: metrics,
+                    header: "Waiting for the network…",
+                    body: "We'll pick up when you're back online.",
+                    showCellularLink: false
+                )
+            }
+
+        case .waitingForWifi(let metrics):
+            card {
+                waitingCard(
+                    metrics: metrics,
+                    header: "Waiting for Wi-Fi…",
+                    body: "Nod will continue when you're back on Wi-Fi.",
+                    showCellularLink: true
+                )
+            }
+
+        case .paused(let metrics):
+            card {
+                pausedCard(metrics: metrics)
+            }
+
+        case .loading:
+            card {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading \(modelDisplayName) into memory…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+
+        case .failed(let msg):
+            card {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(failureTitle(msg: msg))
+                        .font(.subheadline.weight(.medium))
+                    Text(failureBody(msg: msg))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Try again", action: onRetry)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color("NodAccent"))
+                        .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    // MARK: - Card chrome
+
+    @ViewBuilder
+    private func card<Content: View>(@ViewBuilder _ inner: () -> Content) -> some View {
+        inner()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    // MARK: - State variants
+
+    @ViewBuilder
+    private func downloadingCard(metrics: DownloadMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Downloading \(modelDisplayName)…")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(Int(metrics.fraction * 100))%")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            // `.animation(nil, value: metrics.fraction)` kills the
+            // default implicit tween on ProgressView value changes. At
+            // 5 Hz emissions, each implicit tween overlaps the next and
+            // produces visible juddering on the bar itself — counter-
+            // intuitively, disabling the animation makes the bar LOOK
+            // smoother because each step renders crisply.
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+                .animation(nil, value: metrics.fraction)
+
+            // Line 1: byte count — the primary "how far along" signal.
+            Text(formatByteProgress(written: metrics.bytesWritten, total: metrics.totalBytes))
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+
+            // Line 2: speed · ETA (caption secondary). Hidden until we
+            // have a stable rate reading; otherwise we'd show "0 MB/s"
+            // for the first second which looks like something's wrong.
+            if let subtitle = formatSpeedAndETA(metrics: metrics) {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onRequestCancel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func waitingCard(
+        metrics: DownloadMetrics,
+        header: String,
+        body: String,
+        showCellularLink: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(header)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+            }
+
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+                .animation(nil, value: metrics.fraction)
+
+            Text(formatByteProgress(written: metrics.bytesWritten, total: metrics.totalBytes))
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+
+            Text(body)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                if showCellularLink {
+                    Button("Use cellular this time", action: onUseCellular)
+                        .font(.subheadline)
+                        .foregroundStyle(Color("NodAccent"))
+                        .buttonStyle(.plain)
+                }
+                Spacer()
+                Button("Cancel", action: onRequestCancel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pausedCard(metrics: DownloadMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("\(modelDisplayName) download paused")
+                .font(.subheadline.weight(.medium))
+
+            ProgressView(value: metrics.fraction)
+                .tint(Color("NodAccent"))
+                .animation(nil, value: metrics.fraction)
+
+            Text("\(formatByteProgress(written: metrics.bytesWritten, total: metrics.totalBytes)) downloaded")
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button(action: onResume) {
+                    Text("Resume download")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(Color("NodAccent"))
+                        .foregroundStyle(.black)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    // MARK: - Animation key
+    //
+    // For state-case transitions (downloading → paused, waiting → ready)
+    // we want a fade. For progress ticks WITHIN .downloading we do NOT
+    // want a fade on the whole card. This computed property maps each
+    // state to a stable integer that changes only on case identity, not
+    // on the associated DownloadMetrics. Keyed `.animation(value:)` on
+    // this instead of `observer.state` gives us the right granularity.
+    private var stateCaseKey: Int {
+        switch observer.state {
+        case .notLoaded:         return 0
+        case .downloading:       return 1
+        case .waitingForNetwork: return 2
+        case .waitingForWifi:    return 3
+        case .paused:            return 4
+        case .loading:           return 5
+        case .ready:             return 6
+        case .failed:            return 7
+        }
+    }
+
+    // MARK: - Failure copy
+
+    private func failureTitle(msg: String) -> String {
+        if msg.contains("downloadFailedNoNetwork") {
+            return "Can't reach the download server"
+        }
+        if msg.contains("downloadFailedDiskFull") {
+            return "Not enough space for \(modelDisplayName)"
+        }
+        return "\(modelDisplayName) failed to load"
+    }
+
+    private func failureBody(msg: String) -> String {
+        let sizeGB = String(format: "%.1f", Double(totalBytes) / 1_000_000_000)
+        if msg.contains("downloadFailedNoNetwork") {
+            return "Connect to Wi-Fi and try again. The download is ~\(sizeGB) GB."
+        }
+        if msg.contains("downloadFailedDiskFull") {
+            return "Free up ~\(sizeGB) GB on your device, then try again."
+        }
+        return "Something went wrong. Try again, or switch back to Apple Intelligence in the menu."
+    }
+
+    // MARK: - Formatters
+    //
+    // Speed + byte numbers round to coarse increments deliberately. At
+    // 3 MB/s and 5 Hz emits, showing "721 MB, 722 MB, 725 MB" every
+    // fraction of a second reads as twitchy. Rounding to nearest 10 MB
+    // gives one visible tick every ~3 s — the right rhythm for a long
+    // transfer. Underlying metrics still arrive at full precision; only
+    // the display is coarsened.
+
+    private func formatByteProgress(written: Int64, total: Int64) -> String {
+        "\(formatCoarseBytes(written)) of \(formatCoarseBytes(total))"
+    }
+
+    private func formatCoarseBytes(_ bytes: Int64) -> String {
+        let oneGB: Int64 = 1_000_000_000
+        if bytes >= oneGB {
+            let gb = (Double(bytes) / Double(oneGB))
+            return String(format: "%.1f GB", gb)
+        } else {
+            let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
+            return "\(mb) MB"
+        }
+    }
+
+    private func formatSpeedAndETA(metrics: DownloadMetrics) -> String? {
+        let rate = metrics.bytesPerSecond
+        guard rate > 0 else { return nil }
+
+        let rateString = formatCoarseSpeed(rate)
+
+        guard let seconds = metrics.secondsRemaining, seconds.isFinite, seconds > 0 else {
+            return rateString
+        }
+
+        let etaString: String
+        if seconds < 60 {
+            etaString = "less than a minute remaining"
+        } else if seconds < 3600 {
+            let minutes = Int((seconds / 60).rounded())
+            etaString = "about \(minutes) min remaining"
+        } else {
+            let hours = Int((seconds / 3600).rounded())
+            etaString = "about \(hours) hr remaining"
+        }
+        return "\(rateString)  ·  \(etaString)"
+    }
+
+    private func formatCoarseSpeed(_ bytesPerSec: Double) -> String {
+        let mbPerSec = bytesPerSec / 1_000_000
+        if mbPerSec >= 1.0 {
+            return "\(Int(mbPerSec.rounded())) MB/s"
+        }
+        let kbPerSec = bytesPerSec / 1000
+        let rounded = Int((kbPerSec / 50).rounded()) * 50
+        return "\(max(50, rounded)) KB/s"
+    }
+}
+
+// MARK: - AFMUnavailableOnboarding
+//
+// First-run empty state shown when the user's active preference is
+// Apple Intelligence but AFM isn't available on this device. Three
+// branches, keyed on `DeviceCapability.afmStatus` + `canRunMLX4BClass`:
+//
+//   1. disabledInSettings: AFM-capable hardware, user disabled it. Copy
+//      mentions the Settings path; Qwen 3 is the recommended download.
+//   2. notSupported + canRunMLX: hardware can't run AFM (iPhone 15 base
+//      et al). Same layout, different body copy — no Settings path.
+//   3. notSupported + !canRunMLX: dead-end. Honest "needs newer iPhone"
+//      with no CTAs. No model downloads would fit either.
+//
+// Layout: 88pt mascot centered, welcome headline, body copy, primary
+// CTA (NodAccent-filled card = recommended model, Qwen 3 Instruct 2507
+// because proven > newest for a first-time user committing to a 5-min
+// download), OR divider, two secondary cards (Gemma 4, Qwen 3.5 in
+// newest-first order), footer.
+//
+// Tap on any model → `onPickModel(pref)` → ChatView calls
+// `engineHolder.setPreference(...)` which kicks off the download.
+// MLXReadinessBar takes over rendering as soon as state transitions
+// out of .notLoaded.
+private struct AFMUnavailableOnboarding: View {
+    let afmStatus: DeviceCapability.AFMStatus
+    let canRunMLX: Bool
+    let onPickModel: (EnginePreference) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                heroMascot
+                content
+                Spacer(minLength: 40)
+            }
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityLabel(accessibilityIntro)
+    }
+
+    // MARK: Hero
+
+    /// 88pt mascot — the hero size. Larger than the 28pt nav-bar
+    /// mascot; codified as the "hero moment" token (will move into
+    /// DESIGN.md when that ships).
+    private var heroMascot: some View {
+        // Simplest rendering: the orange rounded-square + two eyes,
+        // identical geometry to MiniNodFace but scaled up. Not reusing
+        // MiniNodFace because that view has a blink timer, and a
+        // full-size hero asset doesn't need eye animation here.
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color("NodAccent"))
+            .frame(width: 88, height: 88)
+            .overlay(
+                HStack(spacing: 12) {
+                    Circle().fill(Color.black).frame(width: 12, height: 12)
+                    Circle().fill(Color.black).frame(width: 12, height: 12)
+                }
+            )
+            .padding(.top, 64)
+            .padding(.bottom, 28)
+            .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)
+    }
+
+    // MARK: Branch router
+
+    @ViewBuilder
+    private var content: some View {
+        switch afmStatus {
+        case .available:
+            // Shouldn't reach this view when AFM is available, but be
+            // defensive: show the MLX-only copy as a safe fallback.
+            mlxOnlyBranch
+        case .disabledInSettings:
+            afmDisabledBranch
+        case .notSupported:
+            if canRunMLX {
+                mlxOnlyBranch
+            } else {
+                neitherBranch
+            }
+        }
+    }
+
+    // MARK: Branch: AFM off in Settings
+
+    @ViewBuilder
+    private var afmDisabledBranch: some View {
+        welcomeHeadline("Let's get you set up.")
+        bodyCopy("Apple Intelligence is off on this iPhone. You can turn it on in Settings → Apple Intelligence & Siri, or pick an on-device model below.")
+        modelPickerStack
+        onDeviceFooter
+    }
+
+    // MARK: Branch: MLX-only (AFM hardware-unsupported + MLX available)
+
+    @ViewBuilder
+    private var mlxOnlyBranch: some View {
+        welcomeHeadline("Let's get you set up.")
+        bodyCopy("Nod runs the AI on your device. Your iPhone can't use Apple's built-in one, so pick one of these instead.")
+        modelPickerStack
+        onDeviceFooter
+    }
+
+    // MARK: Branch: Neither (no AFM, no MLX) — dead end
+
+    @ViewBuilder
+    private var neitherBranch: some View {
+        welcomeHeadline("Nod needs a newer iPhone.")
+        bodyCopy("Nod runs the AI on your device, and the models won't fit in this iPhone's memory.")
+        requirementsCard
+        Text("We'd rather be honest than give you a bad experience. The whole point is that your conversations stay on your device.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.top, 18)
+            .padding(.horizontal, 8)
+    }
+
+    // MARK: Shared pieces
+
+    private func welcomeHeadline(_ text: String) -> some View {
+        Text(text)
+            .font(.title3.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .padding(.bottom, 14)
+    }
+
+    private func bodyCopy(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.bottom, 28)
+            .padding(.horizontal, 4)
+    }
+
+    /// Primary + OR + two secondary. Recommended = Qwen 3 (proven),
+    /// alternates newest-first (Gemma 4, Qwen 3.5).
+    @ViewBuilder
+    private var modelPickerStack: some View {
+        modelCard(pref: .qwen3, style: .primary, roleOverride: "Recommended")
+        orDivider
+        modelCard(pref: .gemma4, style: .secondary, roleOverride: nil)
+            .padding(.top, 8)
+        modelCard(pref: .qwen35, style: .secondary, roleOverride: nil)
+            .padding(.top, 8)
+    }
+
+    private var orDivider: some View {
+        Text("OR")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .tracking(0.6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+    }
+
+    private enum ModelCardStyle { case primary, secondary }
+
+    /// One tappable model option. Primary = NodAccent-filled (the
+    /// recommended path); secondary = secondarySystemBackground fill.
+    /// Whole card is the tap target. No chevron button — arrow is a
+    /// visual hint, not a separate interactive element.
+    @ViewBuilder
+    private func modelCard(pref: EnginePreference, style: ModelCardStyle, roleOverride: String?) -> some View {
+        let spec = pref.mlxSpec
+        let role = roleOverride ?? (spec?.roleLabel ?? "")
+        let sizeLabel = spec.map { Self.formatSize($0.totalBytes) } ?? ""
+        let meta = role.isEmpty ? sizeLabel : "\(role) · \(sizeLabel)"
+        let title = pref.displayName
+
+        Button {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            onPickModel(pref)
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(style == .primary ? .semibold : .medium))
+                        .foregroundStyle(style == .primary ? .black : .primary)
+                    Text(meta)
+                        .font(.caption)
+                        .foregroundStyle(style == .primary
+                            ? Color.black.opacity(0.65)
+                            : Color.secondary)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(style == .primary
+                        ? Color.black
+                        : Color.secondary.opacity(0.7))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, style == .primary ? 15 : 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(style == .primary
+                ? Color("NodAccent")
+                : Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(meta), double-tap to download")
+    }
+
+    private var requirementsCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("WHAT YOU'LL NEED")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.6)
+            Text("iPhone 15 Pro or newer, or any iPhone with at least 6 GB of memory.")
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.top, 4)
+    }
+
+    /// Footer shown on both MLX-capable branches (MLX-only and AFM-off).
+    /// Not on "neither" — that branch has its own reassurance copy.
+    private var onDeviceFooter: some View {
+        Text("All on-device. Nothing sent to a server. Wi-Fi recommended for the download.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.top, 18)
+            .padding(.horizontal, 8)
+    }
+
+    // MARK: Helpers
+
+    /// Format bytes as a coarse size string. Mirrors the logic in
+    /// SidebarView.formatCoarseSize so the two surfaces show identical
+    /// numbers for the same model. If the rounding logic ever diverges,
+    /// unify on a shared helper (noted for DESIGN.md follow-up).
+    private static func formatSize(_ bytes: Int64) -> String {
+        let oneGB: Int64 = 1_000_000_000
+        if bytes >= oneGB {
+            return String(format: "%.1f GB", Double(bytes) / Double(oneGB))
+        }
+        let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
+        return "\(mb) MB"
+    }
+
+    /// VoiceOver intro for the whole onboarding screen. Individual
+    /// cards have their own labels; this one provides orientation.
+    private var accessibilityIntro: String {
+        switch afmStatus {
+        case .available:
+            return "Pick a model to start Nod."
+        case .disabledInSettings:
+            return "Apple Intelligence is off. Turn it on in Settings, or pick an on-device model."
+        case .notSupported:
+            if canRunMLX {
+                return "Apple Intelligence isn't supported on this iPhone. Pick an on-device model."
+            } else {
+                return "Nod needs a newer iPhone. Requires iPhone 15 Pro or newer, or 6 GB of memory."
+            }
+        }
+    }
+}
+
+// MARK: - AFMUnavailableBanner
+//
+// Persistent banner shown when the user has existing chat history
+// (messages non-empty) but AFM is unavailable on the current device.
+// Primary trigger: iCloud backup restored from an AFM-capable device
+// onto one that can't run it (iPhone 15 Pro → iPhone 15 base).
+//
+// Matches the existing `fallbackBanner` chrome EXACTLY:
+// secondarySystemBackground fill, 12pt corner radius, info.circle icon
+// in secondary, caption text. No colored left-border (that's on the AI
+// slop blacklist). Intentionally different from `fallbackBanner` in
+// one way: NOT dismissible by X — the only way to clear this banner
+// is to switch engines (which resolves the underlying condition).
+private struct AFMUnavailableBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Apple Intelligence isn't available on this iPhone.")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("Your conversation is safe. Tap the menu to pick an on-device model and keep chatting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Apple Intelligence isn't available on this iPhone. Your conversation is safe. Tap the menu to pick an on-device model and keep chatting.")
     }
 }
 
