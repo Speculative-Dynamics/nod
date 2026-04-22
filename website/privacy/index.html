@@ -93,9 +93,9 @@
                         <strong>Nod runs entirely on your iPhone.</strong> We
                         don't have a server that sees what you write. We don't
                         have accounts. We don't track you, profile you, or
-                        analyse you. There is no pipe to send your conversation
-                        through — so there is nothing for us (or anyone else) to
-                        collect.
+                        analyse you. Your conversation stays local unless you
+                        explicitly turn on iCloud backup for your own account,
+                        which is off by default.
                     </p>
 
                     <div class="callout">
@@ -130,8 +130,9 @@
                         Every part of the Nod experience — the text you type,
                         the voice input you dictate, the model responses, the
                         memory summaries, the conversation history — is
-                        processed and stored
-                        <strong>on your device only</strong>. Specifically:
+                        processed locally on your device. Conversation backup
+                        to your own iCloud account is optional and off by
+                        default. Specifically:
                     </p>
                     <ul>
                         <li>
@@ -149,7 +150,8 @@
                         <li>
                             Your <strong>conversation history</strong> is stored
                             in a local SQLite database on your device, encrypted
-                            at rest by iOS. We never see it.
+                            at rest by iOS. We never see it. You can leave it
+                            local-only or opt into iCloud backup.
                         </li>
                         <li>
                             Tapping <strong>"Start fresh"</strong> permanently
@@ -160,18 +162,20 @@
                     <p>
                         The app ships with the model prompts bundled inside the
                         binary. Nothing about your use is transmitted to
-                        Speculative Dynamics, to Apple (beyond standard
-                        iOS-level telemetry you've already configured for your
-                        device), or to any third party.
+                        Speculative Dynamics or to any third party for
+                        processing your conversation. If you enable iCloud
+                        backup, conversation data is handled by Apple's iCloud
+                        backup system under your Apple account settings.
                     </p>
 
                     <h3>Required network activity</h3>
                     <p>
                         There is one unavoidable network event: on first launch,
-                        the app downloads the Qwen model weights (~2.5 GB) using
-                        Apple's Background Assets framework. This is a one-time
-                        download from Apple's CDN. After that, the app functions
-                        fully offline. We don't see or log this download.
+                        the app downloads the Qwen model weights (~2.5 GB) from
+                        Nod's hosted model files. This is a one-time download.
+                        After that, the app functions fully offline. We don't
+                        receive your conversation content as part of this
+                        download.
                     </p>
 
                     <h3>The marketing website (usenod.app)</h3>

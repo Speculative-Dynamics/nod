@@ -1,0 +1,129 @@
+# XcodeGen input. Regenerate Nod.xcodeproj with:
+#   cd ios && xcodegen generate
+#
+# The generated .xcodeproj is committed to the repo so first-clone works
+# without additional tooling. Regenerate after changing this file.
+
+name: Nod
+
+options:
+  bundleIdPrefix: app.usenod
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  defaultConfig: Debug
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+  # MLX Swift — Apple's array/ML framework + LLM runners. Provides
+  # MLXLLM and MLXLMCommon products used by QwenClient to load and
+  # run on-device language models.
+  #
+  # This was previously `mlx-swift-examples` 2.29.1. The MLX team split
+  # the examples repo from the library code in late 2025; model
+  # implementations now live in `mlx-swift-lm`. Bumping to 3.31.3
+  # gets us the Qwen 3.5 and Gemma 4 architecture registrations that
+  # landed in the 3.x line, which we don't use today but want available
+  # as an upgrade path for the on-device model.
+  #
+  # 3.x is a major version with breaking API changes around tokenizer
+  # and downloader loading. We load from a pre-populated local
+  # directory, so we're on the simpler side of the migration: we drop
+  # the `Hub` dependency entirely and call `loadModelContainer(from:
+  # URL)` directly. See QwenClient.performLoad for the new call.
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    from: "3.31.3"
+  # swift-transformers provides Tokenizers.AutoTokenizer. We bridge it to
+  # MLXLMCommon.TokenizerLoader in app code so we can avoid the package's
+  # macro-based convenience wrapper entirely.
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers
+    from: "1.3.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    CLANG_ENABLE_MODULES: YES
+    # Automatic signing with the Nod Apple Developer team pinned.
+    # Team ID matches the existing App ID registered at
+    # app.usenod.nod (see developer.apple.com/account/resources/identifiers).
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: Z8AYP4GMZ5
+
+targets:
+  Nod:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Nod
+        excludes:
+          - "Info.plist"
+          - "Nod.entitlements"
+      # Prompts live at the repo root (../prompts/) — single source of truth
+      # for LLM prompts across iOS and any future platforms (web, android).
+      # Files copied into the iOS app bundle as resources at build time.
+      - path: ../prompts
+        buildPhase: resources
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.usenod.nod
+        PRODUCT_NAME: Nod
+        INFOPLIST_FILE: Nod/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Nod/Nod.entitlements
+        TARGETED_DEVICE_FAMILY: "1"                    # iPhone only
+        SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: NodAccent
+        DEVELOPMENT_ASSET_PATHS: "\"Nod/Preview Content\""
+        # Previews are kept on for Xcode canvas (#Preview blocks still work
+        # in the Xcode canvas). The debug-dylib split is what was fragile —
+        # ENABLE_DEBUG_DYLIB=NO forces the app to build as a single binary
+        # on device, which is more reliable and avoids the SIGKILL-at-dyld
+        # crash pattern after project regenerations.
+        ENABLE_PREVIEWS: YES
+        ENABLE_DEBUG_DYLIB: NO
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "21"
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - package: GRDB
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
+      # Tokenizers module from swift-transformers — referenced by the
+      # local tokenizer bridge in MLXEngineClient.
+      - package: SwiftTransformers
+        product: Tokenizers
+
+# Explicit scheme so `xcodebuild -scheme Nod` works from the CLI without
+# relying on xcodebuild's auto-create-scheme-from-target behavior (which
+# turned out to be unreliable across xcodegen versions). Regenerate:
+#   cd ios && xcodegen generate
+schemes:
+  Nod:
+    build:
+      targets:
+        Nod: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

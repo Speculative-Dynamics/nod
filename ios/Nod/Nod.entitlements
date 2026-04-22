@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.usenod.nod</string>
+	</array>
+	<!--
+	    Memory entitlements. iOS's default app budget on iPhone 15 Pro
+	    (8 GB RAM) is ~3 GB. With these two, we get ~6 GB — enough to
+	    fit Qwen 3 4B weights (~2.3 GB) plus KV cache plus MLX's Metal
+	    buffer cache without crossing the jetsam line.
+
+	    Both are self-serve: Apple does not gate them separately. They
+	    still live under normal App Review, which won't object for an
+	    on-device LLM use case. Confirmed shipping in Private LLM,
+	    MLCChat, Fullmoon, and the mlx-swift-examples sample apps.
+	-->
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+	<true/>
+</dict>
+</plist>

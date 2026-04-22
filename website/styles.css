@@ -152,6 +152,15 @@ button {
     color: inherit;
 }
 
+:where(a, button):focus-visible {
+    outline: 3px solid var(--nod-orange);
+    outline-offset: 4px;
+}
+
+.paper-sheet :where(a, button):focus-visible {
+    outline-color: var(--nod-orange-deep);
+}
+
 ::selection {
     background: var(--nod-orange);
     color: var(--bg);
@@ -969,6 +978,12 @@ button {
         background-image: url("/assets/hero/desktop.png");
         background-size: cover;
         background-position: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-aspect-ratio: 1/1) {
+    .hero {
+        background-image: url("/assets/hero/mobile.png");
     }
 }
 

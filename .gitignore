@@ -1,0 +1,83 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Xcode archives and exports
+*.xcarchive
+*.ipa
+
+# iOS CocoaPods (if ever used)
+Pods/
+Podfile.lock
+
+# Fastlane (if adopted)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Secrets
+*.xcconfig.local
+.env
+.env.*
+.envrc
+!.env.example
+
+# Credential / signing file types — defense-in-depth. No current file
+# matches these patterns; they're listed so a future `git add .` can't
+# accidentally commit an Apple App Store Connect key (.p8), a
+# provisioning profile (.mobileprovision / .provisionprofile), a PKCS-12
+# bundle (.p12), a plain private key (.key / .pem), a certificate
+# (.crt / .cer), or a Java keystore (.jks / .keystore) that someone
+# happens to drop into the working tree while integrating CI.
+*.pem
+*.p12
+*.p8
+*.key
+*.crt
+*.cer
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+
+# Local tooling / machine-specific state (belt-and-suspenders: these
+# aren't tracked today, but listing them prevents a future `git add .`
+# from accidentally committing Claude Code settings, Cloudflare Wrangler
+# state, or machine-specific TestFlight export options.
+.claude/
+.wrangler/
+ios/TestFlightExportOptions-local.plist
+ios/background-assets/
+
+# Node (for future website)
+node_modules/
+.next/
+out/
+dist/
+.cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model assets (too big for git; downloaded via Background Assets at runtime)
+*.gguf
+*.mlx
+*.safetensors
+ios/Nod/Resources/Models/
