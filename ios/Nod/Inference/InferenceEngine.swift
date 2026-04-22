@@ -86,6 +86,62 @@ protocol InferenceEngine: Sendable {
         history: [Message],
         options: GenerationOptions
     ) async throws -> String
+
+    /// Streaming variant of `respond(to:...)`. Yields the FULL accumulated
+    /// reply each time (snapshot semantics, not deltas) — the final yield
+    /// equals the complete reply. Callers just assign each snapshot to
+    /// the bubble; no delta-math required.
+    ///
+    /// Why snapshots, not deltas: AFM's streaming API yields cumulative
+    /// snapshots natively, and diffing them by suffix-length is brittle
+    /// (the producer may revise earlier text under some conditions). For
+    /// MLX, the implementation accumulates and yields the running string
+    /// per token, which is equivalent work.
+    ///
+    /// CANCELLATION CONTRACT: implementations MUST wire
+    /// `AsyncThrowingStream.Continuation.onTermination` to cancel the
+    /// underlying generation task. Cancellation of the consumer alone
+    /// does NOT free the GPU — the producer must be cancelled explicitly.
+    /// Without this, stop buttons become theatrical (UI stops reading
+    /// while compute keeps running).
+    ///
+    /// Conforming engines without native streaming may yield the final
+    /// string once and finish — the caller behavior is identical.
+    func streamResponse(
+        to userMessage: String,
+        context: String,
+        history: [Message],
+        options: GenerationOptions
+    ) -> AsyncThrowingStream<String, Error>
+}
+
+extension InferenceEngine {
+    /// Default atomic `respond` for engines that implement `streamResponse`.
+    /// Collects to the LAST yielded snapshot. Rethrows stream errors and
+    /// honors `Task.isCancelled` — summarize/extract paths must fail
+    /// loudly on model errors, not silently return partial strings.
+    ///
+    /// Engines that have a cheaper native atomic path (AFM's single-shot
+    /// `respond(to:)`) can still override this method to skip the stream
+    /// setup overhead.
+    func respond(
+        to userMessage: String,
+        context: String,
+        history: [Message],
+        options: GenerationOptions
+    ) async throws -> String {
+        var last = ""
+        for try await snapshot in streamResponse(
+            to: userMessage,
+            context: context,
+            history: history,
+            options: options
+        ) {
+            try Task.checkCancellation()
+            last = snapshot
+        }
+        return last
+    }
 }
 
 /// Errors any InferenceEngine may throw. Clients should handle these with

@@ -45,6 +45,12 @@ struct NodApp: App {
     // can feed it, and so the sidebar toggle flips state for everyone.
     @StateObject private var appLock = AppLockManager()
 
+    // Observed at the app root so a theme flip from the sidebar picker
+    // repaints the entire tree live. The shared store is main-actor
+    // isolated; SwiftUI's @ObservedObject reconnects to its
+    // objectWillChange stream.
+    @ObservedObject private var personalization = PersonalizationStore.shared
+
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -76,11 +82,13 @@ struct NodApp: App {
                     .zIndex(2)
                 }
             }
-            // Dark mode is the brand default. Users can override in Settings
-            // if they want light mode; the app still works because all colors
-            // are semantic (systemBackground, .primary, etc.) except the
-            // accent which is defined in Assets.xcassets with both variants.
-            .preferredColorScheme(.dark)
+            // Theme follows the user's preference (System / Light / Dark).
+            // `.system` returns nil which lets iOS pick — this works
+            // correctly for the main app (WindowGroup re-inherits the
+            // system scheme). The sheet-level stickiness of nil is
+            // handled inside SidebarView via an explicit color-scheme
+            // prop passed from ChatView's `@Environment(\.colorScheme)`.
+            .preferredColorScheme(personalization.current.appearance.preferredColorScheme)
             // The accent color ("NodAccent") is defined in Assets.xcassets
             // with dark variant #E07C40 and light variant #DD6D2C.
             .tint(Color("NodAccent"))
@@ -116,3 +124,4 @@ struct NodApp: App {
         }
     }
 }
+

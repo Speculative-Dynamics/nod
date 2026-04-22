@@ -39,7 +39,10 @@ struct MemoryView: View {
     var body: some View {
         contents
             .navigationTitle("Memory")
-            .navigationBarTitleDisplayMode(.large)
+            // Inline title matches the sidebar's "Nod" title above it.
+            // A large title here would make Memory feel like a
+            // different app the moment you push in from the sidebar.
+            .navigationBarTitleDisplayMode(.inline)
             // Confirmation alert for Forget. `pendingDelete` is the
             // presentation key; presenting the alert via .alert(item:)
             // guarantees cancel + confirm both clear it.

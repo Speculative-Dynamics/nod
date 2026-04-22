@@ -116,6 +116,58 @@ actor FoundationModelsClient: ListeningEngine {
         return response.content
     }
 
+    /// Streaming variant. AFM ships a `streamResponse(to:)` on
+    /// `LanguageModelSession` that yields cumulative snapshots natively,
+    /// but v1 uses the atomic `respond()` wrapped in a single yield.
+    /// Two reasons:
+    ///
+    ///  1. API shape uncertainty at the time this was written — snapshot
+    ///     element type differs across iOS 26 builds.
+    ///  2. AFM replies arrive in <1s on AI-capable devices; the
+    ///     "streaming" payoff is mostly aesthetic vs. MLX's per-token
+    ///     feel.
+    ///
+    /// Real stop ALSO degrades on AFM here — cancellation propagates to
+    /// the consumer task, but the underlying AFM generation runs to
+    /// completion. Accepted for v1 per Plan Risks §1. Follow-up PR can
+    /// swap in native streaming once the API signatures stabilize.
+    ///
+    /// MLXEngineClient.streamResponse wires real per-chunk + producer
+    /// cancellation, so on-device non-AFM engines get both.
+    nonisolated func streamResponse(
+        to userMessage: String,
+        context: String,
+        history: [Message],
+        options: GenerationOptions
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let producer = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                do {
+                    let full = try await self.respond(
+                        to: userMessage,
+                        context: context,
+                        history: history,
+                        options: options
+                    )
+                    try Task.checkCancellation()
+                    continuation.yield(full)
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                producer.cancel()
+            }
+        }
+    }
+
     /// Drop the in-memory listening session. Called on engine teardown
     /// (idle unload, memory warning, engine switch). Parallels
     /// `MLXEngineClient.releaseContainer()` so `EngineHolder` can treat

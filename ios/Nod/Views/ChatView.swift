@@ -38,9 +38,33 @@ struct ChatView: View {
     // that point instead. SidebarView still observes — its pickers bind to
     // the store via Binding(get:set:).
     @Environment(\.scenePhase) private var scenePhase
+    /// Passed into SidebarView (sheet) as the explicit color scheme.
+    /// ChatView's `@Environment(\.colorScheme)` reflects the app's
+    /// current scheme (set by NodApp's `.preferredColorScheme`) and
+    /// updates reactively when NodApp resolves `.system` to nil and
+    /// the app re-inherits from iOS. A sheet's own @Environment
+    /// doesn't track that nil transition reliably, so we pass the
+    /// value down as an explicit prop.
+    @Environment(\.colorScheme) private var hostColorScheme
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
+    /// Handle to the in-flight inference task. Held so the stop button
+    /// can cancel mid-stream. Cancellation propagates through the stream
+    /// continuation's `onTermination` → the engine's producer task,
+    /// which actually stops the GPU (for MLX) instead of just stopping
+    /// the UI from reading.
+    @State private var inferenceTask: Task<Void, Never>? = nil
+    /// Buffer that the streaming loop writes to on every chunk (cheap),
+    /// and that a separate 30 Hz flush tick reads to call
+    /// `store.updateLastAssistantMessageInMemory(with:)`. Separating the
+    /// two means MLX can emit 80 tok/s without triggering 80 main-actor
+    /// mutations + 80 WAL writes per second — one smooth UI update
+    /// cadence regardless of token rate.
+    @State private var pendingSnapshot: String = ""
+    /// The flush tick. Lives for the duration of a stream. Cancelled
+    /// when stream completes or user taps stop.
+    @State private var flushTask: Task<Void, Never>? = nil
     @State private var showingSidebar: Bool = false
     /// Controls the "Pause download?" alert triggered by Cancel on the
     /// downloading card. Splitting it into its own state avoids races
@@ -50,7 +74,13 @@ struct ChatView: View {
     // ScrollView via .scrollPosition. When user scrolls manually, this
     // updates; we use it to decide whether auto-scroll should follow new
     // messages or leave the user reading history undisturbed.
-    @State private var scrollAnchorId: UUID?
+    /// Drives scroll position via Apple's iOS 18+ ScrollPosition API.
+    /// Initialized with `.bottom` edge so first layout pins to the
+    /// latest message. Paired with `.scrollTargetLayout()` on the
+    /// LazyVStack (required for ScrollPosition to know content
+    /// bounds) and programmatic scrolls via
+    /// `scrollPosition.scrollTo(edge: .bottom)`.
+    @State private var scrollPosition = ScrollPosition(edge: .bottom)
     /// Shows a floating "↓ New message" pill at the bottom-right when a
     /// new assistant reply arrives while the user is scrolled up reading
     /// history. Standard Discord/Slack/Telegram pattern — without it,
@@ -338,7 +368,8 @@ struct ChatView: View {
                 SidebarView(
                     store: store,
                     engineHolder: engineHolder,
-                    entityStore: entityStore
+                    entityStore: entityStore,
+                    hostColorScheme: hostColorScheme
                 ) {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
@@ -433,9 +464,12 @@ struct ChatView: View {
                     // messageList, but SwiftUI doesn't re-fire onAppear
                     // on a background→foreground transition. Matching
                     // iMessage / WhatsApp behaviour.
-                    if let lastId = store.messages.last?.id {
-                        scrollAnchorId = lastId
-                    }
+                    // Scroll to bottom on resume via the scrollPosition
+                    // binding's API. `scrollTo(edge:)` is preferred
+                    // over `scrollTo(id:)` because it doesn't require
+                    // the target row to be materialized in the
+                    // LazyVStack.
+                    scrollPosition.scrollTo(edge: .bottom)
                 case .inactive:
                     break
                 @unknown default:
@@ -554,15 +588,49 @@ struct ChatView: View {
                         switch row {
                         case .breakpoint(_, let label, let isDate):
                             BreakpointView(label: label, isDate: isDate)
+                                // Horizontal padding is applied PER ROW
+                                // instead of on the LazyVStack because
+                                // LazyVStack + `.scrollTargetLayout()`
+                                // + external `.padding` breaks the
+                                // padding on first layout (content
+                                // lands flush against the leading
+                                // edge until any user interaction
+                                // triggers a relayout). Per-row padding
+                                // sidesteps that interaction entirely.
+                                .padding(.horizontal, 12)
                         case .message(let msg):
-                            MessageBubble(message: msg)
-                                .id(msg.id)
-                                .padding(.top, Self.topPadding(for: msg,
-                                                               prevRow: prevRow))
+                            let isLastAssistant = msg.role == .assistant
+                                && store.messages.last?.id == msg.id
+                            // Regenerate is deliberately context-menu-only.
+                            // An inline retry button next to every reply
+                            // breaks the "being heard" feel of the chat
+                            // surface — it turns Nod's voice into an LLM
+                            // output to be iterated on. Long-press the
+                            // bubble to find it; power users will, casual
+                            // users won't reach for it, and that's the
+                            // right balance for this product.
+                            MessageBubble(
+                                message: msg,
+                                isLast: isLastAssistant,
+                                onRegenerate: isLastAssistant && canRegenerate(msg)
+                                    ? { regenerate() }
+                                    : nil
+                            )
+                            .id(msg.id)
+                            .padding(.top, Self.topPadding(for: msg,
+                                                           prevRow: prevRow))
+                            .padding(.horizontal, 12)  // per-row, see note above
                         }
                     }
                 }
-                .padding(.horizontal, 12)
+                // `.scrollTargetLayout()` DIRECTLY on the LazyVStack
+                // with NO `.padding` modifier between them. Required
+                // for `.scrollPosition($scrollPosition)` with an
+                // edge-based initial value to resolve "bottom" against
+                // the LazyVStack's bounds on first layout. Horizontal
+                // padding is pushed to individual rows above so this
+                // modifier chain stays clean.
+                .scrollTargetLayout()
                 .padding(.top, 12)
                 // NOTE: no .padding(.bottom) here. The tail gap between
                 // the last message and the input bar is applied to the
@@ -583,14 +651,14 @@ struct ChatView: View {
             // Interactive keyboard dismiss: dragging down on messages pulls
             // the keyboard down with the finger, iOS-native feel.
             .scrollDismissesKeyboard(.interactively)
-            // Keep the scrollPosition binding — we still use it to
-            // programmatically scroll via `proxy.scrollTo` plus setting
-            // the binding. BUT we no longer use its value to decide
-            // "is the user at the bottom." That decision is driven by
-            // `isAtBottom` (measured via geometry below), which is
-            // immune to the binding's quirks on short content and
-            // during animations.
-            .scrollPosition(id: $scrollAnchorId, anchor: .bottom)
+            // Binds scroll position to our ScrollPosition state.
+            // Initialized with `.bottom` edge (see @State declaration)
+            // so first layout pins to the latest message. This
+            // combination — `.scrollTargetLayout()` on LazyVStack +
+            // `.scrollPosition($scrollPosition)` + `ScrollPosition(edge: .bottom)`
+            // initial value — is what actually makes the scroll land
+            // at the bottom on cold launch.
+            .scrollPosition($scrollPosition)
             // Real-geometry "at bottom" detector. iOS 18+ API; app
             // targets iOS 26 so always available. Fires on every scroll
             // delta and on content-size changes. We collapse the
@@ -635,7 +703,6 @@ struct ChatView: View {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(newLastId, anchor: .bottom)
                     }
-                    scrollAnchorId = newLastId
                 } else if newCount > oldCount,
                           msgs.last?.role == .assistant,
                           !(msgs.last?.text.isEmpty ?? true) {
@@ -668,7 +735,6 @@ struct ChatView: View {
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(newLastId, anchor: .bottom)
                 }
-                scrollAnchorId = newLastId
             }
             // Keyboard-open → scroll to bottom. Standard chat-app behavior:
             // when the user taps the input, they want to compose the NEXT
@@ -686,7 +752,6 @@ struct ChatView: View {
                     withAnimation(.easeOut(duration: 0.3)) {
                         proxy.scrollTo(lastId, anchor: .bottom)
                     }
-                    scrollAnchorId = lastId
                 }
             }
             // On first render (cold launch with existing history, or
@@ -701,12 +766,14 @@ struct ChatView: View {
                 // because the scrollTo(lastId) below depends on the row
                 // with that id actually existing in the list.
                 cachedRows = Self.chatRows(from: store.messages)
+                // Note: initial scroll-to-bottom on cold launch is now
+                // handled by `ScrollPosition(edge: .bottom)` at the
+                // `@State` declaration. The proxy.scrollTo fallback
+                // below covers any edge case where the content size
+                // changes after the initial layout (e.g., lazy rows
+                // finishing materialization).
                 if let lastId = store.messages.last?.id {
-                    // No animation on first appear — instant jump is
-                    // what the user expects when opening a chat they've
-                    // had for a while.
                     proxy.scrollTo(lastId, anchor: .bottom)
-                    scrollAnchorId = lastId
                 }
             }
             // Jump-to-bottom pill. Floats at the bottom-right corner of
@@ -722,7 +789,6 @@ struct ChatView: View {
                             withAnimation(.easeOut(duration: 0.25)) {
                                 proxy.scrollTo(lastId, anchor: .bottom)
                             }
-                            scrollAnchorId = lastId
                             hasNewMessageBelow = false
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
@@ -773,16 +839,62 @@ struct ChatView: View {
                 // lie. Hardware keyboards get Cmd+Return via the shortcut
                 // button in .background above.
 
+            // Dual-purpose send/stop button. When Nod is streaming, the
+            // icon morphs to `stop.fill`, the fill shifts from NodAccent
+            // orange to a neutral gray, and the accessibility label
+            // swaps from "Send message" to "Stop response" — three
+            // coordinated cues so the new role reads instantly.
+            //
+            // Tap behavior forks on `isInferring`:
+            //   - idle → sendMessage()
+            //   - streaming → inferenceTask?.cancel() (real GPU stop)
             Button {
-                sendMessage()
+                if isInferring {
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    inferenceTask?.cancel()
+                } else {
+                    sendMessage()
+                }
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(sendEnabled ? Color("NodAccent") : .secondary)
+                ZStack {
+                    Circle()
+                        .fill(sendButtonFill)
+                        .frame(width: 32, height: 32)
+                    Image(systemName: isInferring ? "stop.fill" : "arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(sendButtonIconColor)
+                        .contentTransition(.symbolEffect(.replace.downUp))
+                }
+                .animation(.easeInOut(duration: 0.15), value: isInferring)
             }
-            .disabled(!sendEnabled)
-            .accessibilityLabel("Send message")
+            .disabled(isInferring ? inferenceTask == nil : !sendEnabled)
+            .accessibilityLabel(isInferring ? "Stop response" : "Send message")
+            .accessibilityHint(isInferring
+                ? "Stops the current reply; partial text is preserved"
+                : "")
         }
+    }
+
+    /// Fill color for the send/stop button. Orange NodAccent in idle
+    /// state (the "you'd send here" affordance), neutral gray when
+    /// streaming (the "this is a different action" visual tell). Also
+    /// dims to secondary fill when the button is genuinely disabled
+    /// (pre-hydrate, empty input, etc.).
+    private var sendButtonFill: Color {
+        if isInferring {
+            return Color(.secondarySystemBackground)
+        }
+        return sendEnabled ? Color("NodAccent") : Color(.tertiarySystemFill)
+    }
+
+    private var sendButtonIconColor: Color {
+        if isInferring {
+            // Black on the gray stop circle for high contrast in both
+            // light and dark modes. `.primary` would invert with theme
+            // and lose contrast against the neutral gray fill.
+            return .primary
+        }
+        return sendEnabled ? .black : .secondary
     }
 
     private var sendEnabled: Bool {
@@ -944,106 +1056,224 @@ struct ChatView: View {
             return
         }
         isInferring = true
+        pendingSnapshot = ""
         // Insert an empty assistant message. Filtered out of context we
-        // build for the model; filled with the reply when it arrives.
-        store.append(Message(role: .assistant, text: ""))
+        // build for the model; filled with the reply as tokens stream in.
+        // Capture the ID so the cancel / completion paths can target it
+        // by identity rather than position (robust to interleaved rows).
+        let placeholder = Message(role: .assistant, text: "")
+        let placeholderID = placeholder.id
+        store.append(placeholder)
 
         // Split inputs: systemBlock (personalization + summary + entity
         // context for entities this message references) goes into the
         // engine's system message. `history` is the un-summarized recent
         // turns — the engine passes these as real chat turns so the
         // model's multi-turn attention actually engages.
-        //
-        // Passing the current user message enables entity retrieval: if
-        // the user says "did M ever reply?" and M is stored, the system
-        // block will include "M (manager): ..." so the model has context
-        // without the user re-explaining. If no known entities are
-        // referenced, nothing gets injected (the "nod, not interruption"
-        // guardrail).
         let inputs = store.buildInferenceInputs(currentUserMessage: text)
 
         // Token budget sized to this user's response-style preference.
-        // Brief replies don't need 400 tokens of KV headroom; every
-        // token saved is ~100 KB off the per-generation peak.
-        //
-        // Read on-demand (not via @ObservedObject) so ChatView's body
-        // doesn't invalidate on every keystroke in the sidebar's free-form
-        // text field. See the `personalization` comment at the top of the
-        // struct for the rationale.
         let options = GenerationOptions.forResponseStyle(
             PersonalizationStore.shared.current.responseStyle
         )
 
         // Reset the idle-unload timer. While the user is actively chatting
         // we hold the weights; the timer only fires after 10 quiet
-        // minutes (or a background transition — see .onChange below).
+        // minutes (or a background transition).
         engineHolder.noteActivity()
 
-        Task {
-            let reply: String
+        // 30 Hz flush tick. Runs on the main actor concurrently with the
+        // stream consumer. On each tick, if pendingSnapshot has content
+        // and differs from the bubble's current text, push it into the
+        // store in-memory (no WAL write per tick). The final commit
+        // (which DOES enqueue a WAL write) happens once on stream
+        // completion.
+        flushTask?.cancel()
+        flushTask = Task { @MainActor in
+            var lastFlushed = ""
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 33_000_000) // ~30 Hz
+                if !pendingSnapshot.isEmpty && pendingSnapshot != lastFlushed {
+                    store.updateLastAssistantMessageInMemory(with: pendingSnapshot)
+                    lastFlushed = pendingSnapshot
+                }
+            }
+        }
+
+        // The streaming task. Holds the handle so the stop button can
+        // cancel it. Cancellation cascades: Task.cancel → stream
+        // continuation torn down → onTermination → producer task
+        // cancelled → GPU stops generating.
+        inferenceTask = Task { @MainActor in
             var wasError = false
+            var errorReply: String = ""
+            var lastSnapshot = ""
             do {
-                let rawReply = try await engine.respond(
+                for try await snapshot in engine.streamResponse(
                     to: text,
                     context: inputs.systemBlock,
                     history: inputs.history,
                     options: options
-                )
-                // Guard against empty replies (e.g. Qwen burns all its tokens
-                // inside a <think> block and never emits a final response).
-                // Without this, the placeholder message stays empty and the
-                // UI shows typing-dots indefinitely with no way to recover.
-                if rawReply.isEmpty {
-                    reply = "Something went wrong. Try again."
-                    wasError = true
+                ) {
+                    try Task.checkCancellation()
+                    lastSnapshot = snapshot
+                    pendingSnapshot = snapshot
+                }
+            } catch is CancellationError {
+                // User tapped stop. Tear down the flush tick so the
+                // final-commit path below runs before the stream is
+                // reopened by a new send.
+                flushTask?.cancel()
+                flushTask = nil
+                if lastSnapshot.isEmpty {
+                    // No tokens landed — remove the empty placeholder
+                    // entirely rather than leave an orphan bubble.
+                    store.removeLastAssistantMessage()
                 } else {
-                    reply = rawReply
+                    // Persist the partial reply + mark cancelled so the
+                    // "stopped" tag renders now AND after relaunch.
+                    store.replaceLastAssistantMessage(with: lastSnapshot)
+                    store.markAssistantCancelled(id: placeholderID)
                 }
+                isInferring = false
+                inferenceTask = nil
+                pendingSnapshot = ""
+                return
             } catch InferenceError.modelNotReady {
-                // Engine-specific. For AFM the message branches on the
-                // exact runtime availability reason — users whose
-                // hardware can't run Apple Intelligence should NOT be
-                // pointed at a Settings pane that doesn't exist on
-                // their device. Users who just have it toggled off
-                // get the Settings path. MLX engines are download-
-                // gated (all three: Qwen 3, Qwen 3.5, Gemma 4).
-                switch EnginePreferenceStore.current {
-                case .apple:
-                    switch DeviceCapability.afmStatus {
-                    case .notSupported:
-                        reply = "Your iPhone doesn't support Apple Intelligence. Tap the menu to pick an on-device model instead."
-                    case .disabledInSettings:
-                        reply = "Apple Intelligence is turned off. Flip it on in Settings → Apple Intelligence, or switch to an on-device model from the menu."
-                    case .available:
-                        // We got modelNotReady but availability now
-                        // says .available. Race with the user flipping
-                        // the Settings toggle; tell them to try again.
-                        reply = "Apple Intelligence is warming up. Try sending again in a moment."
-                    }
-                case .qwen3, .qwen35, .gemma4:
-                    reply = "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
-                }
+                errorReply = Self.modelNotReadyMessage()
                 wasError = true
             } catch InferenceError.guardrailViolation {
-                reply = "I'd rather not respond to that."
+                errorReply = "I'd rather not respond to that."
                 wasError = true
             } catch {
-                reply = "Something went wrong. Try again."
+                errorReply = "Something went wrong. Try again."
                 wasError = true
             }
-            await MainActor.run {
-                store.replaceLastAssistantMessage(with: reply)
-                isInferring = false
-                // Haptic on arrival. Soft tap ("something landed for you")
-                // for a real reply; warning pattern for an error so the
-                // user feels the difference without reading.
-                if wasError {
-                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                } else {
-                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+
+            // Normal completion or error path. Stop the flush tick
+            // FIRST so there's no race between "flush tick is writing
+            // pendingSnapshot" and "commit path writes final text".
+            flushTask?.cancel()
+            flushTask = nil
+
+            let finalText: String
+            if wasError {
+                finalText = errorReply
+            } else if lastSnapshot.isEmpty {
+                // Guard against empty replies (e.g. Qwen burns its
+                // tokens inside a <think> block). Without this the
+                // placeholder stays empty and typing-dots show
+                // indefinitely with no way to recover.
+                finalText = "Something went wrong. Try again."
+                wasError = true
+            } else {
+                finalText = lastSnapshot
+            }
+
+            // Commit the final text (single WAL write per reply).
+            store.replaceLastAssistantMessage(with: finalText)
+            isInferring = false
+            inferenceTask = nil
+            pendingSnapshot = ""
+
+            // Haptic on arrival. Soft tap for a real reply; warning
+            // pattern for an error so the user feels the difference
+            // without reading.
+            if wasError {
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            } else {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            }
+        }
+    }
+
+    /// Build the user-facing "model not ready" message, branching on the
+    /// current engine preference + AFM-specific availability reason.
+    private static func modelNotReadyMessage() -> String {
+        switch EnginePreferenceStore.current {
+        case .apple:
+            switch DeviceCapability.afmStatus {
+            case .notSupported:
+                return "Your iPhone doesn't support Apple Intelligence. Tap the menu to pick an on-device model instead."
+            case .disabledInSettings:
+                return "Apple Intelligence is turned off. Flip it on in Settings → Apple Intelligence, or switch to an on-device model from the menu."
+            case .available:
+                return "Apple Intelligence is warming up. Try sending again in a moment."
+            }
+        case .qwen3, .qwen35, .gemma4:
+            return "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
+        }
+    }
+
+    /// Gate for regenerate UI on a given assistant message. Current rule:
+    /// only the most-recent assistant reply can be regenerated AND we
+    /// must have a preceding user message to re-send. Error bubbles AND
+    /// cancelled replies both qualify (retry-after-error + retry-after-
+    /// stop are the canonical uses). Matches the plan's visibility rule.
+    private func canRegenerate(_ msg: Message) -> Bool {
+        guard msg.role == .assistant else { return false }
+        guard store.messages.last?.id == msg.id else { return false }
+        // There must be at least one prior user message we can re-send.
+        return store.messages.reversed().contains(where: { $0.role == .user })
+    }
+
+    /// Regenerate the last assistant reply. Delete-after-success
+    /// sequencing: the OLD reply stays visible while the new one
+    /// streams. On first token of the new reply, the old one is
+    /// removed. On error before first token, the old one stays intact
+    /// and the error bubble slots in after it — user never loses
+    /// context.
+    private func regenerate() {
+        guard !isInferring else { return }
+        guard let last = store.messages.last, last.role == .assistant else { return }
+        let oldAssistantID = last.id
+
+        // Find the most recent user message via backward search.
+        // `messages[count-2]` would be fragile if summary/placeholder
+        // rows ever get interleaved (Codex NEW-6 from plan-eng-review).
+        guard let lastUserText = store.messages.reversed().first(where: { $0.role == .user })?.text else {
+            return
+        }
+
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        // Pre-regenerate cleanup: schedule the old reply for deletion
+        // AFTER the new reply lands a token. Implement via a one-shot
+        // observer on the store — when the NEW placeholder (appended
+        // by respond()) gets its first non-empty snapshot, remove the
+        // old one.
+        //
+        // Simpler: delete the old ID right before we append the new
+        // placeholder IF we can guarantee the new stream will start.
+        // That fails the delete-after-success contract on immediate
+        // error. So we use a Task observer:
+        Task { @MainActor in
+            // Wait for the new placeholder to appear AND gain content,
+            // OR for the inferenceTask to finish (error path).
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 50_000_000) // 20 Hz poll
+                // Error path: respond() finished without the new reply
+                // landing any content. Leave the OLD reply in place.
+                // `respond()` has already appended an error bubble at
+                // the end of `messages`.
+                if inferenceTask == nil {
+                    // If the stream produced no text (empty snapshot)
+                    // OR we hit an error, don't delete the old reply.
+                    // User can still see the previous content.
+                    return
+                }
+                // Happy path: the NEW placeholder is the last message
+                // and has gained text. Delete the old one and exit.
+                if let newLast = store.messages.last,
+                   newLast.id != oldAssistantID,
+                   !newLast.text.isEmpty {
+                    store.removeAssistantMessage(id: oldAssistantID)
+                    return
                 }
             }
         }
+
+        respond(to: lastUserText)
     }
 
     // MARK: - Message spacing
@@ -1191,6 +1421,16 @@ private struct BreakpointView: View {
 
 struct MessageBubble: View {
     let message: Message
+    /// True when this bubble is the last message in the conversation AND
+    /// it's an assistant reply. Gates the inline retry button and the
+    /// "Regenerate" context menu entry. Defaults false so older call
+    /// sites compile unchanged.
+    var isLast: Bool = false
+    /// Called when the user taps Regenerate (inline button or context
+    /// menu). Nil means the parent isn't participating — UI affordances
+    /// that depend on it stay hidden. Provided only for the last
+    /// assistant bubble.
+    var onRegenerate: (() -> Void)? = nil
 
     @State private var nodTriggerForThisBubble: Int = 0
 
@@ -1200,7 +1440,32 @@ struct MessageBubble: View {
                 Spacer(minLength: 40)
                 bubble(color: Color(.tertiarySystemFill))
             } else if message.role == .assistant {
+                // Bubble goes directly into the HStack — NOT wrapped in
+                // a VStack. An earlier version wrapped it in a
+                // `VStack(alignment: .leading)` to host the "stopped"
+                // tag underneath, but SwiftUI's layout algorithm gives
+                // a VStack-in-HStack a different width-request profile
+                // than a raw Text-in-HStack, and on longer replies the
+                // bubble could bleed past the leading padding of the
+                // LazyVStack (flush with the screen edge, left rounded
+                // corner cut off). The "stopped" tag instead renders as
+                // an overlay below the bubble — same visual, zero
+                // layout surprise.
+                //
+                // `.padding(.bottom, 20)` reserves vertical space under
+                // the bubble when cancelled, so the overlay fits
+                // without overlapping the next row.
                 bubble(color: Color(.secondarySystemBackground))
+                    .padding(.bottom, message.wasCancelled && !message.text.isEmpty ? 20 : 0)
+                    .overlay(alignment: .bottomLeading) {
+                        if message.wasCancelled && !message.text.isEmpty {
+                            Text("stopped")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 6)
+                                .accessibilityLabel("Reply was stopped")
+                        }
+                    }
                 Spacer(minLength: 40)
             } else {
                 // .nod — a centered inline blink. Fires once on appear so
@@ -1261,6 +1526,16 @@ struct MessageBubble: View {
                     }
                     ShareLink(item: message.text) {
                         Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    // Regenerate — visible only on the LAST assistant
+                    // reply (which includes cancelled and error bubbles;
+                    // retry-after-error is the canonical use case).
+                    if isLast, message.role == .assistant, let onRegenerate {
+                        Button {
+                            onRegenerate()
+                        } label: {
+                            Label("Regenerate", systemImage: "arrow.clockwise")
+                        }
                     }
                 }
         }
