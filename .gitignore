@@ -3,6 +3,10 @@
 
 # Xcode
 build/
+build-device/
+build-sim/
+ios/build-device/
+ios/build-sim/
 DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
