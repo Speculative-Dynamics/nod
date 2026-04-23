@@ -1,7 +1,10 @@
 // MiniNodFace.swift
-// A small rounded-square Nod face with auto-blinking eyes. Used as the
-// navigation bar's leading brand element (replaces the "Nod" title). In
-// the future, tapping it opens a sidebar — stub action for now.
+// Blinking variant of the canonical NodMascot, used as the navigation
+// bar's leading brand element (replaces the "Nod" title). In the
+// future, tapping it opens a sidebar — stub action for now.
+//
+// The face geometry (body, eyes, glimmer, proportions) lives in
+// NodMascot. This view just drives the blink state on top.
 
 import SwiftUI
 
@@ -13,24 +16,10 @@ struct MiniNodFace: View {
     @State private var blinkTask: Task<Void, Never>?
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
-                .fill(Color("NodAccent"))
-
-            HStack(spacing: size * 0.19) {
-                Ellipse()
-                    .fill(Color(red: 0.08, green: 0.08, blue: 0.08))
-                    .frame(width: size * 0.13, height: size * 0.22)
-                Ellipse()
-                    .fill(Color(red: 0.08, green: 0.08, blue: 0.08))
-                    .frame(width: size * 0.13, height: size * 0.22)
-            }
-            .scaleEffect(y: eyesClosed ? 0.1 : 1.0, anchor: .center)
+        NodMascot(size: size, eyesClosed: eyesClosed)
             .animation(.easeInOut(duration: 0.18), value: eyesClosed)
-        }
-        .frame(width: size, height: size)
-        .onAppear { startBlinking() }
-        .onDisappear { blinkTask?.cancel() }
+            .onAppear { startBlinking() }
+            .onDisappear { blinkTask?.cancel() }
     }
 
     private func startBlinking() {

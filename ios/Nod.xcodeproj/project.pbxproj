@@ -39,6 +39,7 @@
 		B289E4BB871E286AB3B42237 /* MLXModelSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA52E2C7A708C854BB9AF5 /* MLXModelSpec.swift */; };
 		B5BC7D4A4DC14AAD114A01DE /* MLXR2BackgroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C6540C9C1E33F6B053CCD4 /* MLXR2BackgroundSession.swift */; };
 		C24E2CCA2BCF01FB3AD383D9 /* AppLockOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9F9FCA04E591DBC2EFA635 /* AppLockOverlay.swift */; };
+		C5645CF43C594398A3AC3EBD /* NodMascot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC11E94F0CAF443B85BADD1D /* NodMascot.swift */; };
 		C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */; };
 		CD1DCEE44A282AA7684E5821 /* SpeedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C53F1411A95FAB7142921F /* SpeedWindow.swift */; };
 		CDAAAC3781D310A60DC2D9A2 /* AppLockManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */; };
@@ -77,6 +78,7 @@
 		964ADD3303489CFCB3C4EF5D /* DownloadEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadEvent.swift; sourceTree = "<group>"; };
 		A7B129F4799D29E72530A088 /* InferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceEngine.swift; sourceTree = "<group>"; };
 		B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniNodFace.swift; sourceTree = "<group>"; };
+		BC11E94F0CAF443B85BADD1D /* NodMascot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodMascot.swift; sourceTree = "<group>"; };
 		C1EA52E2C7A708C854BB9AF5 /* MLXModelSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXModelSpec.swift; sourceTree = "<group>"; };
 		C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDatabase.swift; sourceTree = "<group>"; };
 		C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 				0437418B2F3A7A98F6F4B089 /* MemoryView.swift */,
 				B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */,
 				83E9E17AF4055789FC092B5E /* NodAnimation.swift */,
+				BC11E94F0CAF443B85BADD1D /* NodMascot.swift */,
 				0517337BBD8316AD61402BEF /* SidebarView.swift */,
 				C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */,
 			);
@@ -331,6 +334,7 @@
 				E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */,
 				C7C3B6E45145A51AE7E271BC /* MiniNodFace.swift in Sources */,
 				89331638D0D309292F560723 /* NodAnimation.swift in Sources */,
+				C5645CF43C594398A3AC3EBD /* NodMascot.swift in Sources */,
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,
 				0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */,
 				AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */,

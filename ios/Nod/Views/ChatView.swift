@@ -1064,12 +1064,13 @@ struct ChatView: View {
         let existing = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = existing.isEmpty ? trimmed : existing + " " + trimmed
         committedAt = Date()
-        // Raise the keyboard so they can edit or send. Delayed one
-        // tick so focus lands after the send/cancel tap finishes.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
-            inputFocused = true
-        }
+        // Deliberately do NOT raise the keyboard here. The voice
+        // experience is spoken, not typed — popping the keyboard right
+        // after commit yanks the user out of the voice flow and into
+        // typing mode. The send button sits in the input row and is
+        // tappable regardless of focus, so they can ship the message
+        // without touching the keyboard. If they want to edit, they
+        // tap the field themselves.
     }
 
     /// Tap dispatch for the two-state send/stop button.
@@ -2162,23 +2163,12 @@ private struct AFMUnavailableOnboarding: View {
 
     // MARK: Hero
 
-    /// 88pt mascot — the hero size. Larger than the 28pt nav-bar
-    /// mascot; codified as the "hero moment" token (will move into
-    /// DESIGN.md when that ships).
+    /// 88pt mascot — the hero size. Larger than the 32pt nav-bar
+    /// mascot; codified as the "hero moment" token. Uses the canonical
+    /// NodMascot so the onboarding first-impression matches the app
+    /// icon users just tapped.
     private var heroMascot: some View {
-        // Simplest rendering: the orange rounded-square + two eyes,
-        // identical geometry to MiniNodFace but scaled up. Not reusing
-        // MiniNodFace because that view has a blink timer, and a
-        // full-size hero asset doesn't need eye animation here.
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color("NodAccent"))
-            .frame(width: 88, height: 88)
-            .overlay(
-                HStack(spacing: 12) {
-                    Circle().fill(Color.black).frame(width: 12, height: 12)
-                    Circle().fill(Color.black).frame(width: 12, height: 12)
-                }
-            )
+        NodMascot(size: 88)
             .padding(.top, 64)
             .padding(.bottom, 28)
             .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)
