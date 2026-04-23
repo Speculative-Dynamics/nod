@@ -91,9 +91,19 @@ enum NodMascotTokens {
     static let blinkClosedScaleY: CGFloat = 0.1
 
     /// Standard blink easing duration. Same beat used in nav-bar
-    /// idle blinks, empty-state slow blinks, and the splash wake-up
-    /// blink, so the character has one cadence across the app.
+    /// idle blinks, empty-state slow blinks, and (approximately) the
+    /// splash wake-up blink, so the character has one cadence across
+    /// the app.
     static let blinkDuration: Double = 0.2
+
+    /// Mean seconds between idle blinks (how often the character
+    /// blinks when sitting still). 4.5s feels alive without being
+    /// fidgety — tested by eye, not science.
+    static let idleBlinkInterval: TimeInterval = 4.5
+
+    /// Random +/- jitter applied to each idle blink interval so two
+    /// blinkers on screen don't lock into sync.
+    static let blinkJitter: TimeInterval = 0.6
 }
 
 // MARK: - Body (orange rounded square)
@@ -189,16 +199,70 @@ struct NodMascot: View {
     }
 }
 
+// MARK: - Blinking variant
+
+/// A NodMascot that idles with a slow blink. Used anywhere the face
+/// lives on-screen for more than a moment: nav bar (MiniNodFace),
+/// onboarding hero, empty state. Every blink across the app shares
+/// this implementation so cadence and easing stay in lockstep.
+///
+/// When to use what:
+///   - NodMascotBlinker    → any idle face that lives on-screen
+///   - NodMascot           → static face (lock screen, icon-moment)
+///   - NodMascotBody + Eye → scripted one-off sequences (splash)
+struct NodMascotBlinker: View {
+    let size: CGFloat
+
+    /// Mean seconds between blinks. Defaults to the idle cadence
+    /// token. Actual interval is `interval ± blinkJitter` so multiple
+    /// blinkers on screen don't lock into perfect sync — that's the
+    /// uncanny-valley cue that breaks the illusion of a living
+    /// character.
+    var interval: TimeInterval = NodMascotTokens.idleBlinkInterval
+
+    @State private var eyesClosed = false
+    @State private var blinkTask: Task<Void, Never>?
+
+    var body: some View {
+        NodMascot(size: size, eyesClosed: eyesClosed)
+            .animation(
+                .easeInOut(duration: NodMascotTokens.blinkDuration),
+                value: eyesClosed
+            )
+            .onAppear { startBlinking() }
+            .onDisappear { blinkTask?.cancel() }
+    }
+
+    private func startBlinking() {
+        blinkTask?.cancel()
+        blinkTask = Task { @MainActor in
+            while !Task.isCancelled {
+                let jitter = Double.random(in: -NodMascotTokens.blinkJitter...NodMascotTokens.blinkJitter)
+                try? await Task.sleep(for: .seconds(interval + jitter))
+                if Task.isCancelled { break }
+
+                // Close. Hold exactly as long as the close animation
+                // runs, then open — no static hold, so the blink reads
+                // as a single fluid beat.
+                eyesClosed = true
+                try? await Task.sleep(for: .seconds(NodMascotTokens.blinkDuration))
+                if Task.isCancelled { break }
+                eyesClosed = false
+            }
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
     VStack(spacing: 24) {
-        NodMascot(size: 120) // App-icon scale
-        NodMascot(size: 96)  // Lock screen
-        NodMascot(size: 88)  // Onboarding hero
-        NodMascot(size: 80)  // Empty state
-        NodMascot(size: 32)  // Nav bar (glimmer fades)
-        NodMascot(size: 24)  // Below threshold
+        NodMascot(size: 120)        // App-icon scale (static)
+        NodMascot(size: 96)         // Lock screen (static, by design)
+        NodMascotBlinker(size: 88)  // Onboarding hero
+        NodMascotBlinker(size: 80)  // Empty state
+        NodMascotBlinker(size: 32)  // Nav bar
+        NodMascot(size: 24)         // Below glimmer threshold
     }
     .padding()
     .preferredColorScheme(.dark)
