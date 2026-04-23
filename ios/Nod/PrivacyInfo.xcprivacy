@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Privacy Manifest for Nod (Just Nod).
+
+    Required by the App Store since May 2024 for any app using
+    required-reason APIs. Declares:
+
+      1. No user tracking. At all.
+      2. No data collection. At all. Every byte Nod sees stays on the
+         user's device — see https://usenod.app/privacy for the product
+         positioning this backs.
+      3. Which required-reason APIs the app uses, and the approved
+         Apple reason code for each. These are the ONLY two such APIs
+         Nod touches, verified by grep before every release:
+           - UserDefaults     → CA92.1  (reading/writing own app prefs)
+           - File timestamps  → C617.1  (file metadata inside app container)
+
+    If you add code that uses another category listed at
+    https://developer.apple.com/documentation/bundleresources/privacy_manifest_files/describing_use_of_required_reason_api,
+    add the corresponding NSPrivacyAccessedAPIType + reason code here.
+    Apple's submission gate reads this file and rejects the build if a
+    used category is undeclared.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Tracking — Nod does not track users across apps or websites.
+        Per Apple's definition, this means we do not link user or
+        device identifiers to data collected from other developers.
+        We do neither side of that equation.
+    -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!--
+        Data collection — Nod collects zero data types. Everything the
+        user writes, says, or generates stays on-device. The app has
+        no network connection except the one-time on-device model
+        download from our R2 CDN, which transfers model weights TO the
+        device, not user data FROM it.
+    -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!--
+        Required-reason APIs — the complete list for Nod as of build 21.
+    -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <!--
+            UserDefaults (NSPrivacyAccessedAPICategoryUserDefaults).
+            Reason CA92.1: "Declare this reason to access user defaults
+            to read and write information that is only accessible to
+            the app itself." Nod reads and writes its own preferences
+            (personalization toggles, app-lock state, engine choice,
+            download preferences, crash-breaker flag). No UserDefaults
+            read or write touches another app's data.
+        -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+
+        <!--
+            File timestamp APIs (NSPrivacyAccessedAPICategoryFileTimestamp).
+            Reason C617.1: "Declare this reason to access the timestamps,
+            size, or other metadata of files inside the app container,
+            app group container, or the app's CloudKit container." Nod
+            calls FileManager.attributesOfItem(atPath:) in exactly two
+            places, both to read the .size attribute of downloaded model
+            files inside the app group container (used for download
+            integrity and progress checks):
+              - MLXModelSpec.swift:109
+              - MLXR2BackgroundSession.swift:333
+        -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
