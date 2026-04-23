@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a change or new capability.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature.
+
+        **Before filing:** read [CONTRIBUTING.md](../CONTRIBUTING.md) — specifically the "What we don't want" section. Nod deliberately avoids analytics, cloud sync, accounts, push notifications, and social features. Requests for these will be closed.
+
+        **Not sure if it fits?** Open a [Discussion](https://github.com/Speculative-Dynamics/nod/discussions) first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Start with the user need, not the solution.
+      placeholder: "When I open Nod after a few days away, I can't easily find what I wrote last time."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Rough sketch of the solution. Screenshots or diagrams help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve this problem, and why you landed on the proposal.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: product-fit
+    attributes:
+      label: Product-fit check
+      description: Confirm this aligns with Nod's stance.
+      options:
+        - label: "This does not require cloud sync, accounts, or a server."
+          required: true
+        - label: "This does not collect analytics, telemetry, or any user data."
+          required: true
+        - label: "This does not add push notifications, reminders, or streaks."
+          required: true
+        - label: "I have searched existing issues and this is not a duplicate."
+          required: true
