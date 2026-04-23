@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build (iPhone 16 Pro Simulator)
+    name: Build (iPhone 17 Pro Simulator)
     runs-on: macos-15
 
     # 20 min ceiling — well above the expected 4-6 min warm, 10 min cold.
@@ -38,18 +38,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Pin Xcode to a specific version that ships iOS 26 SDK.
-      # macOS-15 runner images have 16.2 / 16.3 pre-installed; pick the
-      # newest stable we've tested locally. `sudo xcode-select` is the
-      # documented way on GitHub-hosted runners.
-      - name: Select Xcode 16.3
-        run: sudo xcode-select --switch /Applications/Xcode_16.3.app
+      # Nod's deployment target is iOS 26, which requires Xcode 26+.
+      # Earlier Xcodes (16.x) only ship iOS 18 SDK and fail at
+      # destination resolution. `latest-stable` resolves to the newest
+      # released Xcode on the runner, which as of April 2026 on macos-15
+      # is Xcode 26.x. If we ever need a pin (e.g., to reproduce a CI
+      # bug), swap `latest-stable` for a concrete version like `26.2`.
+      - name: Select Xcode (latest-stable — needs Xcode 26+ for iOS 26 SDK)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Show build environment
         run: |
           sw_vers
           xcodebuild -version
-          xcrun simctl list devices "iPhone 16 Pro" available | head -20
+          echo "--- SDKs ---"
+          xcodebuild -showsdks
+          echo "--- iPhone 17 Pro simulator availability ---"
+          xcrun simctl list devices "iPhone 17 Pro" available
 
       # Swift Package Manager deps are heavy for Nod (MLX ships ~500MB of
       # xcframeworks). Without caching every CI run re-downloads
@@ -65,9 +72,9 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-          key: spm-${{ runner.os }}-xcode163-${{ hashFiles('ios/Nod.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode26-${{ hashFiles('ios/Nod.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-xcode163-
+            spm-${{ runner.os }}-xcode26-
 
       - name: Resolve Swift packages
         working-directory: ios
@@ -84,7 +91,7 @@ jobs:
             -project Nod.xcodeproj \
             -scheme Nod \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
