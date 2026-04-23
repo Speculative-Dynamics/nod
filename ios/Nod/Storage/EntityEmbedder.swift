@@ -29,12 +29,16 @@ import NaturalLanguage
 
 /// Encodes sentence-level embeddings via `NLEmbedding`.
 ///
-/// Not `Sendable`: `NLEmbedding` itself isn't Sendable per Swift 6
-/// strict concurrency, even though it's effectively read-only after
-/// load. Embedder is only held by `EntityStore` (which is @MainActor)
-/// so single-actor access is guaranteed and the non-Sendable type is
-/// fine here.
-struct EntityEmbedder {
+/// Marked `@unchecked Sendable` so embedding computation can move off
+/// the main actor. `NLEmbedding` isn't Sendable-annotated by Apple, but
+/// is effectively read-only after load (initialisation reads the weights
+/// once, then every subsequent `.vector(for:)` call is a pure function
+/// of its input). EntityStore runs `embed(...)` inside a `Task.detached`
+/// during `ingest(_:)` so the ~30 ms NLEmbedding work doesn't block main
+/// at the 6x-amplified trigger cadence introduced by incremental entity
+/// extraction. Same rationale iOS apps routinely apply to Apple frameworks
+/// that are thread-safe but haven't been marked Sendable yet.
+struct EntityEmbedder: @unchecked Sendable {
 
     /// Underlying Apple model. Nil means NLEmbedding has no sentence
     /// model for the current locale — we still construct the embedder

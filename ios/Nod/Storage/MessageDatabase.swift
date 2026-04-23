@@ -142,6 +142,44 @@ final class MessageDatabase: @unchecked Sendable {
             }
         }
 
+        // v4: per-message entity-extraction watermark. Decouples memory
+        // creation from summarization — incremental extraction fires after
+        // every reply instead of only at the 12-message compression mark,
+        // so memories like "I have a dog named Rex" surface in the sidebar
+        // within seconds of being mentioned.
+        //
+        // TEXT column (ISO8601 timestamp) rather than a plain boolean:
+        // preserves when-it-happened for future debugging / analytics, and
+        // matches the `created_at` / `updated_at` pattern used elsewhere.
+        // NULL means "never extracted"; any timestamp means "done."
+        //
+        // Backfill: existing summarized rows were already run through
+        // compression's parallel entity-extraction pass before this
+        // release, so we mark them as extracted. Without this, the first
+        // post-upgrade trigger would re-process up to BATCH_SIZE old rows
+        // per cycle and waste LLM calls on already-extracted content.
+        // Pre-compute the backfill timestamp outside the closure. The
+        // migration closure is @escaping so capturing `self.iso8601(...)`
+        // from inside would need explicit-self; passing the value in
+        // keeps the closure value-capture-only.
+        let v4BackfillTimestamp = iso8601(Date())
+        migrator.registerMigration("v4_entities_extracted") { db in
+            try db.alter(table: "messages") { t in
+                t.add(column: "entities_extracted_at", .text)
+            }
+            try db.create(
+                indexOn: "messages",
+                columns: ["entities_extracted_at"]
+            )
+            try db.execute(sql: """
+                UPDATE messages
+                   SET entities_extracted_at = ?
+                 WHERE is_summarized = 1
+                """,
+                arguments: [v4BackfillTimestamp]
+            )
+        }
+
         try migrator.migrate(queue)
     }
 
@@ -266,6 +304,89 @@ final class MessageDatabase: @unchecked Sendable {
             try db.execute(
                 sql: "UPDATE messages SET is_summarized = 1 WHERE id IN (\(placeholders))",
                 arguments: StatementArguments(args)
+            )
+        }
+        try applyBackupPreference()
+    }
+
+    /// Oldest N messages that have NOT been run through entity extraction yet.
+    /// Used by the incremental extraction path in ConversationStore — fires
+    /// after every completed exchange so "Rex" surfaces as a memory within
+    /// seconds of being mentioned, not after 12 messages of latency.
+    ///
+    /// `entities_extracted_at IS NULL` is the watermark: rows written before
+    /// v4 migration were backfilled (summarized rows marked done); rows
+    /// written post-migration start NULL until the incremental or compression
+    /// path flips them.
+    func fetchUnextractedMessages(limit: Int) throws -> [Message] {
+        try queue.read { db in
+            let rows = try Row.fetchAll(db,
+                sql: """
+                    SELECT id, role, text, created_at, was_cancelled
+                    FROM messages
+                    WHERE entities_extracted_at IS NULL
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                arguments: [limit]
+            )
+            return rows.compactMap(messageFromRow)
+        }
+    }
+
+    /// Mark messages as entity-extracted. Idempotent — setting the column
+    /// on a row that already has a timestamp is a plain UPDATE that just
+    /// rewrites the same value, so repeated calls (e.g. incremental running
+    /// over a row compression already marked) are safe.
+    func markEntitiesExtracted(ids: [UUID]) throws {
+        guard !ids.isEmpty else { return }
+        try queue.write { db in
+            let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+            var args: [DatabaseValueConvertible] = [iso8601(Date())]
+            args.append(contentsOf: ids.map { $0.uuidString })
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                       SET entities_extracted_at = ?
+                     WHERE id IN (\(placeholders))
+                    """,
+                arguments: StatementArguments(args)
+            )
+        }
+        try applyBackupPreference()
+    }
+
+    /// Atomic mark-summarized AND mark-extracted in one transaction. Used
+    /// at the end of the compression pass so a crash between the two writes
+    /// can't leave `is_summarized = 1` with `entities_extracted_at = NULL`
+    /// — a state that would cause the next launch's incremental trigger to
+    /// re-extract the already-processed batch.
+    ///
+    /// Replaces the pair `markSummarized(ids:)` + `markEntitiesExtracted(ids:)`
+    /// at compression time. Both of those still exist for their individual
+    /// use cases (tests; incremental-only path).
+    func markCompressed(ids: [UUID]) throws {
+        guard !ids.isEmpty else { return }
+        try queue.write { db in
+            let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+            let idArgs: [DatabaseValueConvertible] = ids.map { $0.uuidString }
+
+            // UPDATE 1: mark summarized
+            try db.execute(
+                sql: "UPDATE messages SET is_summarized = 1 WHERE id IN (\(placeholders))",
+                arguments: StatementArguments(idArgs)
+            )
+
+            // UPDATE 2: mark extracted with current timestamp
+            var extractedArgs: [DatabaseValueConvertible] = [iso8601(Date())]
+            extractedArgs.append(contentsOf: idArgs)
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                       SET entities_extracted_at = ?
+                     WHERE id IN (\(placeholders))
+                    """,
+                arguments: StatementArguments(extractedArgs)
             )
         }
         try applyBackupPreference()

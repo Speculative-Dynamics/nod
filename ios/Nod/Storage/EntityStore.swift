@@ -217,49 +217,81 @@ final class EntityStore: ObservableObject {
     ///
     /// Safe to call repeatedly with overlapping batches; the strict-
     /// match path is idempotent.
-    func ingest(_ extracted: ExtractedEntities) {
-        for raw in extracted.items {
-            guard let type = EntityType(rawValue: raw.type.lowercased()) else {
+    ///
+    /// Async because embedding computation (~30-150ms per batch, depending
+    /// on how many candidates) is done off-main via `Task.detached`. With
+    /// incremental extraction firing after every exchange (vs. the old
+    /// every-12-messages cadence), doing embeddings inline on MainActor
+    /// was causing visible UI hitches. The detached task batches all
+    /// embedding work; the on-main step only reads precomputed Data blobs.
+    func ingest(_ extracted: ExtractedEntities) async {
+        // Off-main: compute embedding source strings and embedding blobs
+        // for every candidate. Only value types cross the isolation
+        // boundary back — `[ExtractedEntity]` is already Sendable (it's a
+        // Codable struct of Strings) and `Data?` is Sendable.
+        let capturedEmbedder = self.embedder  // EntityEmbedder is @unchecked Sendable
+        let precomputed: [PrecomputedIngestItem] = await Task.detached(priority: .userInitiated) {
+            extracted.items.map { raw -> PrecomputedIngestItem in
+                let trimmedName = raw.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedRole = raw.role.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedNote = raw.note.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Mirror `Entity.embeddingSource`'s concatenation so the
+                // blob we produce here is bit-identical to what the old
+                // inline path produced. Duplicating the logic is worth
+                // keeping this step standalone / Sendable.
+                var parts: [String] = [trimmedName]
+                if !trimmedRole.isEmpty { parts.append(trimmedRole) }
+                if !trimmedNote.isEmpty { parts.append(trimmedNote) }
+                let source = parts.joined(separator: ". ")
+                let blob = (capturedEmbedder.isAvailable && !trimmedName.isEmpty)
+                    ? capturedEmbedder.embed(source)
+                    : nil
+                return PrecomputedIngestItem(
+                    rawType: raw.type,
+                    name: trimmedName,
+                    role: trimmedRole,
+                    note: trimmedNote,
+                    embedding: blob
+                )
+            }
+        }.value
+
+        // On-main: apply dedup + insert logic, using precomputed embeddings.
+        // This is the same control flow as the pre-async version; the only
+        // substitution is `item.embedding` instead of `embedder.embed(...)`.
+        for item in precomputed {
+            guard let type = EntityType(rawValue: item.rawType.lowercased()) else {
                 continue  // LLM returned an unknown type; skip.
             }
-            let trimmedName = raw.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedName.isEmpty else { continue }
-            let trimmedRole = raw.role.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedNote = raw.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !item.name.isEmpty else { continue }
 
             // Exact or alias match → update in place.
-            if let existingIdx = findExactMatch(name: trimmedName) {
-                updateExisting(at: existingIdx, newRole: trimmedRole, newNote: trimmedNote)
+            if let existingIdx = findExactMatch(name: item.name) {
+                updateExisting(at: existingIdx, newRole: item.role, newNote: item.note)
                 continue
             }
 
             // Build a candidate entity so we can either queue for
             // disambiguation or insert fresh.
-            let candidate = Entity(
+            var candidateWithEmbedding = Entity(
                 type: type,
-                canonicalName: trimmedName,
-                role: trimmedRole.isEmpty ? nil : trimmedRole,
-                notes: trimmedNote,
+                canonicalName: item.name,
+                role: item.role.isEmpty ? nil : item.role,
+                notes: item.note,
                 aliases: [],
                 firstMentionedAt: Date(),
                 lastMentionedAt: Date(),
                 mentionCount: 1,
                 embedding: nil  // filled in below
             )
-
-            // Compute the embedding once so fuzzy match and persistence
-            // both see the same vector. `applyEmbedding` both sets the
-            // blob on the candidate AND populates the decoded-vector
-            // cache for its id, so findFuzzyMatch below and a later
-            // retrieveRelevant both read the same cached decode.
-            var candidateEmbed: [Float]? = nil
-            var candidateWithEmbedding = candidate
-            if embedder.isAvailable {
-                candidateEmbed = applyEmbedding(
-                    embedder.embed(candidate.embeddingSource),
-                    to: &candidateWithEmbedding
-                )
-            }
+            // `applyEmbedding` both sets the blob on the candidate AND
+            // populates the decoded-vector cache for its id, so
+            // findFuzzyMatch below and a later retrieveRelevant both read
+            // the same cached decode.
+            let candidateEmbed: [Float]? = applyEmbedding(
+                item.embedding,
+                to: &candidateWithEmbedding
+            )
 
             // Fuzzy match? Only if embedding worked for both candidate
             // and at least one existing entity. Different canonical_name
@@ -281,6 +313,17 @@ final class EntityStore: ObservableObject {
             // No match at all → insert fresh.
             insertFresh(candidateWithEmbedding)
         }
+    }
+
+    /// Value-type holder for a single item whose embedding has already
+    /// been computed off-main. Sendable — only Strings and Data cross the
+    /// detached-task boundary.
+    private struct PrecomputedIngestItem: Sendable {
+        let rawType: String
+        let name: String
+        let role: String
+        let note: String
+        let embedding: Data?
     }
 
     /// How the user answered a PendingDisambiguation.

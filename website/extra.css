@@ -1,0 +1,164 @@
+/* =====================================================================
+   SCREEN FRAME — minimal bezel iPhone 17 Pro
+   A thin dark bezel ring around the screenshot, visible Dynamic Island,
+   crisp shadow. No full chassis. Reads as "a phone screen" instantly.
+   ===================================================================== */
+
+:root {
+    --frame-radius: clamp(36px, 4.6vw, 56px);
+    --frame-bezel: 5px;
+}
+
+.screen-frame {
+    display: block;
+    width: 100%;
+    max-width: clamp(220px, 26vw, 320px);
+    /* No aspect-ratio — the image inside drives the height so nothing crops */
+    margin: 0 auto;
+    padding: var(--frame-bezel);
+    border-radius: var(--frame-radius);
+    /* Bezel: near-black with a subtle sheen (original minimal bezel) */
+    background: linear-gradient(
+        160deg,
+        #1a1a1c 0%,
+        #0c0c0e 50%,
+        #050506 100%
+    );
+    position: relative;
+    transform: translateZ(0);
+    box-shadow:
+        /* inner hairlines for the bezel edge */
+        0 0 0 0.5px rgba(255, 255, 255, 0.06) inset,
+        0 1px 0 rgba(255, 255, 255, 0.14) inset,
+        /* outer depth */
+        0 28px 70px -24px rgba(0, 0, 0, 0.7),
+        0 10px 28px -8px rgba(0, 0, 0, 0.5);
+}
+
+.screen-frame img,
+.screen-frame picture img {
+    display: block;
+    width: 100%;
+    height: auto; /* natural image aspect, no crop */
+    border-radius: calc(var(--frame-radius) - var(--frame-bezel));
+    background: #000;
+}
+
+/* Dynamic Island — overlays on top of the screen at correct position */
+.screen-frame::after {
+    content: "";
+    position: absolute;
+    top: calc(var(--frame-bezel) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32%;
+    height: clamp(18px, 1.6vw, 22px);
+    background: #000;
+    border-radius: 999px;
+    z-index: 2;
+    box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.04) inset;
+    pointer-events: none;
+}
+
+/* Pulsing orange glow wrapper for the voice-input screen */
+.screen-frame--voice::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+    border-radius: calc(var(--frame-radius) + 8px);
+    border: 10px solid var(--nod-orange);
+    filter: blur(16px);
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: -1;
+    animation: screen-voice-pulse 2.4s ease-in-out infinite;
+}
+@keyframes screen-voice-pulse {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 0.72; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .screen-frame--voice::before {
+        animation: none;
+        opacity: 0.5;
+    }
+}
+
+/* =====================================================================
+   SHOWCASE SECTIONS — alternating two-column layout
+   ===================================================================== */
+.showcase {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(2rem, 6vw, 5rem);
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.showcase--reverse .showcase__text   { order: 2; }
+.showcase--reverse .showcase__screen { order: 1; }
+.showcase__text   { min-width: 0; }
+.showcase__screen { display: grid; place-items: center; }
+
+@media (max-width: 880px) {
+    .showcase { grid-template-columns: 1fr; gap: 2.5rem; }
+    .showcase--reverse .showcase__text   { order: 2; }
+    .showcase--reverse .showcase__screen { order: 1; }
+}
+
+/* =====================================================================
+   TWO-UP (personalization + lock)
+   ===================================================================== */
+.screen-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.screen-pair .screen-frame {
+    max-width: clamp(180px, 20vw, 260px);
+}
+.screen-pair__item    { display: grid; place-items: center; }
+.screen-pair__caption {
+    margin: 1rem 0 0;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-mute);
+    text-align: center;
+}
+@media (max-width: 640px) {
+    .screen-pair { grid-template-columns: 1fr; gap: 2rem; }
+}
+
+/* =====================================================================
+   HERO LINE REVEAL — mask + inner structure for GSAP to animate
+   Script wraps each <br>-split line in these spans at page load.
+   ===================================================================== */
+.hero__title .line-mask {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.08em; /* descenders room inside the mask */
+}
+.hero__title .line-inner {
+    display: inline-block;
+    will-change: transform;
+}
+/* Without JS, lines show normally (no hiding) */
+html:not(.js-ready) .hero__title .line-inner {
+    transform: none !important;
+    opacity: 1 !important;
+}
+
+/* =====================================================================
+   JS-READY REVEAL GATE
+   Only hide content when JS has booted — keeps page readable if JS
+   never runs (CSP block, network fail, etc).
+   ===================================================================== */
+html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.screen-pair) {
+    opacity: 0;
+}
+/* When showcase exists, its children are managed by GSAP directly */
+

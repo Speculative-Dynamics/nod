@@ -66,6 +66,13 @@ final class ConversationStore: ObservableObject {
     private let HIGH_WATER_MARK = 12
     private let BATCH_SIZE = 8
 
+    /// Max un-extracted messages handed to the incremental entity-extraction
+    /// pass per trigger. Sized so each call stays snappy (~1-2 s on Qwen)
+    /// and can fire after every completed exchange without feeling heavy.
+    /// Dedup in `EntityStore.ingest` absorbs overlap, so 5 is safe even if
+    /// compression later processes some of the same rows.
+    private let INCREMENTAL_EXTRACTION_WINDOW = 5
+
     private let database: MessageDatabase
     private let summarizer: () -> ConversationSummarizer?
 
@@ -76,6 +83,15 @@ final class ConversationStore: ObservableObject {
     /// Compression runs on a background task. We hold the handle so we don't
     /// fire a second one while the first is still running.
     private var compressionTask: Task<Void, Never>?
+
+    /// Incremental entity-extraction runs on its own background task.
+    /// Fires after every completed exchange; single-flight (see
+    /// `maybeRunIncrementalExtraction` — subsequent triggers during an
+    /// in-flight run flip `extractionWantsRerun`, which schedules exactly
+    /// one catch-up pass when the current run finishes).
+    private var incrementalExtractionTask: Task<Void, Never>?
+    private var extractionWantsRerun: Bool = false
+
     private var pendingDiskWrites: [PendingDiskWrite] = []
 
     /// Structured memory (people, places, projects, situations). Writes
@@ -152,6 +168,15 @@ final class ConversationStore: ObservableObject {
         flushPendingDiskWrites()
 
         self.isHydrated = true
+
+        // Catch-up pass for any messages that were un-extracted when the
+        // app was last killed (mid-extraction crash, or rows written by
+        // a previous version that didn't yet run incremental). Without
+        // this, those rows would wait for the next completed exchange
+        // before their entities surface in the sidebar — and for a user
+        // who opens the app to ask "what do you know about me?" before
+        // sending anything, that's a visible gap.
+        maybeRunIncrementalExtraction()
     }
 
     // MARK: - Appending messages
@@ -184,6 +209,11 @@ final class ConversationStore: ObservableObject {
         )
         messages[lastIndex] = updated
         enqueueDiskWrite(.updateText(id: updated.id, text: text))
+        // Stream-completion is the natural trigger for incremental entity
+        // extraction: both the user's message and the assistant's reply
+        // are now on disk with stable text, and the 5-message sliding
+        // window has enough context to resolve pronouns and names.
+        maybeRunIncrementalExtraction()
     }
 
     /// In-flight streaming update: mutates the last assistant message
@@ -376,15 +406,85 @@ final class ConversationStore: ObservableObject {
             let resolvedExtracted = await extracted
 
             try database.setSummary(resolvedSummary)
-            try database.markSummarized(ids: oldest.map(\.id))
+            // Atomic: summarize + mark-extracted in one transaction so a
+            // crash between the two columns can't leave
+            // `is_summarized = 1` with `entities_extracted_at = NULL`,
+            // which would make the next launch's incremental trigger
+            // re-extract this batch.
+            try database.markCompressed(ids: oldest.map(\.id))
 
             self.summary = resolvedSummary
-            self.entityStore.ingest(resolvedExtracted)
+            // Now async — precomputes embeddings off-main, applies state
+            // changes on-main. See EntityStore.ingest(_:) for detail.
+            await self.entityStore.ingest(resolvedExtracted)
         } catch {
             // Compression is best-effort — if it fails this pass, the
             // un-summarized backlog grows by one batch and we retry on
             // the next high-water trip. The conversation keeps working.
         }
+    }
+
+    // MARK: - Incremental entity extraction
+
+    /// Schedule an incremental entity-extraction pass. Idempotent and
+    /// single-flight:
+    ///   - If no task is running, kicks one off.
+    ///   - If a task IS running, sets `extractionWantsRerun` so the
+    ///     in-flight run's `defer` block schedules exactly one catch-up
+    ///     when it finishes. Guarantees the freshest messages get
+    ///     processed without piling up tasks.
+    ///
+    /// Called from:
+    ///   - `replaceLastAssistantMessage` — the natural per-exchange trigger
+    ///   - `hydrate()` — catch-up pass on launch for anything that was
+    ///     in-flight when the app was killed
+    private func maybeRunIncrementalExtraction() {
+        if incrementalExtractionTask != nil {
+            extractionWantsRerun = true
+            return
+        }
+        incrementalExtractionTask = Task.detached(priority: .utility) { [weak self] in
+            await self?.runIncrementalExtraction()
+        }
+    }
+
+    private func runIncrementalExtraction() async {
+        defer {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let shouldRerun = self.extractionWantsRerun
+                self.extractionWantsRerun = false
+                self.incrementalExtractionTask = nil
+                // A message arrived mid-run — schedule exactly one
+                // catch-up pass. The new task will re-check the DB for
+                // any still-unextracted rows.
+                if shouldRerun {
+                    self.maybeRunIncrementalExtraction()
+                }
+            }
+        }
+        do {
+            let batch = try database.fetchUnextractedMessages(limit: INCREMENTAL_EXTRACTION_WINDOW)
+            guard !batch.isEmpty else { return }
+            await extractAndIngest(messages: batch)
+            try database.markEntitiesExtracted(ids: batch.map(\.id))
+        } catch {
+            // Best-effort. If this pass fails, the watermark column stays
+            // NULL for the batch and the next trigger retries them. The
+            // compression pass (running at the 12-message mark via
+            // markCompressed) is the backstop that prevents permanent
+            // loss if incremental keeps failing.
+        }
+    }
+
+    /// Run the extractor over a batch of messages and apply the results
+    /// to the entity store. Shared between compression and incremental
+    /// paths so the write-side logic lives in one place. Safe to call
+    /// with overlapping batches — `EntityStore.ingest` dedupes via
+    /// exact + alias + vector similarity.
+    private func extractAndIngest(messages batch: [Message]) async {
+        let extracted = await entityExtractor.extract(from: batch)
+        await entityStore.ingest(extracted)
     }
 
     // MARK: - Start fresh
@@ -403,6 +503,21 @@ final class ConversationStore: ObservableObject {
             _ = await task.value
         }
         compressionTask = nil
+
+        // Same for the incremental extraction task. Without this, a
+        // late-finishing extraction could write entities into the store
+        // after `entityStore.resetInMemory()` below, ghost-repopulating
+        // the Memory view the user just asked to clear.
+        //
+        // Disarm rerun BEFORE the cancel+await so the in-flight task's
+        // defer block reads `extractionWantsRerun = false` and can't
+        // schedule a fresh extraction into the teardown window.
+        extractionWantsRerun = false
+        incrementalExtractionTask?.cancel()
+        if let task = incrementalExtractionTask {
+            _ = await task.value
+        }
+        incrementalExtractionTask = nil
 
         // Wipe disk in one transaction. If the write fails (e.g. disk full
         // at the exact moment the user hit "Start fresh"), bail without
