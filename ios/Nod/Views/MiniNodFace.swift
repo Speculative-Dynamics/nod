@@ -17,7 +17,10 @@ struct MiniNodFace: View {
 
     var body: some View {
         NodMascot(size: size, eyesClosed: eyesClosed)
-            .animation(.easeInOut(duration: 0.18), value: eyesClosed)
+            .animation(
+                .easeInOut(duration: NodMascotTokens.blinkDuration),
+                value: eyesClosed
+            )
             .onAppear { startBlinking() }
             .onDisappear { blinkTask?.cancel() }
     }

@@ -37,27 +37,27 @@ struct SplashView: View {
             Color(.systemBackground)
                 .ignoresSafeArea()
 
-            // The orange rounded square. Starts oversized to fill the screen,
-            // animates down to restingSize. Corner radius scales with size
-            // automatically because it's derived inline.
-            RoundedRectangle(
-                cornerRadius: orangeSize * 0.2237,
-                style: .continuous
-            )
-            .fill(Color("NodAccent"))
-            .frame(width: orangeSize, height: orangeSize)
+            // The orange body. Starts oversized to fill the screen,
+            // animates down to restingSize. Uses NodMascotBody so the
+            // corner radius and fill color come from the canonical
+            // tokens — one edit to the icon, one edit to the tokens,
+            // everything follows.
+            NodMascotBody(size: orangeSize)
 
             // Eyes. Scale from near-zero to 1.0 with a bouncy spring.
             // Independent blink state for the in-sequence blink moment.
-            // NodMascotEye gives us the canonical eye + glimmer so the
+            // NodMascotEye carries the canonical eye + glimmer so the
             // splash matches the app icon the user just tapped.
-            HStack(spacing: restingSize * 0.19) {
+            HStack(spacing: restingSize * NodMascotTokens.eyeSpacingRatio) {
                 NodMascotEye(faceSize: restingSize)
                 NodMascotEye(faceSize: restingSize)
             }
             .scaleEffect(eyesScale)
             .opacity(eyesOpacity)
-            .scaleEffect(y: eyesClosedForBlink ? 0.1 : 1.0, anchor: .center)
+            .scaleEffect(
+                y: eyesClosedForBlink ? NodMascotTokens.blinkClosedScaleY : 1.0,
+                anchor: .center
+            )
         }
         .onAppear {
             runSequence()

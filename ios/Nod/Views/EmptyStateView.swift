@@ -27,7 +27,10 @@ struct EmptyStateView: View {
             // eyesClosed; the .animation modifier below carries the
             // easing down to NodMascot's scaleEffect.
             NodMascot(size: 80, eyesClosed: blinkOn)
-                .animation(.easeInOut(duration: 0.2), value: blinkOn)
+                .animation(
+                    .easeInOut(duration: NodMascotTokens.blinkDuration),
+                    value: blinkOn
+                )
                 .accessibilityHidden(true)
 
             VStack(spacing: 8) {
