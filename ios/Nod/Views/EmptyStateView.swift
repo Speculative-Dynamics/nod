@@ -22,23 +22,13 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 24) {
             // Large Nod face (80pt) — eyes blink slowly.
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color("NodAccent"))
-                    .frame(width: 80, height: 80)
-
-                HStack(spacing: 14) {
-                    Ellipse()
-                        .fill(Color.black)
-                        .frame(width: 14, height: 20)
-                    Ellipse()
-                        .fill(Color.black)
-                        .frame(width: 14, height: 20)
-                }
-                .scaleEffect(y: blinkOn ? 0.1 : 1.0, anchor: .center)
+            // NodMascot = canonical face (glimmer + oval eyes), same
+            // geometry as the app icon. The blink is driven through
+            // eyesClosed; the .animation modifier below carries the
+            // easing down to NodMascot's scaleEffect.
+            NodMascot(size: 80, eyesClosed: blinkOn)
                 .animation(.easeInOut(duration: 0.2), value: blinkOn)
-            }
-            .accessibilityHidden(true)
+                .accessibilityHidden(true)
 
             VStack(spacing: 8) {
                 Text(greeting.headline)

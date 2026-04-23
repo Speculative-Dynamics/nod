@@ -49,9 +49,11 @@ struct SplashView: View {
 
             // Eyes. Scale from near-zero to 1.0 with a bouncy spring.
             // Independent blink state for the in-sequence blink moment.
+            // NodMascotEye gives us the canonical eye + glimmer so the
+            // splash matches the app icon the user just tapped.
             HStack(spacing: restingSize * 0.19) {
-                eye
-                eye
+                NodMascotEye(faceSize: restingSize)
+                NodMascotEye(faceSize: restingSize)
             }
             .scaleEffect(eyesScale)
             .opacity(eyesOpacity)
@@ -61,12 +63,6 @@ struct SplashView: View {
             runSequence()
         }
         .accessibilityLabel("Nod is waking up")
-    }
-
-    private var eye: some View {
-        Ellipse()
-            .fill(Color(red: 0.08, green: 0.08, blue: 0.08))
-            .frame(width: restingSize * 0.13, height: restingSize * 0.22)
     }
 
     private func runSequence() {

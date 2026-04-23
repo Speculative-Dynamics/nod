@@ -25,21 +25,10 @@ struct AppLockOverlay: View {
 
             VStack(spacing: 28) {
                 // Large Nod face, steady — no blinking while locked.
-                ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color("NodAccent"))
-                        .frame(width: 96, height: 96)
-
-                    HStack(spacing: 16) {
-                        Ellipse()
-                            .fill(Color.black)
-                            .frame(width: 16, height: 24)
-                        Ellipse()
-                            .fill(Color.black)
-                            .frame(width: 16, height: 24)
-                    }
-                }
-                .accessibilityHidden(true)
+                // NodMascot is the canonical face, same geometry as the
+                // app icon (glimmer included).
+                NodMascot(size: 96)
+                    .accessibilityHidden(true)
 
                 VStack(spacing: 6) {
                     Text("Nod is locked.")
