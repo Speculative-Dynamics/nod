@@ -1,0 +1,111 @@
+name: iOS build
+
+# Verifies that every PR and every push to main compiles cleanly against
+# the iOS Simulator. No signing, no archive, no tests (no test target
+# exists yet). The one question we answer: "does this patch build?"
+#
+# Kept deliberately minimal. Adding matrix builds, tests, or signed
+# archives is a separate decision — this is the floor, not the ceiling.
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'prompts/**'         # copied into the app bundle
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'prompts/**'
+      - '.github/workflows/ios.yml'
+
+# Only the latest run per branch matters. Cancel outdated ones.
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (iPhone 17 Pro Simulator)
+    runs-on: macos-15
+
+    # 20 min ceiling — well above the expected 4-6 min warm, 10 min cold.
+    # If we're here longer something is wrong and we should know fast.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Nod's deployment target is iOS 26, which requires Xcode 26+.
+      # Earlier Xcodes (16.x) only ship iOS 18 SDK and fail at
+      # destination resolution. `latest-stable` resolves to the newest
+      # released Xcode on the runner, which as of April 2026 on macos-15
+      # is Xcode 26.x. If we ever need a pin (e.g., to reproduce a CI
+      # bug), swap `latest-stable` for a concrete version like `26.2`.
+      - name: Select Xcode (latest-stable — needs Xcode 26+ for iOS 26 SDK)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          echo "--- SDKs ---"
+          xcodebuild -showsdks
+          echo "--- iPhone 17 Pro simulator availability ---"
+          xcrun simctl list devices "iPhone 17 Pro" available
+
+      # Swift Package Manager deps are heavy for Nod (MLX ships ~500MB of
+      # xcframeworks). Without caching every CI run re-downloads
+      # everything. With caching, cold = 8-10 min, warm = 3-5 min.
+      #
+      # Key uses Package.resolved hash so the cache invalidates cleanly
+      # when we bump a dependency. SourcePackages/checkouts/ is where
+      # SPM clones live; the build directory holds the .xcframework
+      # binaries.
+      - name: Cache SPM + DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-xcode26-${{ hashFiles('ios/Nod.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode26-
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Nod.xcodeproj \
+            -scheme Nod
+
+      - name: Build for Simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Nod.xcodeproj \
+            -scheme Nod \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | tee xcodebuild.log
+        # Stream output live; also capture for failure-debugging.
+
+      # On failure, stash the xcodebuild log so the PR author doesn't
+      # have to re-run just to see where it broke.
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ios/xcodebuild.log
+          retention-days: 7
