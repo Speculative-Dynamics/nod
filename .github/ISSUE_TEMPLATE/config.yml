@@ -1,0 +1,16 @@
+# Disables the blank-issue option on GitHub's "New issue" page. Every
+# issue must go through one of the YAML templates (bug, feature) or
+# the Discussions contact link. Keeps the issue tracker focused.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: Ask a question
+    url: https://github.com/Speculative-Dynamics/nod/discussions
+    about: General questions, product discussions, "where should I start" → Discussions, not Issues.
+  - name: Report a security issue
+    url: https://github.com/Speculative-Dynamics/nod/security/advisories/new
+    about: Private vulnerability disclosure. Do not file security issues in the public tracker.
+  - name: Email the team
+    url: mailto:hello@usenod.app
+    about: For anything that doesn't fit the options above.

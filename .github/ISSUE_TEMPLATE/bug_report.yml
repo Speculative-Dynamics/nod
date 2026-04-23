@@ -1,0 +1,99 @@
+name: Bug report
+description: Something in Nod behaves wrong or crashes.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        **Before filing:** search existing issues to see if someone already reported this.
+
+        **Security problems:** do not file here. See [SECURITY.md](../SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of what went wrong.
+      placeholder: "I tapped the mic, spoke, and no text appeared in the input field."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "Transcript appears in the input field within a second of tapping stop."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that reliably trigger the problem. If you can't repro it consistently, say so.
+      placeholder: |
+        1. Open Nod on iPhone 16 Pro.
+        2. Tap the mic.
+        3. Speak for ~3 seconds.
+        4. Tap stop.
+        5. Nothing appears.
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: iPhone model and iOS version.
+      placeholder: "iPhone 16 Pro, iOS 26.0.1"
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Nod version
+      description: Visible in the sidebar footer ("Version 0.1.0 (21)").
+      placeholder: "0.1.0 (21)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Which listening model was active?
+      description: You can find this in the sidebar under "Listening model".
+      options:
+        - "Apple Intelligence (AFM)"
+        - "Qwen 3 Instruct 2507"
+        - "Qwen 3.5 4B"
+        - "Gemma 4 E2B"
+        - "Don't know / not relevant"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (optional)
+      description: |
+        Anything you've captured from Console.app filtered by subsystem `app.usenod.nod`.
+        Do not paste the content of any messages you wrote. Logs should contain only
+        technical diagnostics, never your personal text.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy-check
+    attributes:
+      label: Privacy check
+      description: Double-check what you're about to post.
+      options:
+        - label: "I have not included personal journaling content in this report."
+          required: true
+        - label: "I have searched existing issues and this is not a duplicate."
+          required: true

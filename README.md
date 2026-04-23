@@ -104,11 +104,30 @@ A link to the App Store listing will appear at
 .
 ├── ios/          Native iOS app — see ios/README.md for build instructions
 ├── website/      Marketing site at usenod.app
+├── prompts/      LLM prompts, shared across platforms
 └── LICENSE       MIT
 ```
 
 For the iOS app's internal architecture, build steps, and engineering
-notes, see [`ios/README.md`](ios/README.md).
+notes, see [`ios/README.md`](ios/README.md). For a repo-wide overview,
+see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Contributing
+
+We welcome contributions. Quickest way in:
+
+- Pick up an issue labeled [`good first issue`](https://github.com/Speculative-Dynamics/nod/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+  or [`help wanted`](https://github.com/Speculative-Dynamics/nod/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
+- Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, branch
+  conventions, what we're looking for, and what we've decided not
+  to build.
+- Have a question before filing an issue? Open a
+  [Discussion](https://github.com/Speculative-Dynamics/nod/discussions).
+- Found a security issue? See [`SECURITY.md`](SECURITY.md) — do not
+  file security problems as public issues.
+
+By participating, you agree to follow our
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Who built this
 
