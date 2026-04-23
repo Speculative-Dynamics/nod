@@ -1,0 +1,104 @@
+name: iOS build
+
+# Verifies that every PR and every push to main compiles cleanly against
+# the iOS Simulator. No signing, no archive, no tests (no test target
+# exists yet). The one question we answer: "does this patch build?"
+#
+# Kept deliberately minimal. Adding matrix builds, tests, or signed
+# archives is a separate decision — this is the floor, not the ceiling.
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'prompts/**'         # copied into the app bundle
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'prompts/**'
+      - '.github/workflows/ios.yml'
+
+# Only the latest run per branch matters. Cancel outdated ones.
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (iPhone 16 Pro Simulator)
+    runs-on: macos-15
+
+    # 20 min ceiling — well above the expected 4-6 min warm, 10 min cold.
+    # If we're here longer something is wrong and we should know fast.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pin Xcode to a specific version that ships iOS 26 SDK.
+      # macOS-15 runner images have 16.2 / 16.3 pre-installed; pick the
+      # newest stable we've tested locally. `sudo xcode-select` is the
+      # documented way on GitHub-hosted runners.
+      - name: Select Xcode 16.3
+        run: sudo xcode-select --switch /Applications/Xcode_16.3.app
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun simctl list devices "iPhone 16 Pro" available | head -20
+
+      # Swift Package Manager deps are heavy for Nod (MLX ships ~500MB of
+      # xcframeworks). Without caching every CI run re-downloads
+      # everything. With caching, cold = 8-10 min, warm = 3-5 min.
+      #
+      # Key uses Package.resolved hash so the cache invalidates cleanly
+      # when we bump a dependency. SourcePackages/checkouts/ is where
+      # SPM clones live; the build directory holds the .xcframework
+      # binaries.
+      - name: Cache SPM + DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-xcode163-${{ hashFiles('ios/Nod.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode163-
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Nod.xcodeproj \
+            -scheme Nod
+
+      - name: Build for Simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Nod.xcodeproj \
+            -scheme Nod \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | tee xcodebuild.log
+        # Stream output live; also capture for failure-debugging.
+
+      # On failure, stash the xcodebuild log so the PR author doesn't
+      # have to re-run just to see where it broke.
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ios/xcodebuild.log
+          retention-days: 7
