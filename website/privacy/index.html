@@ -136,16 +136,27 @@
                     </p>
                     <ul>
                         <li>
-                            The <strong>listening model</strong> (Qwen 3.5 4B)
-                            runs on-device via MLX Swift. Your prompts never
-                            leave the phone.
+                            The <strong>default listening model</strong> is
+                            Apple's on-device LLM —
+                            <code>FoundationModels</code>, part of Apple
+                            Intelligence. It runs on the same chip that the app
+                            is installed on and does not make network requests.
+                            Your prompts never leave the phone.
                         </li>
                         <li>
-                            The <strong>memory and summaries</strong> feature
-                            uses Apple's on-device
-                            <code>FoundationModels</code> framework (part of
-                            Apple Intelligence). It runs on the same chip; it
-                            does not make network requests.
+                            You can <strong>optionally switch</strong> to an
+                            open-weights model in settings — Qwen 3 Instruct
+                            2507, Qwen 3.5 4B, or Gemma 4 E2B Text, all served
+                            via MLX Swift. These also run on-device. Choosing
+                            one triggers a one-time weights download (see
+                            below); after that, inference stays on the phone.
+                        </li>
+                        <li>
+                            The <strong>memory</strong> feature uses
+                            <code>FoundationModels</code> to extract structured
+                            facts from each turn, stored locally for the
+                            sidebar's "what Nod remembers" view. You can purge
+                            individual facts or everything.
                         </li>
                         <li>
                             Your <strong>conversation history</strong> is stored
@@ -155,8 +166,8 @@
                         </li>
                         <li>
                             Tapping <strong>"Start fresh"</strong> permanently
-                            deletes your local conversation on that device. This
-                            is irreversible.
+                            deletes your local conversation, running summary,
+                            and memory on that device. This is irreversible.
                         </li>
                     </ul>
                     <p>
@@ -168,13 +179,21 @@
                         backup system under your Apple account settings.
                     </p>
 
-                    <h3>Required network activity</h3>
+                    <h3>Optional network activity</h3>
                     <p>
-                        There is one unavoidable network event: on first launch,
-                        the app downloads the Qwen model weights (~2.5 GB) from
-                        Nod's hosted model files. This is a one-time download.
-                        After that, the app functions fully offline. We don't
-                        receive your conversation content as part of this
+                        On the default Apple Intelligence engine, the app does
+                        not download anything and makes no network requests
+                        related to your conversation.
+                    </p>
+                    <p>
+                        If you switch to an open-weights engine (Qwen 3 / 3.5
+                        or Gemma 4) in settings, Nod downloads the selected
+                        model's weights (~2–3 GB) one time from our hosted
+                        model files on Cloudflare R2 via Apple's Background
+                        Assets framework. Downloads default to Wi-Fi only; you
+                        can opt into cellular. After the weights are on your
+                        device, the app functions fully offline. We do not
+                        receive any conversation content as part of this
                         download.
                     </p>
 

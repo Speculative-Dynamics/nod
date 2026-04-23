@@ -154,7 +154,7 @@
                         "@id": "https://usenod.app/#app",
                         "name": "Just Nod",
                         "alternateName": "Nod",
-                        "description": "A small on-device AI that listens without fixing. Runs entirely on your iPhone via Apple Intelligence and Qwen 3.5 4B through MLX Swift. No servers, no accounts, no tracking.",
+                        "description": "A small on-device AI that listens without fixing. Runs on Apple Intelligence out of the box, or switch to an open-weights engine — Qwen 3, Qwen 3.5, or Gemma 4 via MLX Swift — in settings. No servers, no accounts, no tracking.",
                         "applicationCategory": "HealthApplication",
                         "operatingSystem": "iOS 26.0",
                         "url": "https://usenod.app/",
@@ -290,23 +290,38 @@
 
                     <ul class="facts">
                         <li>
-                            <span class="facts__key">Listening model</span>
-                            <span class="facts__val">Qwen 3.5 4B</span>
-                            <span class="facts__note"
-                                >Running on-device via MLX Swift. Downloaded
-                                once, stays on your phone.</span
-                            >
-                        </li>
-                        <li>
-                            <span class="facts__key"
-                                >Memory &amp; summaries</span
-                            >
+                            <span class="facts__key">Default engine</span>
                             <span class="facts__val"
                                 >Apple FoundationModels</span
                             >
                             <span class="facts__note"
-                                >Apple Intelligence's on-device LLM. Never sees
-                                a network.</span
+                                >Apple Intelligence's on-device LLM. Runs the
+                                second you open the app — no download, no
+                                network.</span
+                            >
+                        </li>
+                        <li>
+                            <span class="facts__key">Alternative engines</span>
+                            <span class="facts__val"
+                                >Qwen 3, Qwen 3.5, Gemma 4</span
+                            >
+                            <span class="facts__note"
+                                >Open-weights models via MLX Swift. Switch in
+                                settings — Nod downloads the selected model
+                                once (2&ndash;3&nbsp;GB, Wi-Fi by default),
+                                then runs on-device forever.</span
+                            >
+                        </li>
+                        <li>
+                            <span class="facts__key">Memory</span>
+                            <span class="facts__val"
+                                >On-device fact extraction</span
+                            >
+                            <span class="facts__note"
+                                >Apple FoundationModels extracts structured
+                                memories from each turn. Browse them in the
+                                sidebar; delete any one of them, or all of
+                                them.</span
                             >
                         </li>
                         <li>
@@ -446,8 +461,11 @@
                         <p class="download-box__meta">
                             Requires iPhone with Apple Intelligence — iOS 26.0
                             or later.<br />
-                            Roughly 2.5 GB for the on-device model, downloaded
-                            once on first launch.
+                            Works instantly on Apple's on-device model. If you
+                            later switch to an open-weights engine
+                            (Qwen or Gemma via MLX) in settings, Nod downloads
+                            the selected model once — 2–3&nbsp;GB, Wi-Fi by
+                            default.
                         </p>
                     </div>
                 </div>

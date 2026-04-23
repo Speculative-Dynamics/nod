@@ -49,9 +49,15 @@ architecturally incapable of leaking a single word of what you say.
 ### It runs entirely on your phone
 
 No servers. No accounts. No API keys. No login. Every word you type stays
-on the device. The listening model (**Qwen 3.5 4B**) runs on-device via
-MLX Swift. Memory and summaries are handled by Apple's own on-device LLM
-(**FoundationModels**, part of Apple Intelligence).
+on the device, read only by a model running on the same chip. Out of the
+box, that model is Apple's own on-device LLM — **FoundationModels**, part
+of Apple Intelligence. Nothing to download. It just works.
+
+If you'd rather run an open-weights model on your phone, open settings and
+switch the engine to **Qwen 3 Instruct 2507**, **Qwen 3.5 4B**, or
+**Gemma 4 E2B** — all via MLX Swift. When you switch for the first time,
+Nod downloads the weights (2–3 GB, Wi-Fi by default) once via Apple's
+Background Assets framework. After that, inference is fully offline.
 
 We don't see what you write. **No one does.** Not because we promise —
 because there is no pipe to send it through.
@@ -91,9 +97,11 @@ the model. Here's a piece of it:
 Nod will be listed on the App Store as **Just Nod** — the name *Nod*
 alone was taken, and besides, it matches the in-app button.
 
-Requires an iPhone with Apple Intelligence — **iOS 26.0 or later**. On
-first launch, the app downloads the Qwen model weights (~2.5 GB) once via
-Apple's Background Assets framework. After that, it works fully offline.
+Requires an iPhone with Apple Intelligence — **iOS 26.0 or later**. Works
+instantly on Apple's on-device model — no extra download needed. If you
+switch to an open-weights engine (Qwen or Gemma via MLX) in settings,
+Nod downloads the selected model once (2–3 GB, Wi-Fi only by default).
+Otherwise, nothing is downloaded; nothing leaves the device.
 
 A link to the App Store listing will appear at
 [usenod.app](https://usenod.app) once the app ships.
