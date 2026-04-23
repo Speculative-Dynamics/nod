@@ -152,7 +152,7 @@ enum InferenceError: Error {
     case guardrailViolation      // AFM refused emotional content
     case outOfMemory
     case interrupted             // phone call, app suspension, etc.
-    // Qwen-specific download failures. Mapped from URLError in QwenClient
+    // MLX-model download failures. Mapped from URLError in MLXEngineClient
     // so ChatView / the readiness bar can show typed copy.
     case downloadFailedNoNetwork
     case downloadFailedDiskFull

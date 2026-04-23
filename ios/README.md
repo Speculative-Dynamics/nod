@@ -1,100 +1,134 @@
 # Nod — iOS app
 
-Native SwiftUI app. iOS 18.2+ deployment target. All inference runs on-device.
+Native SwiftUI app. iOS 26+ deployment target. All inference runs on-device —
+Apple FoundationModels for memory and summarization, MLX Swift for the
+listening model (Qwen 3, Qwen 3.5, or Gemma 4 E2B).
+
+Product positioning and "why" live in [the repo root README](../README.md).
+This file is for anyone building or hacking on the iOS code.
 
 ## Prerequisites
 
-- macOS with Xcode 16+ installed
-- Apple Developer account (Organization tier, for App Store distribution — Personal tier works for local device installs with a 7-day provisioning profile)
-- An iPhone 15 Pro or later for on-device testing (required for Apple FoundationModels and Qwen 4B)
+- macOS with **Xcode 16+**
+- **XcodeGen** installed (`brew install xcodegen`) — only needed if you edit `project.yml` and want to regenerate `Nod.xcodeproj`
+- Apple Developer account (Organization tier for App Store distribution; Personal tier works for local device installs with a 7-day provisioning profile)
+- **iPhone 15 Pro or later** for on-device testing — required for Apple Intelligence (FoundationModels) and to fit MLX 4B model weights in memory
 - Apple Intelligence enabled in Settings → Apple Intelligence & Siri on the test device
+
+## Build and run
+
+```bash
+git clone git@github.com:Speculative-Dynamics/nod.git
+cd nod/ios
+open Nod.xcodeproj          # the project is committed, no generation needed
+```
+
+In Xcode: select your iPhone as the run destination, pick your Team in
+Signing & Capabilities on the `Nod` target, then `Cmd+R`.
+
+**Command-line build verification:**
+
+```bash
+xcodebuild -scheme Nod \
+  -destination 'generic/platform=iOS' \
+  build
+```
+
+**If you edit `project.yml`** (changing dependencies, targets, or build
+settings), regenerate the Xcode project:
+
+```bash
+cd ios && xcodegen generate
+```
+
+`Nod.xcodeproj` is committed so a fresh clone builds without needing
+XcodeGen installed.
 
 ## Source layout
 
 ```
 vent/
-├── prompts/                         # ALL LLM prompts (repo-root — one place)
+├── prompts/                         # ALL LLM prompts (repo root, reusable across platforms)
 │   ├── listening_mode.md            # THE listening-mode system prompt
-│   └── summary.md                   # compression summarization prompt
+│   ├── summary.md                   # running-summary compression prompt
+│   └── entity_extraction.md         # memory entity extraction prompt
 │
 └── ios/
     ├── README.md                    # you are here
     ├── project.yml                  # XcodeGen source of truth
-    ├── Nod.xcodeproj/               # generated from project.yml (committed)
-    ├── Nod/                         # Swift source
-    │   ├── NodApp.swift             # @main, SwiftUI App entry point
-    │   ├── Info.plist               # launch screen, permissions, dark mode
-    │   ├── Views/
-    │   │   ├── ChatView.swift       # main chat screen + MessageBubble
-    │   │   ├── EmptyStateView.swift # first-launch empty chat
-    │   │   ├── NodAnimation.swift   # eye-blink + thinking-scan gestures
-    │   │   ├── MiniNodFace.swift    # nav-bar brand face, auto-blinking
-    │   │   └── SplashView.swift     # animated launch: orange → condense → eyes
-    │   ├── Inference/
-    │   │   ├── InferenceEngine.swift          # protocol + error enum
-    │   │   ├── FoundationModelsClient.swift   # Apple on-device LLM (day-1)
-    │   │   └── QwenClient.swift               # MLX + Qwen 3.5 4B (stub)
-    │   ├── Storage/
-    │   │   ├── Message.swift                  # data model
-    │   │   ├── MessageDatabase.swift          # GRDB.swift SQLite persistence
-    │   │   └── ConversationStore.swift        # store + compression trigger
-    │   ├── Assets.xcassets/
-    │   │   ├── AppIcon.appiconset/            # the orange face
-    │   │   └── NodAccent.colorset/            # #DD6D2C / #E07C40
-    │   └── Preview Content/                   # SwiftUI preview resources
-    └── evals/
-        └── listening-mode/          # saved vent transcripts as regression fixtures
+    ├── Nod.xcodeproj/               # committed so first-clone builds
+    ├── Nod.xcscheme                 # shared scheme
+    ├── evals/
+    │   └── listening-mode/          # vent-transcript regression fixtures
+    └── Nod/                         # Swift source
+        ├── NodApp.swift             # @main, SwiftUI App entry point
+        ├── AppDelegate.swift        # background-URLSession re-attachment
+        ├── LaunchCrashBreaker.swift # crash-loop recovery on cold launch
+        ├── Info.plist               # launch screen, permissions
+        ├── Nod.entitlements         # memory + app-group capabilities
+        ├── AppLock/
+        │   ├── AppLockManager.swift    # Face ID state + auth flow
+        │   └── AppLockOverlay.swift    # locked-screen UI
+        ├── Inference/
+        │   ├── InferenceEngine.swift           # shared protocol + error enum
+        │   ├── EngineHolder.swift              # routes between AFM and MLX
+        │   ├── EnginePreference.swift          # which model the user picked
+        │   ├── FoundationModelsClient.swift    # Apple on-device LLM (AFM)
+        │   ├── MLXEngineClient.swift           # MLX, parameterized by model spec
+        │   ├── MLXModelSpec.swift              # Qwen 3 / Qwen 3.5 / Gemma 4 specs
+        │   ├── MLXR2BackgroundSession.swift    # Background-Assets-style download
+        │   ├── DownloadEvent.swift             # UI event enum from downloader
+        │   ├── DownloadMetrics.swift           # progress numbers for the card
+        │   ├── DownloadTuning.swift            # throttle + retry parameters
+        │   ├── SpeedWindow.swift               # rolling-average download speed
+        │   ├── DictationRecognizer.swift       # iOS 26 SpeechAnalyzer wrapper
+        │   ├── EntityExtractorService.swift    # FoundationModels memory extraction
+        │   └── ExtractedEntity.swift           # @Generable schema for memory
+        ├── Storage/
+        │   ├── Message.swift                   # data model
+        │   ├── MessageDatabase.swift           # GRDB.swift SQLite persistence
+        │   ├── ConversationStore.swift         # store + running summary + compression
+        │   ├── Entity.swift                    # memory entity record
+        │   ├── EntityStore.swift               # entity CRUD + semantic search
+        │   └── EntityEmbedder.swift            # NLEmbedding vector gen
+        ├── Personalization/
+        │   └── PersonalizationStore.swift      # sidebar toggles + free-form field
+        ├── Views/
+        │   ├── ChatView.swift                  # main chat screen
+        │   ├── EmptyStateView.swift            # zero-messages first-launch view
+        │   ├── SidebarView.swift               # settings + memory + danger-zone
+        │   ├── MemoryView.swift                # browse and purge entity memory
+        │   ├── SplashView.swift                # 2s cold-launch animation
+        │   ├── NodMascot.swift                 # canonical face + eye + blinker
+        │   ├── MiniNodFace.swift               # nav-bar mascot wrapper
+        │   └── NodAnimation.swift              # bubble eye-blink + thinking-scan
+        ├── Assets.xcassets/
+        │   ├── AppIcon.appiconset/             # home-screen icon (1024pt master)
+        │   └── NodAccent.colorset/             # brand orange, light + dark values
+        └── Preview Content/                    # SwiftUI preview resources
 ```
 
-Note: prompts live at the REPO ROOT (not under `ios/`) so they're reusable
-across iOS, website, and any future platforms. XcodeGen copies them into
-the app bundle as a folder resource (see `project.yml`).
+Prompts live at the repo root so website and future platforms can read
+the same text. XcodeGen copies them into the app bundle as a folder
+resource (see `project.yml`).
 
-The `.xcodeproj` file is NOT checked in — Xcode generates it when you create the project.
+## Architecture — a one-line tour
 
-## Day 1 setup (one-time, ~15 minutes)
+- **`NodApp`** mounts `ChatView`. `ChatView` owns the conversation and composes everything else.
+- **`EngineHolder`** is the routing layer. It picks between `FoundationModelsClient` (Apple Intelligence) and `MLXEngineClient` (on-device 4B models via MLX) based on device capability and user preference.
+- **`MLXR2BackgroundSession`** does the heavy model download via iOS background URLSession so it survives app suspend and kill. `MLXEngineClient` orchestrates it and emits progress events through `DownloadEvent` / `DownloadMetrics`.
+- **`ConversationStore`** is the message log. `MessageDatabase` (GRDB/SQLite) persists. When the log grows past a threshold, `ConversationStore` fires a FoundationModels summarization so the context stays bounded.
+- **`EntityExtractorService`** + **`EntityStore`** are the "memory" layer — AFM extracts structured facts from each turn, embeds them, and they flow back into the system prompt.
+- **`AppLockManager`** guards the whole app behind Face ID when the user opts in. `AppLockOverlay` is what shows while locked.
+- **`DictationRecognizer`** wraps iOS 26's `SpeechAnalyzer` + `SpeechTranscriber` for voice input. Runs entirely on-device.
+- **`NodMascot`** (in `Views/`) is the single source of truth for the orange face — see the comments in that file for the tokens and the relationship to the app icon.
 
-1. Open Xcode → File → New → Project → iOS → App
-2. Configure:
-   - **Product Name:** Nod
-   - **Team:** your Apple Developer team
-   - **Organization Identifier:** `app.usenod` (matches the domain you own)
-   - **Interface:** SwiftUI
-   - **Language:** Swift
-   - **Testing System:** Swift Testing (WWDC 2024)
-   - **Storage:** None
-3. Save the project into this `ios/` directory. Xcode will create `Nod.xcodeproj/` alongside the existing `Nod/` folder.
-4. In Xcode, delete the default `NodApp.swift` and `ContentView.swift` that Xcode generated (keep the ones already in `Nod/` from this repo).
-5. Right-click the `Nod` folder in Xcode → "Add Files to Nod" → select every file already present in `Nod/` so Xcode picks them up.
-6. Drop the app icon into `Assets.xcassets/AppIcon.appiconset/` at the required sizes (1024pt master at minimum for App Store; Xcode generates smaller sizes automatically if you use a single 1024pt).
-7. Set deployment target to **iOS 18.2** in project settings.
-8. Add `Color Set` named `NodAccent` to `Assets.xcassets`. Dark value: `#E89260`. Light value: `#F27A3B`. Set `.accentColor` in `NodApp.swift` to read from this.
-9. Set the app's default appearance to Dark in `Info.plist` (`UIUserInterfaceStyle = Dark`).
+## Tests
 
-## Day 1 build goal
-
-A working text-only chat screen:
-- Dark background
-- Empty state: Nod face + "I'm listening."
-- Type into the input field, tap send
-- Apple FoundationModels responds via `FoundationModelsClient`
-- Response appears as a left-aligned bubble
-- Nod eye-blink animation plays between send and response
-
-Run on your iPhone 15 Pro via Xcode (`Cmd+R` with phone selected as destination).
-
-## Running and iterating
-
-```bash
-# From Xcode GUI: Product → Run (Cmd+R) with your iPhone selected as destination.
-# For command-line build verification (after the project exists):
-xcodebuild -scheme Nod -destination 'generic/platform=iOS' build
-```
-
-## Next phases
-
-After Day 1 works, follow the design doc's Next Steps (day 2-6). Day 3-4 adds MLX Swift + Qwen 3.5 4B via Background Assets. The `QwenClient.swift` file in this repo is a stub until then.
+No test target yet. Evals live under `ios/evals/listening-mode/` as vent
+transcripts that get rerun against the listening prompt whenever the
+prompt changes.
 
 ## License
 
-MIT — see `../LICENSE`.
+MIT — see [`../LICENSE`](../LICENSE).

@@ -528,7 +528,7 @@ final class ConversationStore: ObservableObject {
 }
 
 /// What a summarizer has to be able to do. FoundationModelsClient (and later
-/// QwenClient) will conform to this.
+/// MLXEngineClient) will conform to this.
 protocol ConversationSummarizer: Sendable {
     func summarize(messages: [Message], existingSummary: String) async throws -> String
 }

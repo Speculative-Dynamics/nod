@@ -55,8 +55,8 @@ struct MLXModelSpec: Sendable, Hashable {
     // MARK: - Delivery
 
     /// Base URL for the versioned R2 path. Trailing slash implied by
-    /// `appending(path:)`. See `QwenR2BackgroundSession`-now-renamed-
-    /// `MLXR2BackgroundSession.ensureLocalFiles` for how files are fetched.
+    /// `appending(path:)`. See `MLXR2BackgroundSession.ensureLocalFiles`
+    /// for how files are fetched.
     let r2BaseURL: URL
 
     /// Every file MLX needs: weights, tokenizer bits, chat template,
@@ -155,9 +155,9 @@ extension MLXModelSpec {
     // option for its smaller size and proven performance on iPhone 15
     // Pro.
     //
-    // Hashes + sizes inherited from the pre-refactor QwenClient.r2Files
-    // manifest; bit-identical to what existing users have on disk, so
-    // the upgrade preserves their download.
+    // Hashes + sizes inherited from the pre-refactor single-model
+    // client's r2Files manifest; bit-identical to what existing users
+    // have on disk, so the upgrade preserves their download.
     static let qwen3_instruct_2507 = MLXModelSpec(
         identifier: "qwen3-instruct-2507",
         displayName: "Qwen 3 Instruct 2507",

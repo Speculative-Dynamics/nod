@@ -1,7 +1,7 @@
 // MLXEngineClient.swift
 // One on-device MLX engine instance, parameterized by MLXModelSpec.
-// Generalized from QwenClient — now backs Qwen 3 Instruct 2507,
-// Qwen 3.5 4B, and Gemma 4 E2B Text equally.
+// Originally Qwen-only; generalized to back Qwen 3 Instruct 2507,
+// Qwen 3.5 4B, and Gemma 4 E2B Text equally via the model spec.
 //
 // Why multiple on-device options:
 //   1. AFM is Apple-Intelligence-gated. Many users won't have it enabled
@@ -409,7 +409,7 @@ actor MLXEngineClient: ListeningEngine {
         return error
     }
 
-    /// Called by QwenR2BackgroundSession whenever progress or a
+    /// Called by MLXR2BackgroundSession whenever progress or a
     /// connectivity-state change needs to surface. Metrics carry the full
     /// picture (fraction, bytes, speed, ETA). Transitions from a
     /// progress-ish state map cleanly into one of the four progress

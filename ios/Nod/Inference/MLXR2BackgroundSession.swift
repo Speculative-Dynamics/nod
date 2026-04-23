@@ -28,13 +28,13 @@
 // ==========================================================================
 //
 //   ┌────────────────────────────────────────────────────────────┐
-//   │  QwenClient (actor)                                         │
+//   │  MLXEngineClient (actor)                                         │
 //   │    .prepare() / .cancelDownload() / .resumeDownload()       │
 //   └──────────┬─────────────────────────────────▲────────────────┘
 //              │ calls                            │ applyDownloadEvent()
 //              ▼                                  │
 //   ┌────────────────────────────────────────────────────────────┐
-//   │  QwenR2BackgroundSession (final class, Sendable)            │
+//   │  MLXR2BackgroundSession (final class, Sendable)            │
 //   │    - Singleton via `shared`                                 │
 //   │    - Owns one URLSession(configuration: .background(...))   │
 //   │    - Holds per-task download progress + rolling speed       │
@@ -77,7 +77,7 @@ import Foundation
 import Network
 import os
 
-private let log = Logger(subsystem: "app.usenod.nod", category: "qwen.download")
+private let log = Logger(subsystem: "app.usenod.nod", category: "mlx.download")
 
 /// One file to fetch, with integrity metadata.
 struct FileSpec: Sendable, Hashable {
@@ -149,7 +149,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
     /// for the denominator in overall progress metrics.
     private var totalManifestBytes: Int64 = 0
 
-    /// UI event sink. Set by the caller (QwenClient). Invoked from a
+    /// UI event sink. Set by the caller (MLXEngineClient). Invoked from a
     /// background queue; the caller is responsible for hopping to main if
     /// it needs to.
     private var onEvent: (@Sendable (DownloadEvent) -> Void)?

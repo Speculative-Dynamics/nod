@@ -1,8 +1,8 @@
 // DownloadEvent.swift
-// The discriminated union QwenR2BackgroundSession uses to tell QwenClient
+// The discriminated union MLXR2BackgroundSession uses to tell MLXEngineClient
 // what happened. Kept separate from State because events are what the
 // session reports; State is what the UI sees. The mapping is cheap and
-// explicit in QwenClient.applyDownloadEvent.
+// explicit in MLXEngineClient.applyDownloadEvent.
 
 import Foundation
 
