@@ -94,6 +94,65 @@ struct ChatView: View {
     /// via `.task(id:)` on the count + last-id composite.
     @State private var cachedRows: [ChatView.ChatRow] = []
 
+    // MARK: - Dictation state
+
+    /// Owns the on-device speech recognition pipeline (AVAudioEngine +
+    /// SFSpeechRecognizer). Lives on ChatView so the mic indicator
+    /// teardown survives overlay dismissal and scenePhase changes.
+    @StateObject private var dictationRecognizer = DictationRecognizer()
+
+    // Dictation runs inline now — no overlay, no fullScreenCover.
+    // The mic button toggles recording directly via
+    // `dictationRecognizer.start()` / `.commit()`. While recording,
+    // `isRecording` (computed from `dictationRecognizer.state`)
+    // drives the mic-becomes-stop icon swap and the edge glow.
+
+    /// Set each time dictation commits a non-empty transcript. Watched
+    /// by the input field's post-commit pulse animation so the user's
+    /// eye catches misheard words before they tap send. Never
+    /// persisted — pure UI signal.
+    @State private var committedAt: Date?
+
+    /// True when the mic button has been tapped at least once in this
+    /// session. Until then, render a subtle .symbolEffect(.pulse) on
+    /// the mic icon to hint discoverability.
+    @AppStorage("dictation.hasTappedMic") private var hasTappedMic: Bool = false
+
+    /// Two-mode right-side action button. Mic has its own dedicated
+    /// button (see `micButton` in the input bar) so the send arrow
+    /// stays put and never "disappears" into a mic icon when the
+    /// input is empty. Clearer mental model: send-arrow means send,
+    /// always; tapping the separate mic icon means talk instead.
+    private enum SendButtonRole: Equatable {
+        case send  // text present, not streaming → send
+        case stop  // streaming → cancel
+
+        static func from(isInferring: Bool) -> SendButtonRole {
+            isInferring ? .stop : .send
+        }
+
+        var iconName: String {
+            switch self {
+            case .send: return "arrow.up"
+            case .stop: return "stop.fill"
+            }
+        }
+
+        var a11yLabel: String {
+            switch self {
+            case .send: return "Send message"
+            case .stop: return "Stop response"
+            }
+        }
+
+        var a11yHint: String {
+            switch self {
+            case .send: return ""
+            case .stop: return "Stops the current reply; partial text is preserved"
+            }
+        }
+    }
+
     /// True when the scroll view's visible area reaches the bottom of
     /// the content. Measured via `.onScrollGeometryChange` below, so
     /// it reflects REAL layout (content offset + container height vs
@@ -377,6 +436,34 @@ struct ChatView: View {
                     // Warning haptic confirms the destructive action landed.
                     UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 }
+            }
+            // Dictation state observer.
+            //
+            // The recording UI is just: the mic button morphs to a
+            // stop icon AND an orange edge glow appears around the
+            // app while recording. No modal, no fullscreen view,
+            // no mascot. Siri-style ambient presence.
+            //
+            // When the recognizer transitions to .committed, we
+            // capture the transcript, append it to the input field,
+            // and raise the keyboard so the user can edit before
+            // sending. Missed-state fallback on .idle: if SwiftUI
+            // coalesces .committed→.idle and we see only .idle with
+            // non-empty lastFinalText, deliver it anyway.
+            .onChange(of: dictationRecognizer.state) { oldValue, newValue in
+                handleDictationStateChange(from: oldValue, to: newValue)
+            }
+            // Siri-style edge glow. When dictation is active, a soft
+            // orange halo traces the phone's outer edge. Fades in/out
+            // over 300ms. Single view, single animation driver via
+            // `.opacity(isRecording ? 1 : 0)` + `.animation` — no
+            // repeatForever, no overlapping transactions.
+            .overlay(alignment: .center) {
+                recordingEdgeGlow
+                    .opacity(isRecording ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.3), value: isRecording)
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
             }
             // "Pause download?" confirmation. Default action is "Keep
             // downloading" (safer on accidental tap). "Pause" is .cancel
@@ -819,11 +906,22 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            // The text field handles both typing AND dictation — iOS's
-            // built-in keyboard has a mic button in the bottom-right that
-            // dictates into any focused text field, on-device on
-            // Apple-Intelligence-capable devices. We don't need our own
-            // mic button or mic-handling code.
+            // Dedicated mic button, LEFT of the text field. Always
+            // visible when not streaming (hidden during inference so
+            // you can't talk over Nod thinking). Having mic as its
+            // own button keeps the send arrow always present — no
+            // disappearing send-becomes-mic swap that confused users
+            // about where their "send" went.
+            if !isInferring && !dictationRecognizer.isUnavailableForSession {
+                micButton
+            }
+
+            // Text field with a post-commit underline pulse that
+            // briefly flashes in NodAccent when a dictation commit
+            // lands. Catches the user's eye so they notice misheard
+            // words (a trust break on a venting app) before tapping
+            // send. `committedAt` is the trigger; the overlay modifier
+            // drives opacity 0→1→0 over ~1.5s.
             TextField("Type what's on your mind…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
@@ -831,6 +929,13 @@ struct ChatView: View {
                 .padding(.vertical, 10)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(alignment: .bottom) {
+                    if let committedAt {
+                        PostCommitPulse(trigger: committedAt)
+                            .allowsHitTesting(false)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                }
                 .focused($inputFocused)
                 .accessibilityLabel("Message")
                 // No .submitLabel(.send)/.onSubmit here: with axis: .vertical
@@ -839,62 +944,174 @@ struct ChatView: View {
                 // lie. Hardware keyboards get Cmd+Return via the shortcut
                 // button in .background above.
 
-            // Dual-purpose send/stop button. When Nod is streaming, the
-            // icon morphs to `stop.fill`, the fill shifts from NodAccent
-            // orange to a neutral gray, and the accessibility label
-            // swaps from "Send message" to "Stop response" — three
-            // coordinated cues so the new role reads instantly.
-            //
-            // Tap behavior forks on `isInferring`:
-            //   - idle → sendMessage()
-            //   - streaming → inferenceTask?.cancel() (real GPU stop)
+            // Two-state right-side action button: send / stop.
+            //   - Streaming → stop.fill, gray, tap cancels inference
+            //   - Otherwise → arrow.up, NodAccent, tap sends
+            // `.contentTransition(.symbolEffect(.replace.downUp))`
+            // morphs the icon smoothly; fill animates via `.animation`
+            // on the role. Mic is a separate button above — this one
+            // never becomes a mic.
+            let role = SendButtonRole.from(isInferring: isInferring)
             Button {
-                if isInferring {
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                    inferenceTask?.cancel()
-                } else {
-                    sendMessage()
-                }
+                handleSendButtonTap(role: role)
             } label: {
                 ZStack {
                     Circle()
-                        .fill(sendButtonFill)
+                        .fill(sendButtonFill(for: role))
                         .frame(width: 32, height: 32)
-                    Image(systemName: isInferring ? "stop.fill" : "arrow.up")
+                    Image(systemName: role.iconName)
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(sendButtonIconColor)
+                        .foregroundStyle(sendButtonIconColor(for: role))
                         .contentTransition(.symbolEffect(.replace.downUp))
                 }
-                .animation(.easeInOut(duration: 0.15), value: isInferring)
+                .animation(.easeInOut(duration: 0.15), value: role)
             }
-            .disabled(isInferring ? inferenceTask == nil : !sendEnabled)
-            .accessibilityLabel(isInferring ? "Stop response" : "Send message")
-            .accessibilityHint(isInferring
-                ? "Stops the current reply; partial text is preserved"
-                : "")
+            .disabled(isSendButtonDisabled(for: role))
+            .accessibilityLabel(role.a11yLabel)
+            .accessibilityHint(role.a11yHint)
         }
     }
 
-    /// Fill color for the send/stop button. Orange NodAccent in idle
-    /// state (the "you'd send here" affordance), neutral gray when
-    /// streaming (the "this is a different action" visual tell). Also
-    /// dims to secondary fill when the button is genuinely disabled
-    /// (pre-hydrate, empty input, etc.).
-    private var sendButtonFill: Color {
-        if isInferring {
+    /// True when we're actively capturing voice. Used to morph the
+    /// mic button into a stop button and to show the edge glow.
+    private var isRecording: Bool {
+        switch dictationRecognizer.state {
+        case .listening, .requestingPermission:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Dedicated mic button (left of the text field). Two-state:
+    ///   - Not recording: mic icon, tap → `recognizer.start()`
+    ///   - Recording:     stop icon, tap → `recognizer.commit()`
+    ///     transcript lands in the input field via the state observer
+    ///     on recognizer.state == .committed.
+    private var micButton: some View {
+        Button {
+            hasTappedMic = true
+            if isRecording {
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                dictationRecognizer.commit()
+            } else {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                Task { await dictationRecognizer.start() }
+            }
+        } label: {
+            Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isRecording ? .black : Color("NodAccent"))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle().fill(
+                        isRecording ? Color("NodAccent") : Color(.secondarySystemBackground)
+                    )
+                )
+                .contentTransition(.symbolEffect(.replace.downUp))
+                .symbolEffect(
+                    .pulse,
+                    options: .repeat(2),
+                    isActive: !hasTappedMic && !isRecording
+                )
+        }
+        .animation(.easeInOut(duration: 0.15), value: isRecording)
+        .accessibilityLabel(isRecording ? "Stop dictation" : "Start dictation")
+        .accessibilityHint(isRecording
+            ? "Inserts the transcript into the message field"
+            : "Records what you say and transcribes it")
+    }
+
+    /// Siri-style edge glow that traces the phone's outer rectangle
+    /// when dictation is active. Single stroked rounded-rectangle
+    /// with a blurred NodAccent outline. No rotation, no
+    /// repeatForever — just an opacity fade driven by `isRecording`
+    /// via the parent's `.animation` modifier. Safe by construction.
+    private var recordingEdgeGlow: some View {
+        RoundedRectangle(cornerRadius: 58, style: .continuous)
+            .inset(by: -4)
+            .stroke(Color("NodAccent"), lineWidth: 16)
+            .blur(radius: 14)
+    }
+
+    /// Handles transcript delivery. When the recognizer commits, we
+    /// pick up `lastFinalText`, append it to the input field, and
+    /// focus the text field so the user can edit or send. Empty
+    /// commit silently dismisses. Fallback on .idle covers the case
+    /// where SwiftUI coalesced .committed→.idle into a single
+    /// delivery.
+    private func handleDictationStateChange(
+        from oldValue: DictationRecognizer.State,
+        to newValue: DictationRecognizer.State
+    ) {
+        // `.committed` is the only reliable delivery signal. The old
+        // `.idle`/`.unavailable` fallback (which read lastFinalText)
+        // was dangerous — it could re-insert the previous session's
+        // transcript if the new start() failed before committing.
+        // The recognizer now clears lastFinalText at start(), and
+        // SpeechAnalyzer's stream-based results reliably hit
+        // `.committed` before transitioning to `.idle`.
+        if case .committed = newValue {
+            deliverTranscript(dictationRecognizer.lastFinalText)
+        }
+    }
+
+    private func deliverTranscript(_ finalText: String) {
+        let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Append to existing text, trim-aware so whitespace-only
+        // drafts don't leave leading spaces before the transcript.
+        let existing = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        inputText = existing.isEmpty ? trimmed : existing + " " + trimmed
+        committedAt = Date()
+        // Raise the keyboard so they can edit or send. Delayed one
+        // tick so focus lands after the send/cancel tap finishes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            inputFocused = true
+        }
+    }
+
+    /// Tap dispatch for the two-state send/stop button.
+    private func handleSendButtonTap(role: SendButtonRole) {
+        switch role {
+        case .stop:
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            inferenceTask?.cancel()
+        case .send:
+            sendMessage()
+        }
+    }
+
+    private func isSendButtonDisabled(for role: SendButtonRole) -> Bool {
+        switch role {
+        case .stop: return inferenceTask == nil
+        case .send: return !sendEnabled
+        }
+    }
+
+    /// Fill color for the send/stop button. NodAccent when ready to
+    /// send; neutral gray when streaming (stop); dim tertiary when
+    /// genuinely disabled (empty input pre-hydrate).
+    private func sendButtonFill(for role: SendButtonRole) -> Color {
+        switch role {
+        case .stop:
             return Color(.secondarySystemBackground)
+        case .send:
+            return sendEnabled ? Color("NodAccent") : Color(.tertiarySystemFill)
         }
-        return sendEnabled ? Color("NodAccent") : Color(.tertiarySystemFill)
     }
 
-    private var sendButtonIconColor: Color {
-        if isInferring {
+    private func sendButtonIconColor(for role: SendButtonRole) -> Color {
+        switch role {
+        case .stop:
             // Black on the gray stop circle for high contrast in both
             // light and dark modes. `.primary` would invert with theme
             // and lose contrast against the neutral gray fill.
             return .primary
+        case .send:
+            return sendEnabled ? .black : .secondary
         }
-        return sendEnabled ? .black : .secondary
     }
 
     private var sendEnabled: Bool {
@@ -2216,4 +2433,46 @@ private struct AFMUnavailableBanner: View {
     ChatView()
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
+}
+
+// MARK: - Post-commit pulse
+
+/// Brief NodAccent underline that fades in-and-out across the input
+/// field after a dictation transcript lands. Purely visual — catches
+/// the user's eye so misheard words get noticed before tap-to-send.
+///
+/// Keyed on a Date trigger passed from ChatView; every new commit
+/// replaces the date and re-triggers the animation via `onChange`.
+private struct PostCommitPulse: View {
+    let trigger: Date
+    @State private var opacity: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Rectangle()
+            .fill(Color("NodAccent"))
+            .frame(maxWidth: .infinity)
+            .frame(height: 2)
+            .opacity(opacity)
+            .onAppear { animate() }
+            .onChange(of: trigger) { _, _ in animate() }
+    }
+
+    private func animate() {
+        // Instant up, then gentle fade out over ~1.5s. Reduce-motion
+        // users get the same signal minus the fade (still attention
+        // without movement).
+        if reduceMotion {
+            opacity = 1
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                opacity = 0
+            }
+            return
+        }
+        opacity = 1
+        withAnimation(.easeOut(duration: 1.5)) {
+            opacity = 0
+        }
+    }
 }

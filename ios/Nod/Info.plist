@@ -44,5 +44,9 @@
 	<false/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Nod uses Face ID to keep your journal private on this device.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Nod uses on-device speech recognition so you can talk instead of type. Your voice never leaves this device.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nod uses the microphone to hear what you say when you tap the mic. Your voice never leaves this device.</string>
 </dict>
 </plist>

@@ -302,6 +302,13 @@ struct SidebarView: View {
                     }
                 } header: {
                     Text("About")
+                } footer: {
+                    // Product stance, surfaced so the "why doesn't
+                    // it talk back?" question has an answer users
+                    // can find without asking. Nod listens (voice
+                    // in) but writes replies (text out) on purpose —
+                    // see design notes in the voice feature plan.
+                    Text("Nod listens but never speaks — replies arrive as writing, on purpose.")
                 }
             }
             // The Personalisation free-form TextField brings up the

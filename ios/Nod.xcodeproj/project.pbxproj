@@ -12,6 +12,7 @@
 		10533DEC2A85635650C1859F /* MLXEngineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495EE64172900DB2BC77D01B /* MLXEngineClient.swift */; };
 		118A13A5160E568B829AA1C0 /* ExtractedEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC922C8DEBEDEA243AF03846 /* ExtractedEntity.swift */; };
 		192E639D634F41A1DAEEC035 /* EntityExtractorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3F0CEBCAA938ADC34A73BD /* EntityExtractorService.swift */; };
+		1FBC0CECC5A173C3B38AFE79 /* DictationRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222263F4E36038A02EDE3442 /* DictationRecognizer.swift */; };
 		2402546061ADBA7D14B734A8 /* LaunchCrashBreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760F42DE20FF786A995C7621 /* LaunchCrashBreaker.swift */; };
 		2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FD58A9CC136146214D82403C /* GRDB */; };
 		24D408F3CA747F829DE44292 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */; };
@@ -54,6 +55,7 @@
 		0D5DAEB03E40D203EEAD3708 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		114CF100E130E7C854FBB3BD /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		1A6F4141A334B9AFB3C05FBD /* EntityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityStore.swift; sourceTree = "<group>"; };
+		222263F4E36038A02EDE3442 /* DictationRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecognizer.swift; sourceTree = "<group>"; };
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
 		2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockManager.swift; sourceTree = "<group>"; };
 		30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationStore.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 		41C8C3B2952D77AA18801C9E /* Inference */ = {
 			isa = PBXGroup;
 			children = (
+				222263F4E36038A02EDE3442 /* DictationRecognizer.swift */,
 				964ADD3303489CFCB3C4EF5D /* DownloadEvent.swift */,
 				5EF1D28D4CE6A1E6F644BF24 /* DownloadMetrics.swift */,
 				71720E33D89D0A92B33AD8AB /* DownloadTuning.swift */,
@@ -305,6 +308,7 @@
 				C24E2CCA2BCF01FB3AD383D9 /* AppLockOverlay.swift in Sources */,
 				36209BB2C752B19E2900045C /* ChatView.swift in Sources */,
 				AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */,
+				1FBC0CECC5A173C3B38AFE79 /* DictationRecognizer.swift in Sources */,
 				F5A6DE494F786A55459B30F4 /* DownloadEvent.swift in Sources */,
 				771A5D99B8B6FB6CCF6E0FE3 /* DownloadMetrics.swift in Sources */,
 				0CA4A1858373C7DC8EE573C4 /* DownloadTuning.swift in Sources */,
