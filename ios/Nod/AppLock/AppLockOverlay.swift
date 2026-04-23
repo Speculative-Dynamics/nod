@@ -6,8 +6,12 @@
 // Design choices:
 //   - Same visual language as SplashView so the transition from splash →
 //     lock → chat feels like one continuous reveal, not a hard cut.
-//   - The face DOESN'T blink while locked. Locked Nod is a waiting Nod,
-//     not a fidgeting one. Eyes open, steady, until you unlock.
+//   - Face blinks at the idle cadence (same as nav bar, onboarding,
+//     empty state). The earlier "steady waiting Nod" stance conflated
+//     blinking with fidgeting — a 4.5s-interval blink is the minimum
+//     life signal, not restlessness. Keeping the lock face alive keeps
+//     it from reading as dead on the occasions the user sits with this
+//     screen (Face ID cancel, retry, passcode fallback).
 //   - Auto-prompt Face ID on appear. If the user cancels, the Unlock
 //     button lets them retry on their own schedule.
 //   - No "Forgot passcode" affordance. If Face ID fails the system
@@ -24,22 +28,11 @@ struct AppLockOverlay: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 28) {
-                // Large Nod face, steady — no blinking while locked.
-                ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color("NodAccent"))
-                        .frame(width: 96, height: 96)
-
-                    HStack(spacing: 16) {
-                        Ellipse()
-                            .fill(Color.black)
-                            .frame(width: 16, height: 24)
-                        Ellipse()
-                            .fill(Color.black)
-                            .frame(width: 16, height: 24)
-                    }
-                }
-                .accessibilityHidden(true)
+                // Large Nod face. Blinks at the idle cadence so the
+                // character still reads as "present" while you're
+                // locked out — see the design note at top of file.
+                NodMascotBlinker(size: 96)
+                    .accessibilityHidden(true)
 
                 VStack(spacing: 6) {
                     Text("Nod is locked.")

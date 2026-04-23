@@ -2164,11 +2164,11 @@ private struct AFMUnavailableOnboarding: View {
     // MARK: Hero
 
     /// 88pt mascot — the hero size. Larger than the 32pt nav-bar
-    /// mascot; codified as the "hero moment" token. Uses the canonical
-    /// NodMascot so the onboarding first-impression matches the app
-    /// icon users just tapped.
+    /// mascot; codified as the "hero moment" token. NodMascotBlinker
+    /// so the face feels alive while users read onboarding copy —
+    /// a frozen 88pt face reads cold on a screen users sit with.
     private var heroMascot: some View {
-        NodMascot(size: 88)
+        NodMascotBlinker(size: 88)
             .padding(.top, 64)
             .padding(.bottom, 28)
             .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)

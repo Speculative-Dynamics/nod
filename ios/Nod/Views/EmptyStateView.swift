@@ -1,19 +1,16 @@
 // EmptyStateView.swift
 // Shown when the conversation has zero messages (first launch, after clear).
 //
-// Visual: large version of the Nod face (app icon), doing a slow single blink
-// every 4-5 seconds. Centered vertically above the input field. Headline:
-// time-of-day aware ("Good morning", "I'm listening.", "How was today?", etc.).
-// Body: one line of gentle guidance.
+// Visual: 80pt Nod face (NodMascotBlinker) slowly blinking. Centered
+// vertically above the input field. Headline is time-of-day aware
+// ("Good morning", "I'm listening.", "How was today?", etc.). Body is
+// one line of gentle guidance.
 //
 // The input field IS the CTA. No buttons, no "Get Started."
 
 import SwiftUI
 
 struct EmptyStateView: View {
-    @State private var timer: Timer?
-    @State private var blinkOn = false
-
     /// Recomputed each time the view appears. Not reactive — the empty
     /// state only exists before the first message is sent, so a user
     /// crossing a time boundary while staring at it is a non-issue.
@@ -21,24 +18,12 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            // Large Nod face (80pt) — eyes blink slowly.
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color("NodAccent"))
-                    .frame(width: 80, height: 80)
-
-                HStack(spacing: 14) {
-                    Ellipse()
-                        .fill(Color.black)
-                        .frame(width: 14, height: 20)
-                    Ellipse()
-                        .fill(Color.black)
-                        .frame(width: 14, height: 20)
-                }
-                .scaleEffect(y: blinkOn ? 0.1 : 1.0, anchor: .center)
-                .animation(.easeInOut(duration: 0.2), value: blinkOn)
-            }
-            .accessibilityHidden(true)
+            // Large Nod face (80pt). NodMascotBlinker owns the blink
+            // cadence and jitter — same implementation as the nav-bar
+            // mascot, so two blinkers on screen stay naturally
+            // desynced.
+            NodMascotBlinker(size: 80)
+                .accessibilityHidden(true)
 
             VStack(spacing: 8) {
                 Text(greeting.headline)
@@ -55,26 +40,7 @@ struct EmptyStateView: View {
             .accessibilityLabel("\(greeting.headline). \(greeting.subline)")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            greeting = Greeting.forNow()
-            startBlinking()
-        }
-        .onDisappear { stopBlinking() }
-    }
-
-    private func startBlinking() {
-        timer = Timer.scheduledTimer(withTimeInterval: 4.5, repeats: true) { _ in
-            Task { @MainActor in
-                blinkOn = true
-                try? await Task.sleep(for: .milliseconds(200))
-                blinkOn = false
-            }
-        }
-    }
-
-    private func stopBlinking() {
-        timer?.invalidate()
-        timer = nil
+        .onAppear { greeting = Greeting.forNow() }
     }
 }
 
