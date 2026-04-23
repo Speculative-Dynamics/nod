@@ -122,6 +122,7 @@
         />
 
         <link rel="stylesheet" href="/styles.css" />
+        <link rel="stylesheet" href="/extra.css" />
 
         <!-- Structured data: Organization + iOS app + Website -->
         <script type="application/ld+json">
@@ -225,33 +226,30 @@
 
         <!-- Everything below hero sits on a warm paper sheet -->
         <div class="paper-sheet">
-            <!-- ============ LISTENING PHILOSOPHY ============ -->
-            <section
-                class="section section--listening"
-                id="listening"
-                data-reveal
-            >
+            <!-- ============ LISTENING PHILOSOPHY (+ empty.png) ============ -->
+            <section class="section section--listening" id="listening" data-reveal>
                 <div class="container">
-                    <p class="eyebrow">I'm listening.</p>
-                    <h2 class="display">
-                        Nod doesn't<br />
-                        fix. It <em>listens.</em>
-                    </h2>
-                    <div class="split">
-                        <div class="split__body">
-                            <p>
-                                Most apps try to do something with you. Nod just
-                                sits with you. Type what's on your mind — or tap
-                                the mic and speak. A small model reads what you
-                                wrote, and writes back the way a careful friend
-                                would.
-                            </p>
-                            <p>
-                                No advice. No cheerleading. No productivity
-                                journey. Real presence doesn't announce itself.
-                            </p>
-                        </div>
-                        <div class="split__aside">
+                    <div class="showcase">
+                        <div class="showcase__text">
+                            <p class="eyebrow">I'm listening.</p>
+                            <h2 class="display">
+                                Nod doesn't<br />
+                                fix. It <em>listens.</em>
+                            </h2>
+                            <div class="body">
+                                <p>
+                                    Most apps try to do something with you. Nod
+                                    just sits with you. Type what's on your
+                                    mind — or tap the mic and speak. A small
+                                    model reads what you wrote, and writes back
+                                    the way a careful friend would.
+                                </p>
+                                <p>
+                                    No advice. No cheerleading. No productivity
+                                    journey. Real presence doesn't announce
+                                    itself.
+                                </p>
+                            </div>
                             <blockquote class="pull">
                                 <p>
                                     "Your job is not to solve problems.<br />
@@ -260,11 +258,255 @@
                                 <cite>— from Nod's listening prompt</cite>
                             </blockquote>
                         </div>
+                        <div class="showcase__screen">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/empty.png"
+                                    alt="Nod app empty state: large orange mascot centered, with the line 'I'm listening.' underneath and an input field at the bottom."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ============ ON-DEVICE ============ -->
+            <!-- ============ OFFLINE (+ chat.png) ============ -->
+            <section class="section" id="offline" data-reveal>
+                <div class="container">
+                    <div class="showcase showcase--reverse">
+                        <div class="showcase__text">
+                            <p class="eyebrow">No signal? No problem.</p>
+                            <h2 class="display">
+                                Listens even when you<br />
+                                <em>can't connect.</em>
+                            </h2>
+                            <div class="body">
+                                <p>
+                                    On a plane. In a tunnel. On a trail with
+                                    one bar. Nod doesn't care — the entire
+                                    conversation runs on the same chip that
+                                    renders this message. No network required.
+                                </p>
+                                <p>
+                                    Apple Intelligence is ready the moment you
+                                    install the app. If you switch to an
+                                    open-weights engine in settings, the
+                                    weights download once, then they're yours
+                                    forever. After that, Nod is as offline as
+                                    your camera.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="showcase__screen">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/chat.png"
+                                    alt="Nod app mid-conversation: a few user and Nod turns shown in rounded gray message bubbles on a dark background."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ ENGINES (+ engines.png) ============ -->
+            <section class="section" id="engines" data-reveal>
+                <div class="container">
+                    <div class="showcase">
+                        <div class="showcase__text">
+                            <p class="eyebrow">Your call.</p>
+                            <h2 class="display">
+                                Pick the mind<br />
+                                that <em>listens.</em>
+                            </h2>
+                            <div class="body">
+                                <p>
+                                    Nod ships with <strong>four</strong>
+                                    on-device engines. Apple's own model is the
+                                    default, so Nod works the second you open
+                                    it — no download, nothing to configure.
+                                </p>
+                                <p>
+                                    Prefer open weights? Switch to
+                                    <strong>Qwen 3 Instruct 2507</strong>,
+                                    <strong>Qwen 3.5 4B</strong>, or
+                                    <strong>Gemma 4 E2B</strong> in settings.
+                                    Nod pulls the weights once over Wi-Fi, then
+                                    runs them entirely on your phone. No
+                                    accounts, no API keys, no tokens to
+                                    budget.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="showcase__screen">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/engines.png"
+                                    alt="Nod settings sidebar showing the Listening model section with four engines: Apple Intelligence (selected), Qwen 3 Instruct 2507, Qwen 3.5 4B, and Gemma 4 E2B."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ MEMORY (+ memory.png) ============ -->
+            <section class="section" id="memory" data-reveal>
+                <div class="container">
+                    <div class="showcase showcase--reverse">
+                        <div class="showcase__text">
+                            <p class="eyebrow">Nod remembers.</p>
+                            <h2 class="display">
+                                What matters to you,<br />
+                                <em>on your phone.</em>
+                            </h2>
+                            <div class="body">
+                                <p>
+                                    After each conversation, Nod quietly picks
+                                    up the details that seem to matter — the
+                                    people in your life, the things you're
+                                    working on, the situations you keep coming
+                                    back to. It writes them down in a list you
+                                    can actually see.
+                                </p>
+                                <p>
+                                    Any entry you want gone, you swipe away.
+                                    Want to wipe the whole thing? Tap
+                                    <em>Start fresh.</em> It's all local — no
+                                    profile builds up in a data center
+                                    somewhere, because there is no data
+                                    center.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="showcase__screen">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/memory.png"
+                                    alt="Nod Memory view listing what the app has picked up: People, Ongoing situations, and Projects, each with a few entries."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ VOICE (+ voice.png) ============ -->
+            <section class="section" id="voice" data-reveal>
+                <div class="container">
+                    <div class="showcase">
+                        <div class="showcase__text">
+                            <p class="eyebrow">Speak, don't type.</p>
+                            <h2 class="display">
+                                Or just <em>talk.</em>
+                            </h2>
+                            <div class="body">
+                                <p>
+                                    Tap the mic and start speaking. A warm
+                                    orange glow hugs the edge of the screen
+                                    while Nod listens. It commits when you
+                                    pause — no tap required.
+                                </p>
+                                <p>
+                                    Transcription runs on-device using iOS 26's
+                                    <code>SpeechAnalyzer</code>. What you say
+                                    never leaves the phone, not even for
+                                    speech-to-text.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="showcase__screen">
+                            <div class="screen-frame screen-frame--voice">
+                                <img
+                                    src="/assets/screens/voice.png"
+                                    alt="Nod voice input active: an orange glow traces the screen edge and the stop button is visible next to the input field."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ MAKE IT YOURS + LOCKED (two-up) ============ -->
+            <section
+                class="section section--nod"
+                id="make-it-yours"
+                data-reveal
+            >
+                <div class="container container--narrow">
+                    <p class="eyebrow">Tune it. Lock it.</p>
+                    <h2 class="display">
+                        Make it yours.<br />
+                        Keep it <em>yours.</em>
+                    </h2>
+                    <div class="body">
+                        <p>
+                            Two quiet pickers and a free-form field let you
+                            shape how Nod talks to you — shorter or deeper,
+                            pure listening or a little reflection. Add a line
+                            about yourself and Nod tucks it into every
+                            response.
+                        </p>
+                        <p>
+                            Turn on <strong>Require Face ID</strong> and the
+                            whole app sits behind biometric auth. Close it,
+                            open it, the conversation waits for you — nobody
+                            else.
+                        </p>
+                    </div>
+
+                    <div class="screen-pair">
+                        <div class="screen-pair__item">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/personalization.png"
+                                    alt="Nod Personalisation settings: Response style picker, How Nod responds picker, and a free-form text field."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                            <p class="screen-pair__caption">Shape the voice</p>
+                        </div>
+                        <div class="screen-pair__item">
+                            <div class="screen-frame">
+                                <img
+                                    src="/assets/screens/lock.png"
+                                    alt="Nod lock screen: mascot centered with 'Nod is locked.' and an Unlock button."
+                                    width="1206"
+                                    height="2622"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </div>
+                            <p class="screen-pair__caption">Keep it private</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ ON-DEVICE (facts grid) ============ -->
             <section class="section section--ondevice" id="privacy" data-reveal>
                 <div class="container">
                     <p class="eyebrow">Privacy is architecture.</p>
@@ -380,37 +622,6 @@
                         >
                             <span class="btn__arrow">→</span> Read the license
                         </a>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ============ EMPTY STATE ============ -->
-            <section class="section section--nod" id="empty-state" data-reveal>
-                <div class="container container--narrow">
-                    <p class="eyebrow">The first moment.</p>
-                    <h2 class="display">
-                        When you open Nod,<br />
-                        it blinks. And <em>waits.</em>
-                    </h2>
-                    <div class="body">
-                        <p>
-                            No onboarding flow. No "how can I help you today?"
-                            No suggested prompts, no tutorial, no sign-in. Just
-                            a quiet orange face with slow eyes that blink every
-                            few seconds, and two words underneath —
-                            <em>I'm listening.</em>
-                        </p>
-                        <p>
-                            Start typing when you're ready. Or don't. Nod is in
-                            no rush.
-                        </p>
-                    </div>
-                    <div class="nod-demo" aria-hidden="true">
-                        <div class="nod-face">
-                            <div class="nod-face__eye"></div>
-                            <div class="nod-face__eye"></div>
-                        </div>
-                        <p class="nod-demo__caption">I'm listening.</p>
                     </div>
                 </div>
             </section>

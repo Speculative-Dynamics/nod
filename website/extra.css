@@ -1,0 +1,136 @@
+
+/* =====================================================================
+   SCREEN FRAME — display real app screenshots as product cards.
+   No fake device chrome: rounded corners matching iPhone 17 Pro's
+   ~54px screen radius, subtle shadow, faint edge highlight to
+   suggest the bezel without pretending to be hardware.
+   ===================================================================== */
+.screen-frame {
+    display: block;
+    width: 100%;
+    max-width: clamp(220px, 26vw, 320px);
+    aspect-ratio: 1206 / 2622;
+    margin: 0 auto;
+    border-radius: clamp(32px, 4.2vw, 52px);
+    overflow: hidden;
+    background: #000;
+    box-shadow:
+        0 1px 0 0.5px rgba(255, 255, 255, 0.4) inset,
+        0 0 0 1px rgba(42, 38, 32, 0.08),
+        0 24px 60px -16px rgba(42, 38, 32, 0.35),
+        0 6px 16px -4px rgba(42, 38, 32, 0.18);
+    position: relative;
+    transform: translateZ(0); /* clean subpixel rendering */
+}
+.screen-frame img,
+.screen-frame picture,
+.screen-frame picture img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+}
+
+/* Pulsing orange glow wrapper for the voice-input screen — mirrors the
+   in-app SwiftUI glow (NodAccent stroke + blur) at landing-page scale */
+.screen-frame--voice {
+    position: relative;
+}
+.screen-frame--voice::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border-radius: inherit;
+    border: 8px solid var(--nod-orange);
+    filter: blur(14px);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: -1;
+    animation: screen-voice-pulse 2.2s ease-in-out infinite;
+}
+@keyframes screen-voice-pulse {
+    0%,
+    100% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.75;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .screen-frame--voice::before {
+        animation: none;
+        opacity: 0.55;
+    }
+}
+
+/* =====================================================================
+   SHOWCASE SECTIONS — two-column layout (copy + screen)
+   Alternates left/right; collapses to single column on mobile.
+   ===================================================================== */
+.showcase {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(2rem, 6vw, 5rem);
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.showcase--reverse .showcase__text {
+    order: 2;
+}
+.showcase--reverse .showcase__screen {
+    order: 1;
+}
+.showcase__text {
+    min-width: 0;
+}
+.showcase__screen {
+    display: grid;
+    place-items: center;
+}
+
+@media (max-width: 880px) {
+    .showcase {
+        grid-template-columns: 1fr;
+        gap: 2.5rem;
+    }
+    .showcase--reverse .showcase__text {
+        order: 2;
+    }
+    .showcase--reverse .showcase__screen {
+        order: 1;
+    }
+}
+
+/* Two-up layout (personalization + lock) */
+.screen-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.screen-pair .screen-frame {
+    max-width: clamp(180px, 20vw, 260px);
+}
+.screen-pair__item {
+    display: grid;
+    place-items: center;
+}
+.screen-pair__caption {
+    margin: 1rem 0 0;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-warm-mute);
+    text-align: center;
+}
+@media (max-width: 640px) {
+    .screen-pair {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+}
