@@ -1,6 +1,6 @@
 // DownloadMetrics.swift
 // What the UI shows on a downloading-state card. Carried inside the
-// QwenClient.State enum cases that can show progress (.downloading,
+// MLXEngineClient.State enum cases that can show progress (.downloading,
 // .waitingForNetwork, .waitingForWifi, .paused). Bundling all the numbers
 // into one struct keeps the state cases small and makes equality checks
 // efficient.

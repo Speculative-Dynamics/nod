@@ -21,8 +21,8 @@ packages:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
   # MLX Swift — Apple's array/ML framework + LLM runners. Provides
-  # MLXLLM and MLXLMCommon products used by QwenClient to load and
-  # run on-device language models.
+  # MLXLLM and MLXLMCommon products used by MLXEngineClient to load
+  # and run on-device language models.
   #
   # This was previously `mlx-swift-examples` 2.29.1. The MLX team split
   # the examples repo from the library code in late 2025; model
@@ -35,7 +35,7 @@ packages:
   # and downloader loading. We load from a pre-populated local
   # directory, so we're on the simpler side of the migration: we drop
   # the `Hub` dependency entirely and call `loadModelContainer(from:
-  # URL)` directly. See QwenClient.performLoad for the new call.
+  # URL)` directly. See MLXEngineClient.performLoad for the new call.
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     from: "3.31.3"
