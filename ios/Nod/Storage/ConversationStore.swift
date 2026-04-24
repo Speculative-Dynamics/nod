@@ -12,7 +12,13 @@
 // message is sent to the LLM as full-fidelity context.
 
 import Foundation
+import OSLog
 import SwiftUI
+
+/// Diagnostic logger for conversation + memory pipeline events. Shared
+/// category with EntityStore so `category:memory` in Console surfaces
+/// the full trigger → extract → ingest → persist sequence in one stream.
+private let memoryLog = Logger(subsystem: "app.usenod.nod", category: "memory")
 
 @MainActor
 final class ConversationStore: ObservableObject {
@@ -416,11 +422,13 @@ final class ConversationStore: ObservableObject {
             self.summary = resolvedSummary
             // Now async — precomputes embeddings off-main, applies state
             // changes on-main. See EntityStore.ingest(_:) for detail.
+            memoryLog.info("compression: ingesting \(resolvedExtracted.items.count, privacy: .public) extracted items from batch of \(oldest.count, privacy: .public)")
             await self.entityStore.ingest(resolvedExtracted)
         } catch {
             // Compression is best-effort — if it fails this pass, the
             // un-summarized backlog grows by one batch and we retry on
             // the next high-water trip. The conversation keeps working.
+            memoryLog.error("compression: pass failed — \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -440,9 +448,11 @@ final class ConversationStore: ObservableObject {
     ///     in-flight when the app was killed
     private func maybeRunIncrementalExtraction() {
         if incrementalExtractionTask != nil {
+            memoryLog.info("incremental: trigger coalesced — task already running")
             extractionWantsRerun = true
             return
         }
+        memoryLog.info("incremental: scheduling extraction task")
         incrementalExtractionTask = Task.detached(priority: .utility) { [weak self] in
             await self?.runIncrementalExtraction()
         }
@@ -459,21 +469,28 @@ final class ConversationStore: ObservableObject {
                 // catch-up pass. The new task will re-check the DB for
                 // any still-unextracted rows.
                 if shouldRerun {
+                    memoryLog.info("incremental: rerun requested, scheduling catch-up")
                     self.maybeRunIncrementalExtraction()
                 }
             }
         }
         do {
             let batch = try database.fetchUnextractedMessages(limit: INCREMENTAL_EXTRACTION_WINDOW)
-            guard !batch.isEmpty else { return }
+            guard !batch.isEmpty else {
+                memoryLog.info("incremental: no unextracted messages, skipping")
+                return
+            }
+            memoryLog.info("incremental: processing \(batch.count, privacy: .public) unextracted messages")
             await extractAndIngest(messages: batch)
             try database.markEntitiesExtracted(ids: batch.map(\.id))
+            memoryLog.info("incremental: marked \(batch.count, privacy: .public) messages as extracted")
         } catch {
             // Best-effort. If this pass fails, the watermark column stays
             // NULL for the batch and the next trigger retries them. The
             // compression pass (running at the 12-message mark via
             // markCompressed) is the backstop that prevents permanent
             // loss if incremental keeps failing.
+            memoryLog.error("incremental: pass failed — \(String(describing: error), privacy: .public)")
         }
     }
 

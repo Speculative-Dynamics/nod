@@ -616,7 +616,9 @@ final class EntityStore: ObservableObject {
         do {
             try database.upsertEntity(entity)
             entities[index] = entity
+            memoryLog.info("persistAndCache: updated entity \(entity.canonicalName, privacy: .public) (mentionCount=\(entity.mentionCount, privacy: .public))")
         } catch {
+            memoryLog.error("persistAndCache: upsertEntity threw for \(entity.canonicalName, privacy: .public): \(String(describing: error), privacy: .public)")
             // DB write failed. `entities[index]` still holds the old
             // version. The caller (updateExisting / resolve) has
             // already applied the new vector to the cache via
