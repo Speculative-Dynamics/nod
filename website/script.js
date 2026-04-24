@@ -113,107 +113,171 @@
       .to(".hero__sub", { opacity: 1, y: 0, duration: 0.8 }, "-=0.6")
       .to(".hero__cta", { opacity: 1, y: 0, duration: 0.7 }, "-=0.5");
 
-    /* --- Hero video parallax (smooth scroll-linked) ---------------- */
-    const heroVideo = document.querySelector(".hero__video");
-    const hero = document.querySelector(".hero");
-    if (heroVideo && hero) {
-      gsap.to(heroVideo, {
-        yPercent: 18,
-        ease: "none",
-        scrollTrigger: {
-          trigger: hero,
-          start: "top top",
-          end: "bottom top",
-          scrub: 0.6,
-        },
-      });
-    }
+    /* --- HERO STAGE: pinned scroll transition --------------------------
+       The fullscreen hero video morphs via clip-path down to the phone's
+       screen area. Simultaneously the hero intro fades out, the phone
+       bezel + screenshot fade in, and the Section 01 outro copy fades
+       in beside the phone. The whole thing is one continuous opening. */
+    const heroStage = document.querySelector(".hero--stage");
+    const heroBackdrop = document.querySelector(".hero__backdrop");
+    const heroVideoWrap = document.querySelector(".hero--stage .hero__video-wrap");
+    const heroIntro = document.querySelector(".hero--stage .hero__content");
+    const heroPhoneStage = document.querySelector(".hero__phone-stage");
+    const heroPhoneBezel = document.querySelector(".hero__phone-bezel");
+    const heroScreens = document.querySelectorAll(".hero__screen");
+    const heroChapters = document.querySelectorAll(".hero__chapter");
+    const heroProps = document.querySelectorAll(".hero__prop");
+    const heroScrollHint = document.querySelector(".hero--stage .hero__scroll");
 
-    /* --- Hero wash opacity increases as you scroll past ------------ */
-    const wash = document.querySelector(".hero__wash");
-    if (wash && hero) {
-      gsap.to(wash, {
-        opacity: 1.35,
-        ease: "none",
-        scrollTrigger: {
-          trigger: hero,
-          start: "top top",
-          end: "bottom top",
-          scrub: true,
-        },
-      });
-    }
+    // Only run pinned transition on viewports where the phone stage fits
+    // (wide enough for two columns). Mobile gets a plain hero.
+    const canPin = heroStage && heroPhoneStage &&
+      window.matchMedia("(min-aspect-ratio: 1/1) and (min-width: 901px)").matches;
 
-    /* --- Showcase sections: stagger children in on enter ----------- */
-    const showcaseSections = document.querySelectorAll(
-      "[data-reveal] > .container > .showcase, [data-reveal] > .container > .screen-pair"
-    );
-    showcaseSections.forEach((showcase) => {
-      const section = showcase.closest("[data-reveal]");
-      const text = showcase.querySelector(".showcase__text");
-      const screen = showcase.querySelector(
-        ".showcase__screen, .screen-pair__item"
-      );
-      const screenPairItems = showcase.classList.contains("screen-pair")
-        ? showcase.querySelectorAll(".screen-pair__item")
-        : null;
+    if (canPin) {
+      // 7 chapters stacked on top of each other. Phase 0 = the hero-to-phone
+      // transition AND the first chapter (Listening) ramping in. Phase N =
+      // crossfade from chapter N-1 to chapter N.
+      const TOTAL_CHAPTERS = 7;
+      const PIN_SPAN = 8400; // px of scroll (~9.3vh) — 1200px per chapter
 
-      // Set initial states
-      if (text) gsap.set(text.children, { opacity: 0, y: 30 });
-      if (screenPairItems) {
-        gsap.set(screenPairItems, { opacity: 0, y: 40, scale: 0.94 });
-      } else if (screen) {
-        gsap.set(screen, { opacity: 0, y: 40, scale: 0.94 });
-      }
+      // Initial state
+      gsap.set(heroPhoneBezel, { opacity: 0 });
+      gsap.set(heroScreens, { opacity: 0 });
+      gsap.set(heroChapters, { opacity: 0, y: 20 });
+      gsap.set(heroProps, { opacity: 0 });
 
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: section,
-          start: "top 78%",
-          toggleActions: "play none none none",
-        },
-        defaults: { ease: "power3.out" },
-      });
-
-      if (text) {
-        tl.to(text.children, {
-          opacity: 1,
-          y: 0,
-          duration: 0.9,
-          stagger: 0.09,
-        });
-      }
-
-      if (screenPairItems) {
-        tl.to(
-          screenPairItems,
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 1,
-            stagger: 0.18,
+      // Compute the clip-path inset that matches the phone-stage rect.
+      // Recomputed on resize so the morph always lands accurately.
+      const computeTargets = () => {
+        const rect = heroPhoneStage.getBoundingClientRect();
+        const hostRect = heroStage.getBoundingClientRect();
+        return {
+          clip: {
+            top: rect.top - hostRect.top,
+            right: hostRect.right - rect.right,
+            bottom: hostRect.bottom - rect.bottom,
+            left: rect.left - hostRect.left,
+            radius: Math.max(24, Math.min(48, rect.width * 0.15)),
           },
-          "-=0.7"
-        );
-      } else if (screen) {
-        tl.to(
-          screen,
-          { opacity: 1, y: 0, scale: 1, duration: 1 },
-          "-=0.7"
-        );
-      }
+        };
+      };
 
-      section.classList.add("is-in"); // compat marker
-    });
+      let target = computeTargets();
+      window.addEventListener("resize", () => {
+        target = computeTargets();
+      });
 
-    /* --- Non-showcase data-reveal sections (facts, source, download,
-           footer): simple staggered children reveal --------------- */
-    const plainReveals = document.querySelectorAll("[data-reveal]");
-    plainReveals.forEach((section) => {
-      if (section.querySelector(".showcase, .screen-pair")) return;
+      // Reset clip-path to "no clip" initially
+      heroVideoWrap.style.clipPath = "inset(0px 0px 0px 0px round 0px)";
+
+      // Tent weight function — returns 0..1 based on how close `cp` is to
+      // `peak`. Used for cross-fading chapters, screens, and props.
+      const tentWeight = (cp, peak) => Math.max(0, 1 - Math.abs(cp - peak));
+
+      ScrollTrigger.create({
+        trigger: heroStage,
+        start: "top top",
+        end: `+=${PIN_SPAN}`,
+        pin: true,
+        pinSpacing: true,
+        scrub: 1,
+        // Snap to each chapter peak + the initial hero state. 8 snap
+        // points total (p = 0, 1/7, 2/7, ..., 1). After the user stops
+        // scrolling, the stage gently lands on the nearest peak so each
+        // chapter is held fully visible, not floated past.
+        snap: {
+          snapTo: 1 / TOTAL_CHAPTERS,
+          duration: { min: 0.25, max: 0.6 },
+          ease: "power2.inOut",
+          delay: 0.05,
+        },
+        onUpdate: (self) => {
+          const p = self.progress;
+          // chapterPosition ranges 0..TOTAL_CHAPTERS. Phase 0 = 0..1 (hero
+          // transition). Chapter i peaks at cp = i + 1.
+          const cp = p * TOTAL_CHAPTERS;
+          const phase0 = Math.min(1, cp); // 0..1 during the hero transition
+
+          const tc = target.clip;
+
+          // 1) Clip-path: morph video from full-bleed to phone screen
+          //    during phase 0. After phase 0, holds at phone shape.
+          heroVideoWrap.style.clipPath =
+            `inset(${tc.top * phase0}px ${tc.right * phase0}px ${tc.bottom * phase0}px ${tc.left * phase0}px round ${tc.radius * phase0}px)`;
+
+          // 2) Backdrop: darkens/de-saturates slightly across the pin so
+          //    each chapter feels like a different "room" in the same mood.
+          if (heroBackdrop) {
+            const bd = Math.max(0.35, 1 - p * 0.5);
+            heroBackdrop.style.filter =
+              `brightness(${0.9 * bd}) saturate(${1.08 * bd})`;
+            heroBackdrop.style.opacity = String(0.45 + bd * 0.55);
+          }
+
+          // 3) Hero intro: fades out as phase 0 progresses
+          const introOut = Math.min(1, phase0 * 2);
+          heroIntro.style.opacity = String(1 - introOut);
+          heroIntro.style.transform = `translateY(${-40 * introOut}px)`;
+
+          if (heroScrollHint) {
+            heroScrollHint.style.opacity = String(Math.max(0, 1 - phase0 * 3));
+          }
+
+          // 4) Phone bezel: fades in as the video arrives
+          const bezelIn = Math.max(0, Math.min(1, (phase0 - 0.35) / 0.5));
+          heroPhoneBezel.style.opacity = String(bezelIn);
+
+          // 5) Screens: each screen peaks at cp = (i + 1). Screen 0 has a
+          //    special early delay so the video-to-phone transition reads
+          //    as "video → empty screen" cleanly, not a half-visible cross-fade.
+          heroScreens.forEach((screen, i) => {
+            const peak = i + 1;
+            let w = tentWeight(cp, peak);
+            if (i === 0 && phase0 < 0.8) {
+              w = 0; // hidden during the morph
+            } else if (i === 0 && phase0 < 1) {
+              w = Math.min(w, (phase0 - 0.8) / 0.2);
+            }
+            screen.style.opacity = String(w);
+          });
+
+          // 6) Chapter text: peaks at cp = (i + 1), cross-fades across
+          heroChapters.forEach((chapter, i) => {
+            const peak = i + 1;
+            const w = tentWeight(cp, peak);
+            chapter.style.opacity = String(w);
+            // Subtle vertical drift so inactive chapters don't feel frozen
+            const drift = (cp - peak) * 16; // px
+            chapter.style.transform = `translateY(calc(-50% + ${drift}px))`;
+          });
+
+          // 7) Props: stacked identically. Each prop's data-chapter maps
+          //    to the chapter it supports (chapter 1 = offline pill, etc.).
+          //    Chapter 0 (Listening) has no prop by design.
+          heroProps.forEach((prop) => {
+            const chapterIdx = Number(prop.dataset.chapter);
+            const peak = chapterIdx + 1;
+            const w = tentWeight(cp, peak);
+            prop.style.opacity = String(w);
+          });
+        },
+      });
+    } else if (heroStage) {
+      // Mobile / short viewport: skip the pin transition entirely.
+      // The mobile layout is driven by CSS — each chapter renders
+      // as a regular stacked section with its own inline phone image.
+      heroVideoWrap.style.clipPath = "inset(0px 0px 0px 0px round 0px)";
+      heroStage.classList.add("hero--mobile");
+    }
+
+    /* --- Post-stage data-reveal sections (proof, source, download,
+       footer): stagger their container children in on enter. The
+       pinned stage handles its own reveal; everything below uses this
+       simpler pattern. */
+    document.querySelectorAll("[data-reveal]").forEach((section) => {
       const kids = section.querySelectorAll(
-        ".container > *, .container > .container > *"
+        ".container > *, .container > .container > *, .proof__container > *"
       );
       if (!kids.length) return;
       gsap.set(kids, { opacity: 0, y: 24 });
