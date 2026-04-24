@@ -252,6 +252,16 @@ final class MessageDatabase: @unchecked Sendable {
         }
     }
 
+    /// Diagnostic: raw row count in the entities table. Bypasses the
+    /// entityFromRow decoder (which can drop rows if parsing fails) so
+    /// we can tell "row in DB" from "row in in-memory array". Used by
+    /// EntityStore.hydrate to surface persistence-layer bugs.
+    func entitiesRowCount() throws -> Int {
+        try queue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM entities") ?? 0
+        }
+    }
+
     /// Un-summarized messages only, oldest first. Used to build the context
     /// window for the LLM (summary + these).
     func fetchUnsummarizedMessages() throws -> [Message] {
