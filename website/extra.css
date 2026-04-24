@@ -5,8 +5,13 @@
    ===================================================================== */
 
 :root {
-    --frame-radius: clamp(36px, 4.6vw, 56px);
-    --frame-bezel: 5px;
+    /* Tuned to match iPhone 17 Pro proportions at our rendered widths.
+       Real iPhone device radius is ~15% of device width. At a 300px
+       rendered phone that's ~45px. Bezel thickened to 6px so the
+       outer/inner concentric curves actually read as distinct surfaces
+       instead of a single blurred corner. */
+    --frame-radius: clamp(32px, 3.2vw, 44px);
+    --frame-bezel: 6px;
 }
 
 .screen-frame {
@@ -161,4 +166,1169 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     opacity: 0;
 }
 /* When showcase exists, its children are managed by GSAP directly */
+
+/* =====================================================================
+   SITE ATMOSPHERE — persistent twilight wash behind all content.
+   A heavily-blurred, low-opacity copy of the hero backdrop fixed to
+   the viewport. Sections that would otherwise render on pure black
+   now sit in a warm ambient glow, extending the mood of the hero
+   throughout the page without competing with per-section treatments.
+   ===================================================================== */
+.site-atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 90% 60% at 50% 20%, rgba(255, 120, 50, 0.08), transparent 65%),
+        radial-gradient(ellipse 70% 80% at 80% 85%, rgba(255, 90, 30, 0.06), transparent 70%),
+        url("/assets/hero/desktop.png") center center / cover no-repeat;
+    opacity: 0.18;
+    filter: blur(80px) saturate(1.4) brightness(0.55);
+    /* filter is expensive — keep it in its own layer */
+    transform: translateZ(0);
+    will-change: opacity;
+}
+@media (max-aspect-ratio: 1/1) {
+    .site-atmosphere {
+        background:
+            radial-gradient(ellipse 90% 60% at 50% 20%, rgba(255, 120, 50, 0.08), transparent 65%),
+            radial-gradient(ellipse 70% 80% at 80% 85%, rgba(255, 90, 30, 0.06), transparent 70%),
+            url("/assets/hero/mobile.png") center center / cover no-repeat;
+    }
+}
+/* The hero has its own full-opacity backdrop — the page wash sits behind
+   it and is naturally occluded while the hero is on screen. Nothing
+   extra needed; just don't let the wash's z-index fight the hero. */
+
+/* =====================================================================
+   HERO STAGE — pinned scroll transition: fullscreen video morphs into
+   the phone's screen, section 01 copy fades in beside it.
+   The JS drives:
+     - clip-path on .hero__video-wrap (full → phone-shaped)
+     - opacity on .hero__content (1 → 0)
+     - opacity on .hero__phone-bezel + .hero__phone-screen (0 → 1)
+     - opacity on .hero__outro (0 → 1)
+   ===================================================================== */
+
+.hero--stage {
+    position: relative;
+    height: 100vh;
+    overflow: hidden;
+    isolation: isolate;
+    background: #000;
+}
+
+/* BACKDROP (depth layer 0) — persistent twilight still.
+   Stays full-bleed throughout the transition. As the video shrinks
+   into the phone, this backdrop is revealed behind it, so the scene's
+   atmosphere surrounds the whole viewport. JS drives its brightness
+   and opacity curve during the pin. */
+.hero__backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
+        url("/assets/hero/desktop.png") center center / cover no-repeat;
+    z-index: 0;
+    filter: brightness(0.9) saturate(1.08);
+    will-change: opacity, filter;
+    transform: translateZ(0);
+}
+@media (max-aspect-ratio: 1/1) {
+    .hero__backdrop {
+        background:
+            linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
+            url("/assets/hero/mobile.png") center center / cover no-repeat;
+    }
+}
+
+.hero--stage .hero__video-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    will-change: clip-path;
+    transform: translateZ(0);
+}
+
+
+.hero--stage .hero__video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.hero--stage .hero__wash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, transparent 25%, transparent 60%, rgba(0, 0, 0, 0.55) 100%);
+    z-index: 1;
+}
+
+/* Phone stage target: right half of hero, vertically centered.
+   The bezel and screen image are layered here; the video's clip-path
+   matches this exact rectangle at scroll progress = 1.
+   Sized so the phone reads as one element in the composition, not the
+   whole frame. Max ~72% of viewport height at a 16:9 desktop. */
+.hero__phone-stage {
+    position: absolute;
+    top: 50%;
+    right: 10vw;
+    transform: translateY(-50%);
+    width: 300px;
+    max-width: 22vw;
+    aspect-ratio: 1206 / 2622;
+    z-index: 3;
+    pointer-events: none;
+}
+.hero__phone-bezel {
+    position: absolute;
+    inset: 0;
+    padding: var(--frame-bezel);
+    border-radius: var(--frame-radius);
+    background: linear-gradient(160deg, #1a1a1c 0%, #0c0c0e 50%, #050506 100%);
+    box-shadow:
+        0 0 0 0.5px rgba(255, 255, 255, 0.06) inset,
+        0 1px 0 rgba(255, 255, 255, 0.14) inset,
+        0 28px 70px -24px rgba(0, 0, 0, 0.7),
+        0 10px 28px -8px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    will-change: opacity;
+}
+.hero__phone-bezel::after {
+    content: "";
+    position: absolute;
+    top: calc(var(--frame-bezel) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32%;
+    height: clamp(18px, 1.6vw, 22px);
+    background: #000;
+    border-radius: 999px;
+    z-index: 2;
+}
+/* Screens container inside the bezel. All seven screens stack here
+   and cross-fade as the user scrolls through the pinned chapters. */
+.hero__screens {
+    position: absolute;
+    top: var(--frame-bezel);
+    left: var(--frame-bezel);
+    right: var(--frame-bezel);
+    bottom: var(--frame-bezel);
+    border-radius: calc(var(--frame-radius) - var(--frame-bezel));
+    overflow: hidden;
+}
+.hero__screen {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Match the inner screens-container radius so the image's own
+       corners align with the clip. Belt-and-braces: the container
+       already has overflow:hidden + radius, but translateZ stacking
+       contexts can escape that clip on some browsers. */
+    border-radius: calc(var(--frame-radius) - var(--frame-bezel));
+    opacity: 0;
+    will-change: opacity;
+}
+
+/* Outro (section 01 copy): sits on the LEFT side of the hero,
+   fades in as the phone settles into place. */
+/* Chapters container: fixed slot on the LEFT side of the viewport
+   where chapter copy appears. All 7 chapters stack here; JS cross-fades
+   them as the pinned scroll progresses. */
+.hero__chapters {
+    position: absolute;
+    top: 50%;
+    left: 8vw;
+    transform: translateY(-50%);
+    width: min(44vw, 560px);
+    z-index: 3;
+    pointer-events: none;
+}
+.hero__chapter {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    transform: translateY(-50%);
+    opacity: 0;
+    will-change: opacity, transform;
+}
+.hero__chapter .cinema__headline {
+    margin-top: 2rem;
+}
+
+/* Props container: spans the full hero so each prop can position
+   itself relative to the phone-stage (which sits right-8vw, 50%).
+   Each prop fades in during its chapter and fades out at the end. */
+.hero__props {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+}
+.hero__prop {
+    position: absolute;
+    opacity: 0;
+    will-change: opacity, transform;
+}
+/* Individual prop positioning — place each one ABOVE or BESIDE the
+   phone so they read as floating near it without overlapping text. */
+.hero__prop--offline {
+    top: 22%;
+    right: calc(8vw + 280px); /* just left of the phone */
+    transform: rotate(-2deg);
+}
+.hero__prop--chip {
+    top: 18%;
+    right: calc(8vw + 240px);
+    transform: rotate(2deg);
+}
+.hero__prop--memory {
+    top: 58%;
+    right: calc(8vw + 280px); /* matches other props — clears most of the phone */
+    transform: rotate(-2deg);
+}
+.hero__prop--waveform {
+    top: 24%;
+    right: calc(8vw + 280px);
+    transform: rotate(2deg);
+}
+.hero__prop--faceid {
+    top: 22%;
+    right: calc(8vw + 260px);
+    transform: rotate(-2deg);
+}
+/* Reset the internal prop element positioning so it renders in flow
+   inside its wrapper (wrapper handles layout, prop handles visuals). */
+.hero__prop .cinema__offline-pill,
+.hero__prop .cinema__chip,
+.hero__prop .cinema__memory-card,
+.hero__prop .cinema__waveform,
+.hero__prop .cinema__faceid {
+    position: static;
+    transform: none;
+}
+
+/* Desktop (default): the inline chapter phones are only used on mobile. */
+.hero__chapter-phone {
+    display: none;
+}
+
+/* Mobile: the pin doesn't run. Convert the stacked stage into a
+   normal vertical scroll where each chapter is its own section with
+   the phone image inline below the copy. */
+@media (max-aspect-ratio: 1/1), (max-width: 900px) {
+    /* The stage stops being a fullscreen pinned frame. Zero out the
+       legacy `.hero` padding (80px 20px 40px from styles.css) so the
+       video-wrap reaches edge-to-edge on mobile instead of showing a
+       black frame from the html background through the padding. */
+    .hero--stage {
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+        padding: 0 !important;
+    }
+
+    /* Desktop-only: the centralized pinned phone stage is hidden on
+       mobile (each chapter carries its own inline phone). But the
+       floating props are KEPT and re-homed below their matching
+       chapter via flex ordering. */
+    .hero--stage .hero__phone-stage {
+        display: none;
+    }
+
+    /* Make the stage a flex column so chapters and props can be
+       interleaved. `display: contents` on the two wrappers
+       (.hero__chapters / .hero__props) removes their box so their
+       children become direct children of .hero--stage, participating
+       in its flex layout. */
+    .hero--stage {
+        display: flex;
+        flex-direction: column;
+    }
+    .hero--stage .hero__chapters,
+    .hero--stage .hero__props {
+        display: contents;
+    }
+
+    /* Stage children at known orders. Video first, hero content next
+       (pinned to the first viewport via its own absolute positioning),
+       then chapters interleaved with their matching props. */
+    .hero--stage .hero__video-wrap            { order: 0; }
+    .hero--stage .hero__content               { order: 1; }
+    .hero--stage .hero__chapter[data-chapter="0"] { order:  2; } /* Listening — no prop */
+    .hero--stage .hero__chapter[data-chapter="1"] { order:  4; }
+    .hero--stage .hero__prop[data-chapter="1"]    { order:  5; }
+    .hero--stage .hero__chapter[data-chapter="2"] { order:  6; }
+    .hero--stage .hero__prop[data-chapter="2"]    { order:  7; }
+    .hero--stage .hero__chapter[data-chapter="3"] { order:  8; }
+    .hero--stage .hero__prop[data-chapter="3"]    { order:  9; }
+    .hero--stage .hero__chapter[data-chapter="4"] { order: 10; }
+    .hero--stage .hero__prop[data-chapter="4"]    { order: 11; }
+    .hero--stage .hero__chapter[data-chapter="5"] { order: 12; }
+    .hero--stage .hero__prop[data-chapter="5"]    { order: 13; }
+    .hero--stage .hero__chapter[data-chapter="6"] { order: 14; }
+    .hero--stage .hero__prop[data-chapter="6"]    { order: 15; }
+    .hero--stage .hero__scroll                { order: 99; }
+
+    /* Reset each prop's desktop absolute positioning and center it
+       below the phone. Negative margin-top pulls the pill UP into the
+       cropped phone's fade zone so it reads as emerging from the
+       screen, not floating separately below it. */
+    .hero--stage .hero__prop {
+        position: relative;
+        inset: auto;
+        top: auto;
+        right: auto;
+        left: auto;
+        bottom: auto;
+        transform: none !important;
+        display: flex;
+        justify-content: center;
+        margin: -4.5rem auto 2rem;
+        max-width: 320px;
+        width: auto;
+        padding: 0 1.5rem;
+        z-index: 5;
+        opacity: 1 !important;
+    }
+    /* Small rotational flair per prop, matches the "floating sticker"
+       feel from desktop without the tight anchor positioning. */
+    .hero--stage .hero__prop--offline > *,
+    .hero--stage .hero__prop--faceid > *,
+    .hero--stage .hero__prop--memory > * {
+        transform: rotate(-2deg);
+    }
+    .hero--stage .hero__prop--chip > *,
+    .hero--stage .hero__prop--waveform > * {
+        transform: rotate(2deg);
+    }
+
+    /* Hide the hero backdrop on mobile — it would stretch the twilight
+       image across the entire (very tall) scrolling hero. The
+       `.site-atmosphere` body-level layer provides warmth throughout. */
+    .hero--stage .hero__backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: auto;
+        height: 100vh;
+        inset: unset;
+    }
+
+    /* The video plays as a hero-top poster in the first viewport.
+       MUST match the specificity of `.hero--stage .hero__video-wrap`
+       from the desktop rules — otherwise the absolute-positioning
+       from desktop wins and chapters overlap the video. */
+    .hero--stage .hero__video-wrap {
+        position: relative;
+        top: auto;
+        left: auto;
+        width: 100%;
+        height: 100vh;
+        clip-path: none !important;
+        inset: unset;
+    }
+
+    /* Hero intro sits over the video within the first viewport only.
+       Absolute-positioned inside the 100vh-tall top band (viewport
+       anchor), NOT centered in the tall mobile hero. */
+    .hero--stage .hero__content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0 1.5rem;
+        width: auto;
+        max-width: none;
+        z-index: 3;
+        text-align: center;
+    }
+
+    /* Strengthen the video wash on mobile: title and subtitle sit
+       right over the twilight scene (including the bright orange
+       mascot) and need more contrast than the desktop wash provides.
+       Darkens top + middle + bottom instead of just the edges. */
+    .hero--stage .hero__wash {
+        background: linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.35) 0%,
+            rgba(0, 0, 0, 0.18) 25%,
+            rgba(0, 0, 0, 0.42) 55%,
+            rgba(0, 0, 0, 0.28) 80%,
+            rgba(0, 0, 0, 0.65) 100%
+        );
+    }
+
+    /* Text-shadow gives every glyph a crisp edge against the busy
+       twilight backdrop, independent of the wash opacity above. */
+    .hero--stage .hero__title,
+    .hero--stage .hero__sub {
+        text-shadow:
+            0 2px 14px rgba(0, 0, 0, 0.85),
+            0 0 28px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Chapters un-stack and flow vertically. Each chapter is a
+       full-width section with text + phone. */
+    .hero__chapters {
+        position: relative;
+        top: auto;
+        left: auto;
+        transform: none;
+        width: 100%;
+        max-width: none;
+        padding: 2rem 0;
+        z-index: 2;
+    }
+    .hero__chapter {
+        position: relative;
+        top: auto;
+        left: auto;
+        transform: none !important;
+        opacity: 1 !important;
+        width: 100%;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 4rem 1.5rem 3rem;
+        text-align: left;
+    }
+
+    /* Show the inline chapter phone below each chapter's copy.
+       Cropped to ~3/4 height so the device appears to continue
+       off-frame at the bottom — cleaner editorial look than a full
+       phone sitting in the middle of the scroll. Bottom fade mask
+       softens the cut so it reads as intentional, not clipped. */
+    .hero__chapter-phone {
+        display: block;
+        margin: 2.5rem auto 0;
+        max-width: 280px;
+        /* Phone aspect is 1206/2622 ≈ 0.46. At 280px wide, full
+           height would be ~608px. Show top 75% = ~456px so the device
+           visually continues off-frame instead of sitting in a box. */
+        height: calc(280px * 2622 / 1206 * 0.75);
+        overflow: hidden;
+        /* Soft fade at the bottom so the crop reads as intentional. */
+        -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 82%, transparent 100%);
+        mask-image: linear-gradient(180deg, #000 0%, #000 82%, transparent 100%);
+    }
+    .hero__chapter-phone .screen-frame {
+        max-width: 280px;
+        margin: 0 auto;
+    }
+
+    /* Smaller typography on mobile so headlines don't dominate. */
+    .hero__chapter .cinema__headline {
+        font-size: clamp(2.5rem, 9vw, 3.75rem);
+        margin-top: 1.25rem;
+    }
+    .hero__chapter .cinema__body {
+        font-size: 1rem;
+    }
+
+    /* Scroll hint has no purpose once the pin is gone. */
+    .hero__scroll {
+        display: none;
+    }
+}
+
+/* =====================================================================
+   CINEMA SYSTEM
+   Two primary compositions (V1 Poster, V5 Hybrid) + a custom two-up
+   for the final section. Each section gets:
+     - A warm atmospheric layer (radial gradient / haze)
+     - An eyebrow + serif headline + body column
+     - A phone column that can bleed left or right
+     - Optional prop (memory card, tech chip, waveform)
+   ===================================================================== */
+
+.cinema {
+    position: relative;
+    min-height: 100vh;
+    padding: 7rem 0 6rem;
+    overflow: hidden;
+    isolation: isolate;
+    color: var(--ink);
+}
+
+
+.cinema__eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--nod-orange, #ff8a3a);
+    margin: 0 0 2rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.cinema__headline {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(3rem, 6.5vw, 5.75rem);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.75rem;
+    color: var(--ink, #f5f0e8);
+    /* Balance lines evenly — avoids orphans like "you," getting
+       stranded on its own line when the previous line was too long
+       for the copy to fit cleanly. */
+    text-wrap: balance;
+}
+.cinema__headline em {
+    font-style: italic;
+    font-variation-settings: "opsz" 144;
+    color: var(--nod-orange, #ff8a3a);
+}
+
+.cinema__body {
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--ink-soft, #cfc7bb);
+    max-width: 46ch;
+}
+.cinema__body p + p { margin-top: 1rem; }
+.cinema__body strong { color: var(--ink, #f5f0e8); font-weight: 500; }
+.cinema__body em {
+    font-style: italic;
+    font-variation-settings: "opsz" 144;
+    color: var(--nod-orange, #ff8a3a);
+}
+.cinema__body code {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.94em;
+    color: var(--ink, #f5f0e8);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+}
+
+.cinema__pull {
+    margin: 2rem 0 0;
+    padding: 1.5rem 0 0;
+    border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    font-family: "Fraunces", Georgia, serif;
+    font-style: italic;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    color: var(--ink, #f5f0e8);
+}
+.cinema__pull cite {
+    display: block;
+    margin-top: 0.75rem;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-style: normal;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a8378);
+}
+
+
+
+
+/* ---- Props: iOS tech chip ---- */
+.cinema__chip {
+    position: absolute;
+    top: 10%;
+    left: 2%;
+    width: auto;
+    min-width: 240px;
+    max-width: 340px;
+    padding: 0.9rem 1rem 0.9rem 0.9rem;
+    background: rgba(28, 22, 18, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    box-shadow: 0 20px 48px -20px rgba(0, 0, 0, 0.7);
+    transform: rotate(2deg);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.cinema__chip-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--nod-orange, #ff8a3a);
+    box-shadow: 0 0 0 4px rgba(255, 138, 58, 0.2), 0 0 12px rgba(255, 138, 58, 0.5);
+    animation: cinema-chip-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cinema-chip-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(255, 138, 58, 0.2), 0 0 12px rgba(255, 138, 58, 0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(255, 138, 58, 0.35), 0 0 18px rgba(255, 138, 58, 0.75); }
+}
+.cinema__chip-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a8378);
+    margin-bottom: 0.15rem;
+}
+.cinema__chip-value {
+    font-size: 0.82rem;
+    color: var(--ink, #f5f0e8);
+    font-weight: 500;
+}
+
+/* ---- Props: Memory card (V1 memory section) ---- */
+.cinema__memory-card {
+    position: absolute;
+    right: 4%;
+    bottom: -1rem;
+    width: 280px;
+    padding: 1.1rem 1.3rem;
+    /* Opaque-ish bg so chapter cross-fades don't let the phone's text
+       bleed through this prop. */
+    background: rgba(18, 13, 9, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.6);
+    z-index: 3;
+}
+.cinema__memory-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--nod-orange, #ff8a3a);
+    margin-bottom: 0.5rem;
+}
+.cinema__memory-body {
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--ink-soft, #cfc7bb);
+    font-style: italic;
+}
+
+/* ---- Props: Waveform strip (voice section) ---- */
+.cinema__waveform {
+    position: absolute;
+    top: 12%;
+    left: 0;
+    width: 220px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1rem;
+    background: rgba(28, 22, 18, 0.85);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+    transform: rotate(2deg);
+    z-index: 3;
+}
+.cinema__waveform span {
+    display: block;
+    width: 3px;
+    height: 8px;
+    background: var(--nod-orange, #ff8a3a);
+    border-radius: 2px;
+    animation: cinema-wave 1.2s ease-in-out infinite;
+}
+.cinema__waveform span:nth-child(even) { animation-duration: 1.4s; }
+.cinema__waveform span:nth-child(3n)   { animation-duration: 0.95s; }
+.cinema__waveform span:nth-child(5n)   { animation-duration: 1.1s; }
+.cinema__waveform span:nth-child(1)  { animation-delay: 0s; }
+.cinema__waveform span:nth-child(2)  { animation-delay: -0.15s; }
+.cinema__waveform span:nth-child(3)  { animation-delay: -0.35s; }
+.cinema__waveform span:nth-child(4)  { animation-delay: -0.5s; }
+.cinema__waveform span:nth-child(5)  { animation-delay: -0.7s; }
+.cinema__waveform span:nth-child(6)  { animation-delay: -0.25s; }
+.cinema__waveform span:nth-child(7)  { animation-delay: -0.85s; }
+.cinema__waveform span:nth-child(8)  { animation-delay: -0.1s; }
+.cinema__waveform span:nth-child(9)  { animation-delay: -0.55s; }
+.cinema__waveform span:nth-child(10) { animation-delay: -0.4s; }
+@keyframes cinema-wave {
+    0%, 100% { height: 8px; opacity: 0.6; }
+    50%      { height: 28px; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cinema__waveform span { animation: none; height: 16px; opacity: 0.8; }
+    .cinema__chip-dot { animation: none; }
+}
+
+
+/* =====================================================================
+   ROTATING TEXT — used inside chips, memory cards, any pill that needs
+   to cycle through values. Stacked <span>s; each fades in/out on a
+   timed loop so the prop always feels alive.
+   Container sets the height so layout doesn't jump. --dur + --count
+   drive the timing; each span computes its own delay via nth-child.
+   ===================================================================== */
+.cinema__rotate {
+    position: relative;
+    display: inline-block;
+    min-height: 1.2em;
+    line-height: 1.2;
+}
+.cinema__rotate span {
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    white-space: nowrap;
+    animation: cinema-rotate-3 9s infinite;
+    will-change: opacity, transform;
+}
+.cinema__rotate--3 span:nth-child(1) { animation-delay: 0s; }
+.cinema__rotate--3 span:nth-child(2) { animation-delay: 3s; }
+.cinema__rotate--3 span:nth-child(3) { animation-delay: 6s; }
+.cinema__rotate--4 span {
+    animation: cinema-rotate-4 12s infinite;
+}
+.cinema__rotate--4 span:nth-child(1) { animation-delay: 0s; }
+.cinema__rotate--4 span:nth-child(2) { animation-delay: 3s; }
+.cinema__rotate--4 span:nth-child(3) { animation-delay: 6s; }
+.cinema__rotate--4 span:nth-child(4) { animation-delay: 9s; }
+
+@keyframes cinema-rotate-3 {
+    0%    { opacity: 0; transform: translateY(6px); }
+    3%    { opacity: 1; transform: translateY(0); }
+    30%   { opacity: 1; transform: translateY(0); }
+    33%   { opacity: 0; transform: translateY(-6px); }
+    100%  { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes cinema-rotate-4 {
+    0%    { opacity: 0; transform: translateY(6px); }
+    2%    { opacity: 1; transform: translateY(0); }
+    23%   { opacity: 1; transform: translateY(0); }
+    25%   { opacity: 0; transform: translateY(-6px); }
+    100%  { opacity: 0; transform: translateY(-6px); }
+}
+/* Chip with rotating value: size chip to widest value, keep single line.
+   The chip is absolutely positioned so auto-width doesn't affect layout. */
+.cinema__chip-value.cinema__rotate {
+    min-width: 14ch;
+}
+.cinema__chip-value.cinema__rotate span {
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cinema__rotate span {
+        animation: none;
+        opacity: 0;
+    }
+    .cinema__rotate span:nth-child(1) { opacity: 1; }
+}
+
+/* =====================================================================
+   OFFLINE PILL (section 02) — airplane icon + label + animated dots
+   that pulse in sequence, mimicking a "still working" indicator even
+   though the network is off.
+   ===================================================================== */
+.cinema__offline-pill {
+    position: absolute;
+    top: 14%;
+    right: 2%;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.85rem 1.15rem;
+    background: rgba(28, 22, 18, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    box-shadow: 0 20px 48px -20px rgba(0, 0, 0, 0.7);
+    transform: rotate(2deg);
+    z-index: 3;
+}
+.cinema__offline-icon {
+    width: 22px;
+    height: 22px;
+    color: var(--nod-orange, #ff8a3a);
+    flex-shrink: 0;
+}
+.cinema__offline-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a8378);
+    margin-bottom: 0.15rem;
+}
+.cinema__offline-value {
+    font-size: 0.82rem;
+    color: var(--ink, #f5f0e8);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.cinema__offline-dots {
+    display: flex;
+    gap: 4px;
+    margin-left: 0.25rem;
+}
+.cinema__offline-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--nod-orange, #ff8a3a);
+    animation: cinema-offline-dot 1.5s ease-in-out infinite;
+}
+.cinema__offline-dots span:nth-child(2) { animation-delay: 0.2s; }
+.cinema__offline-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes cinema-offline-dot {
+    0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+    40%           { opacity: 1;    transform: scale(1.15); }
+}
+
+/* =====================================================================
+   MEMORY HEAD — small orange dot + label upgrade for the memory card
+   so the card feels like a live notification, not a static quote.
+   ===================================================================== */
+.cinema__memory-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+.cinema__memory-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--nod-orange, #ff8a3a);
+    box-shadow: 0 0 0 3px rgba(255, 138, 58, 0.18), 0 0 10px rgba(255, 138, 58, 0.5);
+    animation: cinema-chip-pulse 2.4s ease-in-out infinite;
+}
+/* Constrain the rotating memory body so it doesn't overflow */
+.cinema__memory-body.cinema__rotate {
+    display: block;
+    min-height: 3.6em;
+    width: 100%;
+}
+.cinema__memory-body.cinema__rotate span {
+    white-space: normal;
+    width: 100%;
+}
+
+/* =====================================================================
+   FACE ID PILL (section 07) — 3x3 dot grid that scans in a sweep,
+   plus label. Abstract hint at biometric auth without literal face.
+   ===================================================================== */
+.cinema__faceid {
+    position: absolute;
+    top: 14%;
+    right: 2%;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.85rem 1.15rem 0.85rem 0.95rem;
+    background: rgba(28, 22, 18, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    box-shadow: 0 20px 48px -20px rgba(0, 0, 0, 0.7);
+    transform: rotate(2deg);
+    z-index: 3;
+}
+.cinema__faceid-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    width: 36px;
+    flex-shrink: 0;
+}
+.cinema__faceid-grid span {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--nod-orange, #ff8a3a);
+    opacity: 0.2;
+    animation: cinema-faceid-scan 2.4s ease-in-out infinite;
+}
+.cinema__faceid-grid span:nth-child(1) { animation-delay: 0s; }
+.cinema__faceid-grid span:nth-child(2) { animation-delay: 0.08s; }
+.cinema__faceid-grid span:nth-child(3) { animation-delay: 0.16s; }
+.cinema__faceid-grid span:nth-child(4) { animation-delay: 0.24s; }
+.cinema__faceid-grid span:nth-child(5) { animation-delay: 0.32s; }
+.cinema__faceid-grid span:nth-child(6) { animation-delay: 0.40s; }
+.cinema__faceid-grid span:nth-child(7) { animation-delay: 0.48s; }
+.cinema__faceid-grid span:nth-child(8) { animation-delay: 0.56s; }
+.cinema__faceid-grid span:nth-child(9) { animation-delay: 0.64s; }
+@keyframes cinema-faceid-scan {
+    0%, 55%, 100% { opacity: 0.2; transform: scale(1); }
+    20%           { opacity: 1;   transform: scale(1.25); box-shadow: 0 0 8px rgba(255, 138, 58, 0.6); }
+}
+.cinema__faceid-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a8378);
+    margin-bottom: 0.15rem;
+}
+.cinema__faceid-value {
+    font-size: 0.82rem;
+    color: var(--ink, #f5f0e8);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cinema__offline-dots span,
+    .cinema__faceid-grid span,
+    .cinema__memory-dot { animation: none; opacity: 0.8; }
+    .cinema__faceid-grid span { opacity: 0.6; }
+}
+
+/* =====================================================================
+   PROOF SECTION (08) — giant stats + terminal-style spec readout.
+   Replaces the old bulleted facts list with something that feels
+   like a chapter-closing thesis, not a FAQ.
+   ===================================================================== */
+.cinema--proof {
+    position: relative;
+    padding: 7rem 0 7rem;
+    min-height: 100vh;
+    overflow: hidden;
+    isolation: isolate;
+}
+.cinema--proof .proof__glow {
+    position: absolute;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70vw;
+    height: 70vw;
+    max-width: 900px;
+    max-height: 900px;
+    background: radial-gradient(circle,
+        rgba(255, 120, 50, 0.18) 0%,
+        rgba(255, 90, 30, 0.06) 40%,
+        transparent 70%);
+    filter: blur(60px);
+    z-index: -1;
+    pointer-events: none;
+}
+.proof__container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 clamp(1.5rem, 4vw, 3rem);
+    text-align: center;
+}
+.proof__container .cinema__eyebrow {
+    justify-content: center;
+}
+.proof__headline {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(3.25rem, 7vw, 6rem);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    margin: 0 0 2rem;
+    color: var(--ink, #f5f0e8);
+}
+.proof__headline em {
+    font-style: italic;
+    font-variation-settings: "opsz" 144;
+    color: var(--nod-orange, #ff8a3a);
+}
+.proof__lede {
+    font-size: 1.125rem;
+    line-height: 1.6;
+    color: var(--ink-soft, #cfc7bb);
+    max-width: 52ch;
+    margin: 0 auto 4rem;
+}
+
+/* ---- Stat wall ---- */
+.proof__stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    max-width: 900px;
+    margin: 0 auto 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+}
+.proof__stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+.proof__stat-num {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(4rem, 9vw, 7rem);
+    line-height: 1;
+    color: var(--ink, #f5f0e8);
+    letter-spacing: -0.04em;
+}
+.proof__stat:nth-child(-n+3) .proof__stat-num {
+    color: var(--nod-orange, #ff8a3a);
+    font-style: italic;
+    font-variation-settings: "opsz" 144;
+}
+.proof__stat-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a8378);
+    margin-top: 0.75rem;
+}
+
+/* ---- Terminal-style spec readout ---- */
+.proof__spec {
+    max-width: 780px;
+    margin: 0 auto 4rem;
+    background: rgba(15, 12, 10, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    text-align: left;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
+}
+.proof__spec-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.proof__spec-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.proof__spec-dot--r { background: #ff5f57; }
+.proof__spec-dot--y { background: #febc2e; }
+.proof__spec-dot--g { background: #28c840; }
+.proof__spec-title {
+    margin-left: auto;
+    margin-right: auto;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.72rem;
+    color: var(--ink-mute, #8a8378);
+    letter-spacing: 0.1em;
+}
+.proof__spec-list {
+    margin: 0;
+    padding: 0.5rem 0;
+}
+.proof__spec-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 1.5rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.proof__spec-row:last-child { border-bottom: none; }
+.proof__spec-row dt {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    color: var(--nod-orange, #ff8a3a);
+    padding-top: 0.15rem;
+}
+.proof__spec-row dd {
+    margin: 0;
+    font-family: "Inter", -apple-system, sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: var(--ink-soft, #cfc7bb);
+}
+.proof__spec-row dd strong {
+    display: block;
+    color: var(--ink, #f5f0e8);
+    font-weight: 500;
+    font-size: 1rem;
+    margin-bottom: 0.15rem;
+}
+.proof__spec-row dd span {
+    color: var(--ink-mute, #8a8378);
+    font-size: 0.88rem;
+}
+
+/* ---- Closing pull quote ---- */
+.proof__pull {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 0 0;
+    border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    font-family: "Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(1.5rem, 2.8vw, 2.25rem);
+    line-height: 1.35;
+    color: var(--ink, #f5f0e8);
+    text-align: center;
+    letter-spacing: -0.01em;
+}
+
+/* ---- Responsive: single column on narrow screens ---- */
+@media (max-width: 900px) {
+    .proof__stats { grid-template-columns: repeat(2, 1fr); gap: 2rem 1rem; }
+    .proof__spec-row { grid-template-columns: 1fr; gap: 0.35rem; padding: 1rem; }
+    .proof__spec-row dt { padding-top: 0; }
+}
+
+/* ---- Responsive: single column on narrow screens ---- */
+@media (max-width: 900px) {
+    .cinema { padding: 4rem 0; min-height: auto; }
+    .cinema__grid {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        gap: 2.5rem;
+    }
+    .cinema--v1.cinema--left .cinema__phone-wrap,
+    .cinema--v5.cinema--left .cinema__phone-wrap {
+        order: 2;
+    }
+    .cinema--v1.cinema--left .cinema__text,
+    .cinema--v5.cinema--left .cinema__text {
+        order: 1;
+    }
+    .cinema__phone-wrap .screen-frame,
+    .cinema--v1.cinema--right .cinema__phone-wrap .screen-frame,
+    .cinema--v1.cinema--left .cinema__phone-wrap .screen-frame,
+    .cinema--v5.cinema--right .cinema__phone-wrap--tilt .screen-frame,
+    .cinema--v5.cinema--left .cinema__phone-wrap--tilt .screen-frame {
+        transform: none;
+        width: 260px;
+    }
+    .cinema__chip,
+    .cinema__memory-card,
+    .cinema__waveform,
+    .cinema__offline-pill,
+    .cinema__faceid {
+        position: static;
+        transform: none;
+        margin: 1.5rem auto 0;
+    }
+    .cinema__corner { position: static; text-align: center; margin: 2.5rem auto 0; }
+    .cinema__haze { display: none; }
+    .cinema__phone-wrap { min-height: auto; }
+    .cinema__phone-wrap--tilt::before { display: none; }
+    .cinema__pair-phones { grid-template-columns: 1fr; }
+}
 
