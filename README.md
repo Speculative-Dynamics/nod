@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://usenod.app"><strong>usenod.app</strong></a> &nbsp;·&nbsp;
-  <a href="https://apps.apple.com/us/app/">App Store</a> &nbsp;·&nbsp;
+  App Store coming soon &nbsp;·&nbsp;
   <a href="LICENSE">MIT License</a>
 </p>
 

@@ -282,6 +282,11 @@ struct SidebarView: View {
                         Link(destination: url) {
                             Label("Send feedback", systemImage: "envelope")
                         }
+                        // Link defaults to the accent tint. Override to
+                        // primary text color so this row matches "Start
+                        // fresh" and other action rows — the orange icon
+                        // alone is enough visual signal.
+                        .foregroundStyle(.primary)
                     } else {
                         // URLComponents couldn't assemble a valid mailto
                         // (extremely unlikely — shouldn't happen in practice).

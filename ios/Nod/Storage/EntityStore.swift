@@ -24,7 +24,15 @@
 // lines of real logic.
 
 import Foundation
+import OSLog
 import SwiftUI
+
+/// Diagnostic logger for entity persistence. Surfaces insert/load counts
+/// so we can tell whether entities are being written, whether they're
+/// being read back, and — if they silently vanish — which side of the
+/// boundary dropped them. Filter in Console.app with
+/// `subsystem:app.usenod.nod category:memory`.
+private let memoryLog = Logger(subsystem: "app.usenod.nod", category: "memory")
 
 @MainActor
 final class EntityStore: ObservableObject {
@@ -128,11 +136,29 @@ final class EntityStore: ObservableObject {
         guard !isHydrated else { return }
 
         let db = self.database
-        let fetched: [Entity] = await Task.detached {
-            (try? db.fetchAllEntities()) ?? []
+        // Fetch runs off-main. If GRDB throws, we surface the specific
+        // error so "memories disappeared on relaunch" bug reports can be
+        // diagnosed from Console — without the log we'd silently coerce
+        // to [] via `try?` and the root cause would be invisible.
+        //
+        // Log both the raw row count AND the decoded entity count. If
+        // the DB has rows but fetchAllEntities returns fewer, the
+        // decoder is dropping them — a different bug than "entities
+        // weren't persisted at all."
+        let (rawCount, fetched): (Int, [Entity]) = await Task.detached {
+            let rawCount = (try? db.entitiesRowCount()) ?? -1
+            let entities: [Entity]
+            do {
+                entities = try db.fetchAllEntities()
+            } catch {
+                memoryLog.error("hydrate: fetchAllEntities threw \(String(describing: error), privacy: .public)")
+                entities = []
+            }
+            return (rawCount, entities)
         }.value
 
         self.entities = fetched
+        memoryLog.info("hydrate: DB rows=\(rawCount, privacy: .public), decoded entities=\(fetched.count, privacy: .public)")
         // Populate decoded-embedding cache. See the invariant note above
         // `decodedEmbeddings`. This is the only place we pay the N-decode
         // cost; every subsequent retrieval reads the cached vectors.
@@ -259,6 +285,7 @@ final class EntityStore: ObservableObject {
         // On-main: apply dedup + insert logic, using precomputed embeddings.
         // This is the same control flow as the pre-async version; the only
         // substitution is `item.embedding` instead of `embedder.embed(...)`.
+        memoryLog.info("ingest: \(precomputed.count, privacy: .public) candidates (existing entities=\(self.entities.count, privacy: .public))")
         for item in precomputed {
             guard let type = EntityType(rawValue: item.rawType.lowercased()) else {
                 continue  // LLM returned an unknown type; skip.
@@ -267,6 +294,7 @@ final class EntityStore: ObservableObject {
 
             // Exact or alias match → update in place.
             if let existingIdx = findExactMatch(name: item.name) {
+                memoryLog.info("ingest: \(item.name, privacy: .public) → exact/alias match, updateExisting")
                 updateExisting(at: existingIdx, newRole: item.role, newNote: item.note)
                 continue
             }
@@ -302,6 +330,7 @@ final class EntityStore: ObservableObject {
                 // Don't persist the candidate yet — it's pending the
                 // user's [Same/New] answer. If they pick [Same] we add
                 // the alias; [New] we insert fresh.
+                memoryLog.info("ingest: \(item.name, privacy: .public) → fuzzy match with \(fuzzy.canonicalName, privacy: .public), queued for disambiguation (NOT persisted)")
                 let pending = PendingDisambiguation(
                     candidate: candidateWithEmbedding,
                     existing: fuzzy
@@ -567,6 +596,7 @@ final class EntityStore: ObservableObject {
         do {
             try database.upsertEntity(entity)
             entities.append(entity)
+            memoryLog.info("insertFresh: persisted entity \(entity.canonicalName, privacy: .public) (type: \(entity.type.rawValue, privacy: .public))")
         } catch {
             // DB write failed — keep the in-memory state consistent
             // with disk by NOT updating the cache, and silently drop
@@ -578,6 +608,7 @@ final class EntityStore: ObservableObject {
             // the entity won't exist in `entities`, drop the orphaned
             // cache entry to preserve the invariant.
             decodedEmbeddings.removeValue(forKey: entity.id)
+            memoryLog.error("insertFresh: upsertEntity threw for \(entity.canonicalName, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -585,7 +616,9 @@ final class EntityStore: ObservableObject {
         do {
             try database.upsertEntity(entity)
             entities[index] = entity
+            memoryLog.info("persistAndCache: updated entity \(entity.canonicalName, privacy: .public) (mentionCount=\(entity.mentionCount, privacy: .public))")
         } catch {
+            memoryLog.error("persistAndCache: upsertEntity threw for \(entity.canonicalName, privacy: .public): \(String(describing: error), privacy: .public)")
             // DB write failed. `entities[index]` still holds the old
             // version. The caller (updateExisting / resolve) has
             // already applied the new vector to the cache via

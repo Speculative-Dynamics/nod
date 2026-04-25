@@ -55,9 +55,11 @@ final class EntityExtractorService {
     /// Run extraction on a batch of messages. Tries AFM first, falls back
     /// to the active engine, returns empty on total failure. Never throws.
     func extract(from messages: [Message]) async -> ExtractedEntities {
+        log.info("extract: starting with \(messages.count, privacy: .public) messages (primary=\(self.primary != nil, privacy: .public))")
         if let primary {
             do {
                 let result = try await primary.extractEntities(from: messages)
+                log.info("extract: AFM returned \(result.items.count, privacy: .public) items — \(result.items.map(\.name).joined(separator: ", "), privacy: .public)")
                 return result
             } catch let error as LanguageModelSession.GenerationError {
                 // AFM refused (guardrailViolation is the common one) or hit
@@ -81,7 +83,9 @@ final class EntityExtractorService {
             return ExtractedEntities(items: [])
         }
         do {
-            return try await fallback.extractEntities(from: messages)
+            let result = try await fallback.extractEntities(from: messages)
+            log.info("extract: fallback returned \(result.items.count, privacy: .public) items — \(result.items.map(\.name).joined(separator: ", "), privacy: .public)")
+            return result
         } catch {
             log.warning("Fallback extraction failed: \(String(describing: error), privacy: .public); returning empty")
             return ExtractedEntities(items: [])
