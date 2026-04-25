@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <meta name="theme-color" content="#F2E9D7" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="robots" content="index, follow" />
+
+        <title>Support — Nod</title>
+        <meta
+            name="description"
+            content="Get help with Nod, the private on-device AI chat app. Common questions, contact email, and links to file issues on GitHub."
+        />
+        <link rel="canonical" href="https://usenod.app/support/" />
+
+        <meta property="og:type" content="article" />
+        <meta property="og:site_name" content="Nod" />
+        <meta property="og:url" content="https://usenod.app/support/" />
+        <meta property="og:title" content="Support — Nod" />
+        <meta
+            property="og:description"
+            content="Get help with Nod. Common questions, contact email, and GitHub for issues."
+        />
+        <meta
+            property="og:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Support — Nod" />
+        <meta
+            name="twitter:description"
+            content="Get help with Nod. Common questions, contact email, and GitHub for issues."
+        />
+        <meta
+            name="twitter:image"
+            content="https://usenod.app/assets/og-image.jpg"
+        />
+
+        <link rel="icon" href="/assets/favicon.ico" sizes="any" />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/assets/icon-16.png"
+        />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/assets/icon-32.png"
+        />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/assets/icon-180.png"
+        />
+        <link rel="manifest" href="/manifest.webmanifest" />
+
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;500;600&display=swap"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body class="legal-page">
+        <div class="noise" aria-hidden="true"></div>
+
+        <div class="paper-sheet">
+            <header class="page-header">
+                <div class="container container--narrow">
+                    <a href="/" class="back-link"
+                        ><span aria-hidden="true">←</span> Back to Nod</a
+                    >
+                    <h1>Support</h1>
+                    <p class="meta">
+                        Most questions answer themselves once you remember Nod
+                        runs entirely on your phone.
+                    </p>
+                </div>
+            </header>
+
+            <main class="prose">
+                <div class="container container--narrow">
+                    <h2>Get in touch</h2>
+                    <p>
+                        The fastest path is email:
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a>.
+                        We read every message and reply within a few business
+                        days. For bug reports with logs or screenshots, the
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod/issues"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >GitHub issue tracker</a
+                        >
+                        is also open.
+                    </p>
+
+                    <div class="callout">
+                        <p>
+                            Because Nod has no servers, we genuinely cannot see
+                            your conversations or device state. To help us
+                            reproduce something, please describe what happened
+                            in your own words and include the device model and
+                            iOS version. Don't paste conversation content unless
+                            it's directly relevant — we'd rather not have it.
+                        </p>
+                    </div>
+
+                    <h2>Common questions</h2>
+
+                    <h3>The app says my device isn't supported. Why?</h3>
+                    <p>
+                        Nod requires an iPhone that supports Apple Intelligence
+                        and is running iOS 26.0 or later. That means iPhone 15
+                        Pro / Pro Max or any iPhone 16 or later. Older devices
+                        don't have the on-device model Nod is built around.
+                    </p>
+
+                    <h3>I tapped the engine I want and nothing happened.</h3>
+                    <p>
+                        The first time you switch to an open-weights engine
+                        (Qwen 3, Qwen 3.5, or Gemma 4), Nod downloads its
+                        weights — about 2 to 3 GB. The download defaults to
+                        Wi-Fi only and runs in the background. You'll see a
+                        progress indicator in settings. Once it's done, that
+                        engine runs entirely on-device and never re-downloads.
+                    </p>
+
+                    <h3>Why does the download seem stuck?</h3>
+                    <p>
+                        A few common causes: you're on cellular and haven't
+                        opted into cellular downloads (toggle in settings),
+                        you're on a metered or restrictive network, or
+                        Background Assets is throttled by iOS while the device
+                        is in low power mode. Plug the device in, connect to
+                        Wi-Fi, and the download should resume automatically.
+                    </p>
+
+                    <h3>Where are my conversations stored?</h3>
+                    <p>
+                        In a local SQLite database on your iPhone, encrypted at
+                        rest by iOS. Nothing is uploaded. If you've enabled
+                        iCloud backup for your iPhone, the database is included
+                        in your standard iCloud backup under your Apple
+                        account — not anything we run.
+                    </p>
+
+                    <h3>How do I delete everything?</h3>
+                    <p>
+                        Inside the app, tap <em>Start fresh</em> in settings.
+                        That permanently deletes the local conversation,
+                        running summary, and memory on this device. To go
+                        further, delete the app — iOS removes the database
+                        with it.
+                    </p>
+
+                    <h3>Does Nod work offline?</h3>
+                    <p>
+                        Yes. Once the engine you've selected is on the device
+                        (Apple Intelligence ships with iOS; the open-weights
+                        engines are downloaded once), Nod is as offline as
+                        your camera. Airplane Mode is a fine way to test it.
+                    </p>
+
+                    <h3>Can I use a different language?</h3>
+                    <p>
+                        Apple Intelligence and the open-weights engines all
+                        handle a wide range of languages. The app's interface
+                        is currently English-only; we plan to add more
+                        languages.
+                    </p>
+
+                    <h3>Voice input doesn't seem to work.</h3>
+                    <p>
+                        Make sure you've granted microphone and speech-recognition
+                        permissions when prompted. If you skipped those prompts,
+                        re-enable them in iOS Settings → Privacy &amp; Security
+                        → Microphone (and the same path for Speech Recognition).
+                        Both run entirely on-device using iOS 26's
+                        <code>SpeechAnalyzer</code>.
+                    </p>
+
+                    <h3>How do I turn on Face ID?</h3>
+                    <p>
+                        In settings, toggle <em>Require Face ID</em>. After that,
+                        opening the app prompts for Face ID before the
+                        conversation appears. Useful when you share your phone
+                        or hand it around.
+                    </p>
+
+                    <h3>Is Nod a substitute for professional help?</h3>
+                    <p>
+                        No. Nod is a general-purpose AI chat app — a calm
+                        conversation partner, not a counselor, doctor, or
+                        therapist. If you're in a crisis or need professional
+                        support, please contact local emergency services or a
+                        qualified professional in your country.
+                    </p>
+
+                    <h3>Is Nod really open source?</h3>
+                    <p>
+                        Yes. The full Swift source — the UI, the model
+                        wrappers, the system prompts, the database schema — is
+                        on GitHub at
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >github.com/Speculative-Dynamics/nod</a
+                        >
+                        under the MIT license. The build on the App Store is
+                        signed from the maintainer's account but built from
+                        the code in the repo.
+                    </p>
+
+                    <h3>I have a feature request.</h3>
+                    <p>
+                        Open an issue on
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod/issues"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >GitHub</a
+                        >
+                        with the
+                        <code>enhancement</code> label, or email
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a>.
+                        We can't promise everything ships, but we read
+                        everything.
+                    </p>
+
+                    <h2>Reporting a security issue</h2>
+                    <p>
+                        If you find a security or privacy issue, please email
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a>
+                        with the subject "Security" and a clear description.
+                        Please don't open a public GitHub issue for security
+                        problems before we've had a chance to look. Our
+                        full disclosure policy is in
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod/blob/main/SECURITY.md"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >SECURITY.md</a
+                        >.
+                    </p>
+
+                    <h2>Contact</h2>
+                    <p>
+                        Speculative Dynamics Private Limited<br />
+                        Email:
+                        <a href="mailto:hello@usenod.app">hello@usenod.app</a
+                        ><br />
+                        Source code:
+                        <a
+                            href="https://github.com/Speculative-Dynamics/nod"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >github.com/Speculative-Dynamics/nod</a
+                        >
+                    </p>
+                </div>
+            </main>
+
+            <footer class="footer">
+                <div class="container">
+                    <div class="footer__row">
+                        <div class="footer__brand">
+                            <img
+                                src="/assets/icon.png"
+                                alt="Nod"
+                                class="footer__icon"
+                            />
+                            <p class="footer__tag">
+                                For when you just need to be heard.
+                            </p>
+                        </div>
+                        <nav class="footer__links" aria-label="Footer">
+                            <a href="/">Home</a>
+                            <a
+                                href="https://github.com/Speculative-Dynamics/nod"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                >GitHub</a
+                            >
+                            <a href="/terms/">Terms</a>
+                            <a href="/privacy/">Privacy</a>
+                        </nav>
+                    </div>
+                    <p class="footer__fine">
+                        © 2026 Speculative Dynamics Private Limited. Built with
+                        care. Runs on your phone. Shipped open.
+                    </p>
+                </div>
+            </footer>
+        </div>
+    </body>
+</html>
