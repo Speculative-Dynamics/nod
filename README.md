@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/assets/og-image.jpg" alt="A young man sitting under a tree at sunset, a small glowing orange cube spirit floating beside him — a watercolor painting." width="880" />
+  <img src="website/assets/hero/desktop.png" alt="A young man sitting under a tree at twilight, a small glowing orange cube floating beside him — distant mountains and town lights below." width="880" />
 </p>
 
 <h1 align="center">Nod</h1>
@@ -33,15 +33,14 @@ That's the whole app. That's why it's called Nod.
 
 ## Why we built it
 
-Most apps built around mental health or wellness want to *do something* with
-your words. Analyze them. Classify them. Track your mood. Score your
-journey. Nudge you toward their KPI.
+Most apps that get your words want to *do something* with them. Analyze
+them. Classify them. Score your habits. Nudge you toward their KPI.
 
-Sometimes you don't need any of that. Sometimes you just need to be heard —
-by a presence that isn't trying to fix you, convert you, grow you, or mine
-you.
+Sometimes you don't need any of that. Sometimes you just want to talk to
+something that listens — not a tool that's trying to fix you, convert you,
+grow you, or mine you.
 
-We wanted to build that. A companion that's gentle, unintrusive, and
+We wanted to build that. A small chat app that's gentle, unintrusive, and
 architecturally incapable of leaking a single word of what you say.
 
 ## How it's different

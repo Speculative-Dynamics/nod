@@ -42,8 +42,14 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- App Store category. Productivity is the modern home for AI chat /
+	     assistant apps (ChatGPT, Claude). Avoid healthcare-fitness or
+	     medical — those trigger Apple's medical-app review with extra
+	     documentation requirements and reviewer scrutiny. -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Nod uses Face ID to keep your journal private on this device.</string>
+	<string>Nod uses Face ID to keep your conversations private on this device.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Nod uses on-device speech recognition so you can talk instead of type. Your voice never leaves this device.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -21,8 +21,8 @@ issue labeled **[`good first issue`][gfi]** or **[`help wanted`][hw]**.
 High-value areas beyond those labels:
 
 - **Accessibility.** VoiceOver, Dynamic Type, keyboard navigation.
-  Mental-health apps have to be accessible. Audit any screen you use
-  and flag what breaks.
+  An app people open during private moments has to be accessible.
+  Audit any screen you use and flag what breaks.
 - **Prompt quality.** The listening prompt lives at
   [`prompts/listening_mode.md`](prompts/listening_mode.md). If you
   have a fixture (an anonymized vent transcript) where Nod's reply
@@ -200,9 +200,9 @@ process.
 
 By participating, you agree to follow our
 [Code of Conduct](CODE_OF_CONDUCT.md). The short version: be kind,
-assume good intent, give feedback on code not people. Mental-health
-adjacent projects attract vulnerable users and new contributors —
-we take this seriously.
+assume good intent, give feedback on code not people. People share
+real, sometimes vulnerable things with apps like this — we take that
+seriously when reviewing contributions.
 
 ---
 
