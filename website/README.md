@@ -4,28 +4,28 @@ Marketing and landing page for the Nod iOS app. Domain: [usenod.app](https://use
 
 ## Status
 
-Not started. Will be built after the iOS app's Phase 1 is shipping to TestFlight. Revisit then.
+Live static site in this directory. It is intentionally plain HTML, CSS, and a
+small amount of vanilla JavaScript so it can be deployed without a build step.
 
-## Likely shape
+## Shape
 
-Single-page static site. Framework TBD — candidates:
+The homepage is a single-page marketing site, with separate static legal pages:
 
-- **Astro** (nice default for content sites, fast, minimal JS)
-- **Plain HTML/CSS** (least tooling, ships instantly)
-- **Next.js** (overkill for a one-pager, but familiar)
+- `index.html`
+- `privacy/index.html`
+- `terms/index.html`
 
-Hosting: probably Cloudflare Pages or Vercel (free tier is plenty for a solo side project).
+Hosting can be any static host. The current domain target is
+[usenod.app](https://usenod.app).
 
-## What it needs
+## Deployment checklist
 
-- A clear statement of what Nod is ("For when you just need to be heard.")
-- The Nod face
-- A TestFlight / App Store download link
-- A link to the GitHub repo
-- A privacy statement that doesn't lie ("Nod runs entirely on your phone. We can't see your words because we have no server.")
-
-That's it. No pricing page, no testimonials, no feature grid.
+- Replace the App Store "coming soon" state with the real listing URL once the
+  app is approved.
+- Keep `sitemap.xml`, canonical links, Open Graph image URLs, and `CNAME`
+  aligned to `https://usenod.app`.
+- Validate `manifest.webmanifest` and `script.js` before publishing.
 
 ## License
 
-The website code, once it exists, will share the repo's MIT license.
+The website code shares the repo's MIT license.

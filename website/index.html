@@ -23,7 +23,7 @@
         <title>Nod — For when you just need to be heard.</title>
         <meta
             name="description"
-            content="A small on-device AI that listens without fixing. Runs entirely on your iPhone. No servers, no accounts, no tracking. Open source. Listed on the App Store as Just Nod."
+            content="A small on-device AI that listens without fixing. Runs entirely on your iPhone. No servers, no accounts, no tracking. Open source. Coming soon to the App Store as Just Nod."
         />
         <meta
             name="keywords"
@@ -159,7 +159,6 @@
                         "applicationCategory": "HealthApplication",
                         "operatingSystem": "iOS 26.0",
                         "url": "https://usenod.app/",
-                        "downloadUrl": "https://apps.apple.com/us/app/",
                         "image": "https://usenod.app/assets/og-image.jpg",
                         "author": { "@id": "https://usenod.app/#organization" },
                         "offers": {
@@ -637,7 +636,7 @@
                             class="btn btn--ghost"
                             href="https://github.com/Speculative-Dynamics/nod"
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                         >
                             <span class="btn__arrow">→</span> View on GitHub
                         </a>
@@ -645,7 +644,7 @@
                             class="btn btn--ghost"
                             href="https://github.com/Speculative-Dynamics/nod/blob/main/LICENSE"
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                         >
                             <span class="btn__arrow">→</span> Read the license
                         </a>
@@ -662,7 +661,7 @@
                 <div class="container">
                     <p class="eyebrow">It's free.</p>
                     <h2 class="display">
-                        Listed as <em>Just Nod</em><br />
+                        Coming soon as <em>Just Nod</em><br />
                         on the App Store.
                     </h2>
                     <div class="body">
@@ -673,12 +672,10 @@
                     </div>
 
                     <div class="download-box">
-                        <a
-                            href="https://apps.apple.com/us/app/"
-                            target="_blank"
-                            rel="noopener"
-                            class="appstore-btn"
-                            data-appstore
+                        <span
+                            class="appstore-btn appstore-btn--disabled"
+                            role="status"
+                            aria-label="App Store listing coming soon"
                         >
                             <svg
                                 viewBox="0 0 40 40"
@@ -692,10 +689,10 @@
                                 />
                             </svg>
                             <span class="appstore-btn__text">
-                                <small>Download on the</small>
+                                <small>Coming soon on the</small>
                                 <strong>App Store</strong>
                             </span>
-                        </a>
+                        </span>
                         <p class="download-box__meta">
                             Requires iPhone with Apple Intelligence — iOS 26.0
                             or later.<br />
@@ -727,13 +724,13 @@
                             <a
                                 href="https://github.com/Speculative-Dynamics/nod"
                                 target="_blank"
-                                rel="noopener"
+                                rel="noopener noreferrer"
                                 >GitHub</a
                             >
                             <a
                                 href="https://github.com/Speculative-Dynamics/nod/blob/main/LICENSE"
                                 target="_blank"
-                                rel="noopener"
+                                rel="noopener noreferrer"
                                 >MIT License</a
                             >
                             <a href="/terms/">Terms</a>
