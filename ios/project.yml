@@ -95,11 +95,12 @@ targets:
         ENABLE_PREVIEWS: YES
         ENABLE_DEBUG_DYLIB: NO
         # Marketing version: shown to users in App Store + Settings.
-        # Bump on every public release. 1.0.0 = first App Store submission.
-        MARKETING_VERSION: "1.0.0"
+        # Bump on every public release. 1.0.0 shipped to the App Store on
+        # 2026-04-27 (apps.apple.com/in/app/just-nod/id6762388689).
+        MARKETING_VERSION: "1.0.1"
         # Build number: must increase monotonically across every TestFlight
         # / App Store upload (Apple rejects re-uploads at the same number).
-        CURRENT_PROJECT_VERSION: "22"
+        CURRENT_PROJECT_VERSION: "23"
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: GRDB

@@ -110,6 +110,13 @@ Notes on choices:
 - `journal` — adjacent category, high search volume, neutral (not medical)
 - `opensource` — the verifiability angle
 
+**China availability:** the `gpt` keyword triggers China's Deep Synthesis
+Technology (DST) rules under Guideline 5 (Legal) — apps referencing
+ChatGPT/OpenAI in metadata need a MIIT permit to ship in China. We keep
+`gpt` for global SEO and deselect mainland China from Availability in App
+Store Connect. Re-enable later by removing `gpt` here AND in the App
+Store Connect Keywords field, or by securing the MIIT permit.
+
 **Removed** (would push toward medical-app review): `mental`, `mindfulness`, `therapy`, `wellness`, `mood`, `reflection`, `quiet`, `venting`.
 
 ---
