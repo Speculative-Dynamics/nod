@@ -228,6 +228,20 @@ button {
     padding: 6rem var(--gutter) clamp(4rem, 8vw, 7rem);
     overflow: hidden;
     isolation: isolate;
+    /* Static hero painting as the always-on fallback. The <video> overlays
+       this when JS + autoplay succeed; if the video is slow to load, blocked,
+       or the user has reduced-motion preference, the painting is what they
+       see. desktop.png (16:9) by default; the mobile-aspect query below
+       swaps to mobile.png (9:16) so the boy + tree stay in frame. */
+    background-image: url("/assets/hero/desktop.png");
+    background-size: cover;
+    background-position: center;
+}
+
+@media (max-aspect-ratio: 1/1) {
+    .hero {
+        background-image: url("/assets/hero/mobile.png");
+    }
 }
 
 .hero__video-wrap {
@@ -310,6 +324,29 @@ button {
     gap: 0.8rem;
     flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+/* Above-the-fold App Store CTA in the hero. The base .appstore-btn lives
+   on the dark download-section card; the hero variant uses the same
+   white-on-dark visual but adds a subtle glow so it pops against the
+   moving twilight backdrop. */
+.appstore-btn--hero {
+    box-shadow: 0 14px 38px -16px rgba(255, 245, 230, 0.35);
+}
+.appstore-btn--hero:hover {
+    box-shadow: 0 18px 42px -14px rgba(255, 245, 230, 0.45);
+}
+
+/* Small line under the hero CTA explaining what's free and the device
+   requirements. Mirrors the meta line under the Download section card. */
+.hero__cta-meta {
+    margin: 1rem 0 0 auto;
+    max-width: 38ch;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    text-align: right;
+    text-shadow: 0 2px 16px rgba(14, 12, 10, 0.7);
 }
 
 /* scroll indicator — moved to left so it doesn't collide with the right-aligned text */
@@ -618,19 +655,12 @@ button {
     html {
         scroll-behavior: auto;
     }
+    /* Hide the video — the static painting set as background-image on .hero
+       (always-on fallback in the base .hero rule above) is what these users
+       see. The duplicated background-image declarations that used to live
+       here are no longer needed. */
     .hero__video {
         display: none;
-    }
-    .hero {
-        background-image: url("/assets/hero/desktop.png");
-        background-size: cover;
-        background-position: center;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) and (max-aspect-ratio: 1/1) {
-    .hero {
-        background-image: url("/assets/hero/mobile.png");
     }
 }
 
@@ -664,8 +694,14 @@ button {
         align-items: stretch;
         justify-content: flex-start;
     }
-    .hero__cta .btn {
+    .hero__cta .btn,
+    .hero__cta .appstore-btn {
         justify-content: center;
+    }
+    .hero__cta-meta {
+        margin: 1rem 0 0 0;
+        max-width: 100%;
+        text-align: left;
     }
 
     .footer__row {
