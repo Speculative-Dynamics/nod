@@ -326,28 +326,10 @@ button {
     justify-content: flex-end;
 }
 
-/* Above-the-fold App Store CTA in the hero. The base .appstore-btn lives
-   on the dark download-section card; the hero variant uses the same
-   white-on-dark visual but adds a subtle glow so it pops against the
-   moving twilight backdrop. */
-.appstore-btn--hero {
-    box-shadow: 0 14px 38px -16px rgba(255, 245, 230, 0.35);
-}
-.appstore-btn--hero:hover {
-    box-shadow: 0 18px 42px -14px rgba(255, 245, 230, 0.45);
-}
-
-/* Small line under the hero CTA explaining what's free and the device
-   requirements. Mirrors the meta line under the Download section card. */
-.hero__cta-meta {
-    margin: 1rem 0 0 auto;
-    max-width: 38ch;
-    font-size: 0.85rem;
-    line-height: 1.45;
-    color: var(--ink-soft);
-    text-align: right;
-    text-shadow: 0 2px 16px rgba(14, 12, 10, 0.7);
-}
+/* Above-the-fold App Store CTA in the hero. The base .appstore-btn already
+   has white-on-dark contrast that reads cleanly on the twilight painting.
+   No extra glow — the painting + button is the whole composition; decorative
+   shadows around the CTA dilute it. */
 
 /* scroll indicator — moved to left so it doesn't collide with the right-aligned text */
 .hero__scroll {
@@ -697,11 +679,6 @@ button {
     .hero__cta .btn,
     .hero__cta .appstore-btn {
         justify-content: center;
-    }
-    .hero__cta-meta {
-        margin: 1rem 0 0 0;
-        max-width: 100%;
-        text-align: left;
     }
 
     .footer__row {
