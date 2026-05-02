@@ -517,18 +517,10 @@ button {
         transform 0.25s var(--ease-out-soft),
         background 0.25s;
 }
-.appstore-btn--disabled {
-    cursor: default;
-}
 .appstore-btn:hover {
     transform: translateY(-2px);
     background: #ffffff;
     box-shadow: 0 10px 24px -8px rgba(255, 255, 255, 0.25);
-}
-.appstore-btn--disabled:hover {
-    transform: none;
-    background: var(--ink);
-    box-shadow: none;
 }
 .appstore-btn__text {
     display: flex;

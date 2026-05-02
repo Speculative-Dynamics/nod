@@ -20,11 +20,11 @@ Hosting can be any static host. The current domain target is
 
 ## Deployment checklist
 
-- Replace the App Store "coming soon" state with the real listing URL once the
-  app is approved.
 - Keep `sitemap.xml`, canonical links, Open Graph image URLs, and `CNAME`
   aligned to `https://usenod.app`.
 - Validate `manifest.webmanifest` and `script.js` before publishing.
+- App Store listing: <https://apps.apple.com/in/app/just-nod/id6762388689>
+  (update the link in `index.html` if the storefront URL ever changes).
 
 ## License
 
