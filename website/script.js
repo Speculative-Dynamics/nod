@@ -11,29 +11,18 @@
   ).matches;
 
   /* ------------------------------------------------------------------
-   * 0. Hero video poster-swap (mobile vs desktop)
-   *    Runs synchronously before video starts so the right still is
-   *    showing from the first frame.
+   * 0. Hero asset selection (poster + source) is now done INLINE in <head>
+   *    via window.__heroAssets, BEFORE the <video> element parses. See
+   *    index.html. That's the only correct moment to decide which mp4 +
+   *    still to use, because the previous deferred poster-swap pattern
+   *    raced with the browser's <source media> selection and caused a
+   *    visible mis-crop on cold mobile loads (desktop poster rendered
+   *    inside a portrait container with object-fit:cover, cropping the
+   *    boy + tree out of frame until the script swap landed).
+   *
+   *    Leaving this comment as a breadcrumb so future-us doesn't
+   *    re-introduce a deferred swap here.
    * ------------------------------------------------------------------ */
-  (() => {
-    const video = document.querySelector(".hero__video");
-    if (!video) return;
-    const mql = window.matchMedia("(max-aspect-ratio: 1/1)");
-    const sync = () => {
-      const poster = mql.matches
-        ? "/assets/hero/mobile.png"
-        : "/assets/hero/desktop.png";
-      if (video.getAttribute("poster") !== poster) {
-        video.setAttribute("poster", poster);
-      }
-    };
-    sync();
-    (mql.addEventListener ? mql.addEventListener : mql.addListener).call(
-      mql,
-      "change",
-      sync
-    );
-  })();
 
   /* ------------------------------------------------------------------
    * 1. Ensure hero video autoplays on iOS Safari quirks.
