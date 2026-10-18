@@ -428,7 +428,11 @@ struct ChatView: View {
                     store: store,
                     engineHolder: engineHolder,
                     entityStore: entityStore,
-                    hostColorScheme: hostColorScheme
+                    hostColorScheme: hostColorScheme,
+                    onWillClear: {
+                        await stopInferenceAndWait()
+                        await engineHolder.resetConversationState()
+                    }
                 ) {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
@@ -1337,6 +1341,10 @@ struct ChatView: View {
                     lastSnapshot = snapshot
                     pendingSnapshot = snapshot
                 }
+                // A cancelled consumer can see the stream end normally
+                // rather than throw, so re-check before treating this
+                // as a completed (possibly empty) reply.
+                try Task.checkCancellation()
             } catch is CancellationError {
                 // User tapped stop. Tear down the flush tick so the
                 // final-commit path below runs before the stream is
@@ -1361,7 +1369,7 @@ struct ChatView: View {
                 errorReply = Self.modelNotReadyMessage()
                 wasError = true
             } catch InferenceError.guardrailViolation {
-                errorReply = "I'd rather not respond to that."
+                errorReply = "I couldn't find the right words for that one. Keep going if you want."
                 wasError = true
             } catch {
                 errorReply = "Something went wrong. Try again."
@@ -1403,6 +1411,17 @@ struct ChatView: View {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             }
         }
+    }
+
+    /// Cancel the in-flight reply (if any) and wait for its cancellation
+    /// path to finish writing. Used by "Start fresh" so the clear runs
+    /// strictly after the stream has stopped touching the store.
+    private func stopInferenceAndWait() async {
+        guard let task = inferenceTask else { return }
+        task.cancel()
+        await task.value
+        flushTask?.cancel()
+        flushTask = nil
     }
 
     /// Build the user-facing "model not ready" message, branching on the

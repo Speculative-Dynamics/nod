@@ -236,6 +236,15 @@ final class EngineHolder: ObservableObject {
         Task { await client.releaseContainer() }
     }
 
+    /// Drop any conversation state the active engine holds in memory.
+    /// Called by "Start fresh" so AFM's long-lived session can't carry
+    /// the cleared conversation into the next reply. MLX keeps no
+    /// per-conversation state between calls, so it's a no-op there.
+    func resetConversationState() async {
+        guard let afm = engine as? FoundationModelsClient else { return }
+        await afm.releaseSession()
+    }
+
     private func armIdleUnloadTimer(after delay: Duration) {
         idleUnloadTask?.cancel()
         // Only arm if we're actually on an MLX engine with something to

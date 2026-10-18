@@ -112,8 +112,29 @@ actor FoundationModelsClient: ListeningEngine {
             throw InferenceError.modelNotReady
         }
 
-        let response = try await session.respond(to: userMessage)
-        return response.content
+        do {
+            let response = try await session.respond(to: userMessage)
+            return response.content
+        } catch let error as LanguageModelSession.GenerationError {
+            switch error {
+            case .exceededContextWindowSize:
+                // The long-lived session accumulates every turn and
+                // eventually outgrows AFM's context window. Re-seed from
+                // the bounded context + un-summarized history and retry
+                // once. A second overflow propagates.
+                listeningSession = LanguageModelSession(
+                    instructions: buildSeedInstructions(context: context, history: history)
+                )
+                listeningSessionFingerprint = fingerprint
+                guard let fresh = listeningSession else { throw error }
+                let response = try await fresh.respond(to: userMessage)
+                return response.content
+            case .guardrailViolation, .refusal:
+                throw InferenceError.guardrailViolation
+            default:
+                throw error
+            }
+        }
     }
 
     /// Streaming variant. AFM ships a `streamResponse(to:)` on

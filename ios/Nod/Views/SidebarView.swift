@@ -32,6 +32,12 @@ struct SidebarView: View {
     /// correctly; we forward the value.
     let hostColorScheme: ColorScheme
 
+    /// Called after the user confirms "Start fresh," BEFORE the store is
+    /// cleared. ChatView uses this to stop any in-flight reply and wait
+    /// for it to exit, so a late-finishing stream can't write into the
+    /// freshly cleared conversation.
+    let onWillClear: () async -> Void
+
     /// Called after the user confirms "Start fresh." ChatView uses this to
     /// reset any local inference state (e.g. the isInferring thinking
     /// indicator) that isn't owned by the store itself.
@@ -332,6 +338,7 @@ struct SidebarView: View {
                 Button("Cancel", role: .cancel) { }
                 Button("Clear Conversation", role: .destructive) {
                     Task {
+                        await onWillClear()
                         await store.clear()
                         onCleared()
                         dismiss()
@@ -588,7 +595,7 @@ struct SidebarView: View {
         summarizer: { [holder] in holder.engine },
         entityFallbackProvider: { [holder] in holder.engine }
     )
-    SidebarView(store: store, engineHolder: holder, entityStore: entities, hostColorScheme: .dark, onCleared: {})
+    SidebarView(store: store, engineHolder: holder, entityStore: entities, hostColorScheme: .dark, onWillClear: {}, onCleared: {})
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }
