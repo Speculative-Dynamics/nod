@@ -113,6 +113,10 @@ struct ChatView: View {
     /// persisted — pure UI signal.
     @State private var committedAt: Date?
 
+    /// Set when dictation can't start, so the user gets an explanation
+    /// instead of a mic button that silently does nothing.
+    @State private var dictationProblem: DictationRecognizer.UnavailableReason?
+
     /// True when the mic button has been tapped at least once in this
     /// session. Until then, render a subtle .symbolEffect(.pulse) on
     /// the mic icon to hint discoverability.
@@ -474,6 +478,27 @@ struct ChatView: View {
             // role (not .destructive) because Pause is genuinely
             // reversible — resume data is persisted and the user can
             // resume whenever. Destructive-red would miscommunicate.
+            .alert(
+                Self.dictationProblemTitle(dictationProblem),
+                isPresented: Binding(
+                    get: { dictationProblem != nil },
+                    set: { if !$0 { dictationProblem = nil } }
+                ),
+                presenting: dictationProblem
+            ) { reason in
+                if reason == .permissionDenied {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    Button("Not now", role: .cancel) { }
+                } else {
+                    Button("OK", role: .cancel) { }
+                }
+            } message: { reason in
+                Text(Self.dictationProblemMessage(reason))
+            }
             .alert("Pause download?", isPresented: $showingCancelDownloadAlert) {
                 Button("Keep downloading", role: nil) { }
                 Button("Pause", role: .cancel) {
@@ -1055,8 +1080,37 @@ struct ChatView: View {
         // The recognizer now clears lastFinalText at start(), and
         // SpeechAnalyzer's stream-based results reliably hit
         // `.committed` before transitioning to `.idle`.
-        if case .committed = newValue {
+        switch newValue {
+        case .committed:
             deliverTranscript(dictationRecognizer.lastFinalText)
+        case .unavailable(let reason):
+            dictationProblem = reason
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        default:
+            break
+        }
+    }
+
+    private static func dictationProblemTitle(
+        _ reason: DictationRecognizer.UnavailableReason?
+    ) -> String {
+        switch reason {
+        case .permissionDenied: return "Voice needs your permission"
+        case .recognizerUnavailable: return "Voice isn't available yet"
+        case .audioEngineFailed, .none: return "Voice didn't start"
+        }
+    }
+
+    private static func dictationProblemMessage(
+        _ reason: DictationRecognizer.UnavailableReason
+    ) -> String {
+        switch reason {
+        case .permissionDenied:
+            return "To talk to Nod, allow Microphone and Speech Recognition for Nod in Settings. What you say is transcribed on this iPhone."
+        case .recognizerUnavailable:
+            return "Voice input doesn't support your language yet. You can still type."
+        case .audioEngineFailed:
+            return "Something got in the way of the microphone. Try again in a moment, or type instead."
         }
     }
 
@@ -1270,8 +1324,9 @@ struct ChatView: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    private func respond(to text: String) {
+    private func respond(to text: String, excludingFromHistory excluded: Set<UUID> = []) {
         guard let engine = engineHolder.engine else {
+            isInferring = false
             // Build bug: a prompt file isn't being copied into the bundle.
             // Developer-facing message — should never reach a real user.
             store.append(Message(role: .assistant, text: "Build error: prompts/ not found in app bundle. Check Xcode → Build Phases → Copy Bundle Resources."))
@@ -1292,7 +1347,10 @@ struct ChatView: View {
         // engine's system message. `history` is the un-summarized recent
         // turns — the engine passes these as real chat turns so the
         // model's multi-turn attention actually engages.
-        let inputs = store.buildInferenceInputs(currentUserMessage: text)
+        let inputs = store.buildInferenceInputs(
+            currentUserMessage: text,
+            excludingFromHistory: excluded
+        )
 
         // Token budget sized to this user's response-style preference.
         let options = GenerationOptions.forResponseStyle(
@@ -1483,8 +1541,19 @@ struct ChatView: View {
         // Simpler: delete the old ID right before we append the new
         // placeholder IF we can guarantee the new stream will start.
         // That fails the delete-after-success contract on immediate
-        // error. So we use a Task observer:
+        // error. So we use a Task observer.
+        //
+        // Before re-sending, drop AFM's live session: it already holds
+        // the original question and the reply we're replacing, so the
+        // model would otherwise see the same question twice. The fresh
+        // session re-seeds from history, which excludes the old reply.
+        // `isInferring` is claimed up front so a double tap during the
+        // await can't launch a second regenerate.
+        isInferring = true
         Task { @MainActor in
+            await engineHolder.resetConversationState()
+            respond(to: lastUserText, excludingFromHistory: [oldAssistantID])
+
             // Wait for the new placeholder to appear AND gain content,
             // OR for the inferenceTask to finish (error path).
             while !Task.isCancelled {
@@ -1509,8 +1578,6 @@ struct ChatView: View {
                 }
             }
         }
-
-        respond(to: lastUserText)
     }
 
     // MARK: - Message spacing

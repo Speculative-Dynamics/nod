@@ -246,7 +246,7 @@ final class PersonalizationStore: ObservableObject {
             ?? .conversational
         let mode = NodMode(rawValue: d.string(forKey: nodModeKey) ?? "")
             ?? .reflect
-        let text = d.string(forKey: freeFormKey) ?? ""
+        let text = loadFreeFormText()
         let appearance = AppearancePreference(rawValue: d.string(forKey: appearanceKey) ?? "")
             ?? .system
         return Personalization(
@@ -261,7 +261,39 @@ final class PersonalizationStore: ObservableObject {
         let d = UserDefaults.standard
         d.set(current.responseStyle.rawValue, forKey: Self.responseStyleKey)
         d.set(current.nodMode.rawValue, forKey: Self.nodModeKey)
-        d.set(current.freeFormText, forKey: Self.freeFormKey)
         d.set(current.appearance.rawValue, forKey: Self.appearanceKey)
+        Self.saveFreeFormText(current.freeFormText)
+    }
+
+    // The free-form note is personal, so it lives in a file next to the
+    // conversation database where the iCloud-backup toggle applies.
+    // UserDefaults is always included in device backups.
+
+    private static func loadFreeFormText() -> String {
+        let url = MessageDatabase.personalNoteURL
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            return text
+        }
+        // One-time migration from the old UserDefaults key.
+        let d = UserDefaults.standard
+        guard let legacy = d.string(forKey: freeFormKey) else { return "" }
+        saveFreeFormText(legacy)
+        d.removeObject(forKey: freeFormKey)
+        return legacy
+    }
+
+    private static func saveFreeFormText(_ text: String) {
+        let url = MessageDatabase.personalNoteURL
+        if text.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        if (try? String(contentsOf: url, encoding: .utf8)) == text { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+        MessageDatabase.applyBackupPreference(to: url)
     }
 }
