@@ -81,7 +81,7 @@
                     >
                     <h1>Privacy Policy</h1>
                     <p class="meta">
-                        Last updated: 20 April 2026 · Effective immediately.
+                        Last updated: 19 October 2026 · Effective immediately.
                     </p>
                 </div>
             </header>
@@ -129,7 +129,7 @@
                     <p>
                         Every part of the Nod experience — the text you type,
                         the voice input you dictate, the model responses, the
-                        memory summaries, the conversation history — is
+                        memory notes, the conversation history — is
                         processed locally on your device. Conversation backup
                         to your own iCloud account is optional and off by
                         default. Specifically:
@@ -144,19 +144,21 @@
                             Your prompts never leave the phone.
                         </li>
                         <li>
-                            You can <strong>optionally switch</strong> to an
-                            open-weights model in settings — Qwen 3 Instruct
-                            2507, Qwen 3.5 4B, or Gemma 4 E2B Text, all served
-                            via MLX Swift. These also run on-device. Choosing
-                            one triggers a one-time weights download (see
+                            On iPhones without Apple Intelligence, or if you
+                            choose one in advanced settings, Nod uses an
+                            open-weights model instead — Qwen 3.5 4B or Qwen 3.5
+                            2B, served via MLX Swift. These also run on-device.
+                            Using one triggers a one-time weights download (see
                             below); after that, inference stays on the phone.
                         </li>
                         <li>
-                            The <strong>memory</strong> feature uses
-                            <code>FoundationModels</code> to extract structured
-                            facts from each turn, stored locally for the
-                            sidebar's "what Nod remembers" view. You can purge
-                            individual facts or everything.
+                            The <strong>memory</strong> feature uses the
+                            on-device model to write short notes about earlier
+                            stretches of your conversation, and searches your
+                            own earlier messages on the device to recall
+                            details. Notes are stored locally and shown in the
+                            "What Nod remembers" view. You can forget individual
+                            notes or everything.
                         </li>
                         <li>
                             Your <strong>conversation history</strong> is stored
@@ -166,8 +168,8 @@
                         </li>
                         <li>
                             Tapping <strong>"Start fresh"</strong> permanently
-                            deletes your local conversation, running summary,
-                            and memory on that device. This is irreversible.
+                            deletes your local conversation and memory notes on
+                            that device. This is irreversible.
                         </li>
                     </ul>
                     <p>
@@ -186,8 +188,9 @@
                         related to your conversation.
                     </p>
                     <p>
-                        If you switch to an open-weights engine (Qwen 3 / 3.5
-                        or Gemma 4) in settings, Nod downloads the selected
+                        If Nod uses an open-weights model (Qwen 3.5 4B or 2B),
+                        on a device without Apple Intelligence or by your
+                        choice in settings, Nod downloads the selected
                         model's weights (~2–3 GB) one time from our hosted
                         model files on Cloudflare R2 via Apple's Background
                         Assets framework. Downloads default to Wi-Fi only; you

@@ -1332,3 +1332,66 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     .cinema__pair-phones { grid-template-columns: 1fr; }
 }
 
+
+/* =====================================================================
+   Questions (FAQ). Native <details> so it works without JS and with
+   keyboard and screen readers; the marker is drawn in CSS.
+   ===================================================================== */
+.section--faq .display {
+    margin-bottom: 2rem;
+}
+.faq {
+    border-top: 1px solid var(--hairline-strong);
+}
+.faq__item {
+    border-bottom: 1px solid var(--hairline-strong);
+}
+.faq__item summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1.5rem;
+    padding: 1.35rem 0;
+    font-family: var(--font-sans);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--ink);
+    text-wrap: balance;
+}
+.faq__item summary::-webkit-details-marker {
+    display: none;
+}
+.faq__item summary::after {
+    content: "+";
+    flex: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--nod-orange);
+    transition: transform 0.25s var(--ease-out-soft);
+}
+.faq__item[open] summary::after {
+    transform: rotate(45deg);
+}
+.faq__item summary:focus-visible {
+    outline: 2px solid var(--nod-orange);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+.faq__item p {
+    margin: 0 0 1.5rem;
+    max-width: 60ch;
+    font-size: var(--fs-body);
+    line-height: 1.65;
+    color: var(--ink-soft);
+}
+.faq__item em {
+    font-style: normal;
+    color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+    .faq__item summary::after {
+        transition: none;
+    }
+}
