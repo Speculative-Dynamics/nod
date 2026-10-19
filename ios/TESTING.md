@@ -39,21 +39,25 @@ Debug launch arguments the tests use (`Nod/Views/DebugUIState.swift`):
 
 All are compiled out of release builds.
 
-## 2. Real engines (Mac or iPhone)
+## 2. Real engines (iPhone)
 
 `NodUITests/NodRealEngineTests.swift` repeats the core flows with no
 scripted engine: replies from Apple Intelligence, Stop, a real memory
 note and recall, and (opt-in) downloading Qwen and getting a reply.
+UI tests can't run on "My Mac (Designed for iPad)", so this needs an
+iPhone with Apple Intelligence:
 
 ```bash
 TEST_RUNNER_NOD_REAL_ENGINE=1 xcodebuild test -project Nod.xcodeproj -scheme Nod \
-  -destination 'platform=macOS,arch=arm64,variant=Designed for [iPad,iPhone]' \
+  -destination 'platform=iOS,name=<your iPhone>' \
   -only-testing:NodUITests/NodRealEngineTests -allowProvisioningUpdates
 ```
 
-Add `TEST_RUNNER_NOD_REAL_MLX=1` for the Qwen download (~3 GB). Every
-test wipes the app's data first, so don't run them on a phone whose Nod
-conversation matters.
+Add `TEST_RUNNER_NOD_REAL_MLX=1` for the Qwen download (~3 GB). This
+installs a debug build over the App Store app, and every test wipes
+Nod's data first, so don't run it on a phone whose Nod conversation
+matters. The evals below exercise the same real engines through the
+app's own reply and memory code without a device.
 
 ## 3. Reply quality and memory evals (Mac)
 
