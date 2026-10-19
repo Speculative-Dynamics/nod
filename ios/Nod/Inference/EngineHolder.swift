@@ -116,7 +116,8 @@ final class EngineHolder: ObservableObject {
         // observer sees `.ready`. The extra `canRunAFM` gate prevents
         // the send button from looking enabled on an iPhone 15 base
         // that can't actually generate.
-        self.isModelReady = (effective.mlxSpec == nil) && DeviceCapability.canRunAFM
+        self.isModelReady = ((effective.mlxSpec == nil) && DeviceCapability.canRunAFM)
+            || DebugUIState.fakeEngineMode != nil
         // On cold launch we ONLY attach the state observer — we do NOT
         // eagerly load the 2-3 GB MLX model here. Loading during init
         // puts us inside iOS's tight launch-time memory budget, and a
@@ -148,7 +149,8 @@ final class EngineHolder: ObservableObject {
         // AFM is ready only if the hardware + user settings actually
         // allow it. MLX needs a load either way. See the init comment
         // for why we don't auto-fallback when AFM isn't available.
-        isModelReady = (preference.mlxSpec == nil) && DeviceCapability.canRunAFM
+        isModelReady = ((preference.mlxSpec == nil) && DeviceCapability.canRunAFM)
+            || DebugUIState.fakeEngineMode != nil
 
         // Mid-session switches should start the download/load right
         // away — the user just picked a new engine, latency would be
@@ -341,6 +343,11 @@ final class EngineHolder: ObservableObject {
     // MARK: - Private
 
     private static func makeEngine(for pref: EnginePreference) -> (any ListeningEngine)? {
+        #if DEBUG
+        if let raw = DebugUIState.fakeEngineMode, let mode = ScriptedEngine.Mode(rawValue: raw) {
+            return ScriptedEngine(mode: mode)
+        }
+        #endif
         switch pref {
         case .apple:
             return try? FoundationModelsClient()

@@ -124,6 +124,29 @@ targets:
       - package: SwiftTransformers
         product: Tokenizers
 
+  # End-to-end UI tests. They drive the real app with debug launch
+  # arguments (see Nod/Views/DebugUIState.swift): a clean start every
+  # test, and a scripted reply engine where the Simulator can't run a
+  # real model. Run: xcodebuild test -scheme Nod -destination <device>
+  NodUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: NodUITests
+    dependencies:
+      - target: Nod
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.usenod.nod.uitests
+        # XCTest's UI APIs predate strict concurrency; Swift 5 mode keeps
+        # the tests readable without isolation annotations everywhere.
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TEST_TARGET_NAME: Nod
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+
 # Explicit scheme so `xcodebuild -scheme Nod` works from the CLI without
 # relying on xcodebuild's auto-create-scheme-from-target behavior (which
 # turned out to be unreliable across xcodegen versions). Regenerate:
@@ -137,6 +160,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - NodUITests
     profile:
       config: Release
     analyze:
