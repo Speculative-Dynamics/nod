@@ -47,6 +47,24 @@ final class MessageDatabase: @unchecked Sendable {
         return libraryURL.appendingPathComponent("nod-conversation.sqlite")
     }()
 
+    /// The user's free-form "Anything else" note from the sidebar.
+    /// Lives next to the database (not in UserDefaults, which iOS always
+    /// backs up) so the same backup preference covers it.
+    static let personalNoteURL: URL = fileURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("nod-personal-note.txt")
+
+    /// Apply the current backup preference to one file. Needed after
+    /// any atomic write, because an atomic write replaces the file and
+    /// the replacement doesn't inherit `isExcludedFromBackup`.
+    static func applyBackupPreference(to url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = !iCloudBackupEnabled
+        var mutableURL = url
+        try? mutableURL.setResourceValues(values)
+    }
+
     static var iCloudBackupEnabled: Bool {
         get {
             let defaults = UserDefaults.standard
@@ -586,6 +604,7 @@ final class MessageDatabase: @unchecked Sendable {
             URL(fileURLWithPath: databaseURL.path + "-wal"),
             URL(fileURLWithPath: databaseURL.path + "-shm"),
             pendingWritesURL,
+            Self.personalNoteURL,
         ]
     }
 

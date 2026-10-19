@@ -38,7 +38,10 @@ packages:
   # URL)` directly. See MLXEngineClient.performLoad for the new call.
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
-    from: "3.31.3"
+    # 3.32.3+: our code uses the `perform { context in }` API and the
+    # Generation.rejectedToolCall case. Older toolchains silently
+    # resolve 3.31.x, which doesn't compile — keep this floor.
+    from: "3.32.3"
   # swift-transformers provides Tokenizers.AutoTokenizer. We bridge it to
   # MLXLMCommon.TokenizerLoader in app code so we can avoid the package's
   # macro-based convenience wrapper entirely.

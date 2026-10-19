@@ -816,7 +816,7 @@ actor MLXEngineClient: ListeningEngine {
                 switch generation {
                 case .chunk(let chunk):
                     output += chunk
-                case .info, .toolCall:
+                case .info, .toolCall, .rejectedToolCall:
                     break
                 }
             }
@@ -885,7 +885,7 @@ actor MLXEngineClient: ListeningEngine {
                 case .chunk(let chunk):
                     accumulator += chunk
                     try await onSnapshot(accumulator)
-                case .info, .toolCall:
+                case .info, .toolCall, .rejectedToolCall:
                     break
                 }
             }

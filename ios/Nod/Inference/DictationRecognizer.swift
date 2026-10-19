@@ -100,6 +100,18 @@ final class DictationRecognizer: ObservableObject {
     /// observe it, so updates don't trigger ChatView re-renders.
     private var currentPartial: String = ""
 
+    /// Finalized segments so far. SpeechTranscriber finalizes speech
+    /// phrase by phrase while recording continues, so a final result
+    /// is one segment, not the end of the dictation. The transcript is
+    /// `finalizedText` + `currentPartial`; we only commit on stop or
+    /// silence.
+    private var finalizedText: String = ""
+
+    /// Set when the transcriber's results sequence ends, which happens
+    /// after `finalizeAndFinishThroughEndOfInput()` has flushed the
+    /// last finalized segment.
+    private var resultsStreamEnded = false
+
     // MARK: - Private state
 
     private let log = Logger(subsystem: "app.usenod.nod", category: "voice")
@@ -145,6 +157,8 @@ final class DictationRecognizer: ObservableObject {
         // ChatView can't re-insert it if this session fails before
         // committing.
         lastFinalText = ""
+        finalizedText = ""
+        resultsStreamEnded = false
         isFinalizing = false
         state = .requestingPermission
 
@@ -247,6 +261,7 @@ final class DictationRecognizer: ObservableObject {
             } catch {
                 // Stream closed on teardown — normal.
             }
+            self?.resultsStreamEnded = true
         }
 
         currentPartial = ""
@@ -266,7 +281,6 @@ final class DictationRecognizer: ObservableObject {
             tearDownSync()
             return
         }
-        let partial = currentPartial
         // Idempotent: don't launch a second finalize if one is
         // already in flight.
         if isFinalizing { return }
@@ -284,13 +298,18 @@ final class DictationRecognizer: ObservableObject {
             do {
                 try await analyzer?.finalizeAndFinishThroughEndOfInput()
             } catch {
-                // Log only; we still fall through to fallback.
+                // Log only; we still commit whatever we have.
             }
 
-            // Fallback: if no final result arrives in 700ms, commit
-            // with the partial we had at commit-time.
-            try? await Task.sleep(for: .milliseconds(700))
-            await self?.fallbackFinalize(with: partial)
+            // Let the last finalized segment drain through the results
+            // loop, up to 700 ms. If it doesn't arrive in time, the
+            // trailing partial stands in for it.
+            for _ in 0..<14 {
+                if Task.isCancelled || (self?.resultsStreamEnded ?? true) { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !Task.isCancelled else { return }
+            self?.finishCommit()
         }
     }
 
@@ -458,22 +477,13 @@ final class DictationRecognizer: ObservableObject {
     private func handleTranscriberResult(_ result: SpeechTranscriber.Result) {
         let text = String(result.text.characters)
         if result.isFinal {
-            // Guard: if we already transitioned past .listening (e.g.,
-            // fallback finalize or cancel beat us to it), drop this
-            // result. Prevents double-state-flip and stale-session
-            // results overwriting current state. (Multi-source finding.)
+            // One finalized segment. Recording keeps going; the
+            // dictation commits on stop or silence (see commit()).
+            // Drop results that arrive after cancel/commit landed.
             guard case .listening = state else { return }
-            // Cancel any pending fallback-finalize timer so it can't
-            // re-commit with stale partial text.
-            finalizeTask?.cancel(); finalizeTask = nil
-            lastFinalText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            tearDownSync()
-            state = .committed(final: lastFinalText)
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(50))
-                guard let self, case .committed = self.state else { return }
-                self.state = .idle
-            }
+            finalizedText = Self.joinSegments(finalizedText, text)
+            currentPartial = ""
+            if !isFinalizing { resetSilenceTimer() }
         } else {
             // Partial result: update the private partial text but
             // do NOT touch @Published state. That's the entire point
@@ -482,17 +492,17 @@ final class DictationRecognizer: ObservableObject {
             // moves forward as new words arrive.
             guard case .listening = state else { return }
             currentPartial = text
-            resetSilenceTimer()
+            if !isFinalizing { resetSilenceTimer() }
         }
     }
 
-    private func fallbackFinalize(with partial: String) async {
-        // If a real isFinal result already arrived and transitioned
-        // us to .committed (or anywhere else), don't overwrite.
-        // Prevents double-state-flip when isFinal lands during the
-        // 700ms fallback sleep.
+    /// Deliver the accumulated transcript. Called once per dictation,
+    /// after finalization has drained (or timed out).
+    private func finishCommit() {
+        // Cancel may have landed while we were draining.
         guard case .listening = state else { return }
-        let trimmed = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.joinSegments(finalizedText, currentPartial)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         lastFinalText = trimmed
         tearDownSync()
         state = .committed(final: trimmed)
@@ -501,6 +511,15 @@ final class DictationRecognizer: ObservableObject {
             guard let self, case .committed = self.state else { return }
             self.state = .idle
         }
+    }
+
+    /// Join transcript segments with a single space unless the
+    /// boundary already has whitespace.
+    private static func joinSegments(_ head: String, _ tail: String) -> String {
+        if head.isEmpty { return tail }
+        if tail.isEmpty { return head }
+        let needsSpace = !(head.last?.isWhitespace ?? true) && !(tail.first?.isWhitespace ?? true)
+        return needsSpace ? head + " " + tail : head + tail
     }
 
     // MARK: - Silence timer (main actor)
@@ -524,6 +543,7 @@ final class DictationRecognizer: ObservableObject {
     private func tearDownSync() {
         isFinalizing = false
         currentPartial = ""
+        finalizedText = ""
         silenceTask?.cancel(); silenceTask = nil
         finalizeTask?.cancel(); finalizeTask = nil
 

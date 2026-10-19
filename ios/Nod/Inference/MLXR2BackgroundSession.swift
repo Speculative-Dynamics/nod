@@ -235,10 +235,20 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
     /// under lock.
     private var wifiGatedSnapshot: Bool = false
 
+    /// Set by `useCellularThisTime()` and cleared at the start of every
+    /// run. Must be accessed under lock.
+    private var cellularAllowedThisRun: Bool = false
+
+    /// Persistent preference OR the one-shot override. Must be called
+    /// under lock.
+    private var cellularPermittedLocked: Bool {
+        cellularAllowed || cellularAllowedThisRun
+    }
+
     /// Compute whether the current path gates us. Must be called under lock.
     private func isWifiGated(path: NWPath?) -> Bool {
         guard let path else { return false }
-        if cellularAllowed { return false }
+        if cellularPermittedLocked { return false }
         return path.usesInterfaceType(.cellular)
     }
 
@@ -349,6 +359,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
             self.totalManifestBytes = totalBytes
             self.onEvent = event
             self.currentResumeURL = resumeDataURL
+            self.cellularAllowedThisRun = false
             self.wifiGatedSnapshot = isWifiGated(path: latestPath)
         }
 
@@ -434,7 +445,10 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
     /// One-shot: allow cellular for the CURRENT run only. Does not flip
     /// the persistent preference.
     func useCellularThisTime() {
-        lock.withLock { wifiGatedSnapshot = false }
+        lock.withLock {
+            cellularAllowedThisRun = true
+            wifiGatedSnapshot = false
+        }
         let metrics = lock.withLock { snapshotMetricsLocked() }
         onEvent?(.progress(metrics))
     }
@@ -547,7 +561,7 @@ final class MLXR2BackgroundSession: NSObject, URLSessionDownloadDelegate, @unche
                     var request = URLRequest(url: url)
                     // Respect per-file cellular gate. URLSession-level is
                     // true; this gate is the user-preference-backed one.
-                    request.allowsCellularAccess = lock.withLock { cellularAllowed }
+                    request.allowsCellularAccess = lock.withLock { cellularPermittedLocked }
                     task = session.downloadTask(with: request)
                 }
 

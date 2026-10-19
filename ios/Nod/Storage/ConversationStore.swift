@@ -315,7 +315,14 @@ final class ConversationStore: ObservableObject {
     /// Without that filter we'd risk Nod lapsing into pattern-surfacing
     /// ("you've mentioned M a lot recently"), which the design explicitly
     /// forbids.
-    func buildInferenceInputs(currentUserMessage: String? = nil) -> InferenceInputs {
+    ///
+    /// `excludingFromHistory` drops specific rows from `history` — used
+    /// by regenerate so the reply being replaced isn't shown to the
+    /// model as if it had already answered.
+    func buildInferenceInputs(
+        currentUserMessage: String? = nil,
+        excludingFromHistory excluded: Set<UUID> = []
+    ) -> InferenceInputs {
         var parts: [String] = []
 
         // Personalisation first so it frames how the rest of the context
@@ -347,6 +354,7 @@ final class ConversationStore: ObservableObject {
             // Drop the empty assistant placeholder that ChatView inserts
             // before streaming tokens back in.
             recent = recent.filter { !($0.role == .assistant && $0.text.isEmpty) }
+            recent = recent.filter { !excluded.contains($0.id) }
             // Drop the most recent user message — it's the current query.
             if let lastIndex = recent.lastIndex(where: { $0.role == .user }) {
                 recent.remove(at: lastIndex)
@@ -656,6 +664,7 @@ final class ConversationStore: ObservableObject {
             withIntermediateDirectories: true
         )
         try? data.write(to: url, options: .atomic)
+        MessageDatabase.applyBackupPreference(to: url)
     }
 }
 
