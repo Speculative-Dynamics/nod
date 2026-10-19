@@ -9,6 +9,9 @@
 //   -nodDownload downloading | wifi | network | paused | loading |
 //                failNetwork | failDisk | failOther
 //       Show the download/readiness bar in that state.
+//   -nodRecording YES
+//       Show the dictation UI as if recording (stop button, edge glow).
+//       Simulator voice input often lacks its language assets.
 //   -nodLocked YES
 //       Show the Face ID lock screen and keep it up (the Simulator
 //       has no passcode, so it would otherwise unlock at once).
@@ -38,6 +41,8 @@ enum DebugUIState {
 
     static var forceLocked: Bool { argument("-nodLocked") == "YES" }
 
+    static var forceRecording: Bool { argument("-nodRecording") == "YES" }
+
     static var forcedDownloadState: MLXEngineClient.State? {
         let total = MLXModelSpec.qwen35_4b.totalBytes
         let partial = DownloadMetrics(
@@ -60,6 +65,7 @@ enum DebugUIState {
     static let forcedAFMStatus: DeviceCapability.AFMStatus? = nil
     static let forceNoMLX = false
     static let forceLocked = false
+    static let forceRecording = false
     static let forcedDownloadState: MLXEngineClient.State? = nil
     #endif
 }

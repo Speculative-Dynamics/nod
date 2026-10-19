@@ -1008,6 +1008,7 @@ struct ChatView: View {
     /// True when we're actively capturing voice. Used to morph the
     /// mic button into a stop button and to show the edge glow.
     private var isRecording: Bool {
+        if DebugUIState.forceRecording { return true }
         switch dictationRecognizer.state {
         case .listening, .requestingPermission:
             return true
