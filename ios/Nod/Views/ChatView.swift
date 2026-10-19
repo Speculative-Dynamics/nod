@@ -2265,8 +2265,10 @@ private struct AFMUnavailableOnboarding: View {
     var body: some View {
         // Explanation scrolls; the actions stay pinned at the bottom,
         // where thumbs are and where large text can't push them away.
+        // Soft: left-aligned like the chat's empty state, warm colours,
+        // a pill-shaped main action.
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 heroMascot
                 explanation
                 // At accessibility sizes only the main button is pinned;
@@ -2274,7 +2276,7 @@ private struct AFMUnavailableOnboarding: View {
                 if typeSize.isAccessibilitySize { secondaryActions }
             }
             .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -2293,14 +2295,14 @@ private struct AFMUnavailableOnboarding: View {
 
     // MARK: Hero
 
-    /// 88pt mascot — the hero size. Larger than the 32pt nav-bar
-    /// mascot; codified as the "hero moment" token. NodMascotBlinker
-    /// so the face feels alive while users read onboarding copy —
-    /// a frozen 88pt face reads cold on a screen users sit with.
+    /// 64pt blinking face above the headline, so the face feels alive
+    /// while people read; a frozen face reads cold on a screen they
+    /// sit with.
     private var heroMascot: some View {
-        NodMascotBlinker(size: 88)
-            .padding(.top, typeSize.isAccessibilitySize ? 24 : 64)
+        NodMascotBlinker(size: 64)
+            .padding(.top, typeSize.isAccessibilitySize ? 16 : 56)
             .padding(.bottom, 28)
+            .accessibilityHidden(true)
             .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)
     }
 
@@ -2334,10 +2336,8 @@ private struct AFMUnavailableOnboarding: View {
             requirementsCard
             Text("We'd rather be honest than give you a bad experience. The whole point is that your conversations stay on your device.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .foregroundStyle(Soft.muted)
                 .padding(.top, 18)
-                .padding(.horizontal, 8)
         }
     }
 
@@ -2379,18 +2379,18 @@ private struct AFMUnavailableOnboarding: View {
 
     private func welcomeHeadline(_ text: String) -> some View {
         Text(text)
-            .font(.title3.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 14)
+            .font(.largeTitle.weight(.bold))
+            .foregroundStyle(Soft.ink)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.bottom, 12)
     }
 
     private func bodyCopy(_ text: String) -> some View {
         Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 28)
-            .padding(.horizontal, 4)
+            .font(.body)
+            .foregroundStyle(Soft.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.bottom, 24)
     }
 
     /// The main call to action: download the best model this phone fits.
@@ -2413,8 +2413,8 @@ private struct AFMUnavailableOnboarding: View {
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color("NodAccent"))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 20)
+            .background(Soft.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Download Nod's model, \(size)")
@@ -2428,8 +2428,10 @@ private struct AFMUnavailableOnboarding: View {
             onPickModel(pref)
         } label: {
             Text("\(label) (\(size))")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color("NodAccent"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Soft.accent)
+                .multilineTextAlignment(.center)
+                .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(label), \(size)")
@@ -2437,13 +2439,12 @@ private struct AFMUnavailableOnboarding: View {
 
     private var requirementsCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("WHAT YOU'LL NEED")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.6)
+            Text("What you'll need")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Soft.muted)
             Text("An iPhone with Apple Intelligence, or any iPhone with at least 6 GB of memory.")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
+                .font(.body)
+                .foregroundStyle(Soft.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -2459,12 +2460,11 @@ private struct AFMUnavailableOnboarding: View {
     /// Footer shown on both MLX-capable branches (MLX-only and AFM-off).
     /// Not on "neither" — that branch has its own reassurance copy.
     private var onDeviceFooter: some View {
-        Text("Everything stays on this iPhone. Nothing is sent to a server.")
+        Label("Everything stays on this iPhone.", systemImage: "lock.fill")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Soft.muted)
             .multilineTextAlignment(.center)
-            .padding(.top, 18)
-            .padding(.horizontal, 8)
+            .padding(.top, 14)
     }
 
     // MARK: Helpers
