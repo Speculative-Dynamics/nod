@@ -55,8 +55,8 @@ jobs:
           xcodebuild -version
           echo "--- SDKs ---"
           xcodebuild -showsdks
-          echo "--- iPhone 17 Pro simulator availability ---"
-          xcrun simctl list devices "iPhone 17 Pro" available
+          echo "--- iOS simulator runtimes ---"
+          xcrun simctl list runtimes ios
 
       # Swift Package Manager deps are heavy for Nod (MLX ships ~500MB of
       # xcframeworks). Without caching every CI run re-downloads
@@ -91,7 +91,7 @@ jobs:
             -project Nod.xcodeproj \
             -scheme Nod \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
