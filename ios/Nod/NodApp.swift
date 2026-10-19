@@ -33,7 +33,13 @@ struct NodApp: App {
         // walkthrough) is to cap it aggressively — 20 MB is plenty for a
         // chat workload. Pair this with the memory-limit entitlement so the
         // OS doesn't jetsam us mid-inference.
+        //
+        // Skipped in the Simulator: touching MLX there aborts at launch
+        // (MLX can't create its Metal device), and the Simulator only
+        // runs the Apple Intelligence engine anyway.
+        #if !targetEnvironment(simulator)
         Memory.cacheLimit = 20 * 1024 * 1024
+        #endif
     }
 
     // Resets to true on every cold launch (the @State default). Warm launches

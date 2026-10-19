@@ -1,0 +1,11 @@
+{
+  "id": "memory-does-not-volunteer",
+  "category": "memory",
+  "turns": [
+    "what should I make for dinner"
+  ],
+  "expect": "Answers the dinner question casually. Does NOT bring up J, the job search or the mom's health.",
+  "context": {
+    "chapter": "Their partner J has been steady through a rough job search. They mentioned their mom's health scare twice last month."
+  }
+}

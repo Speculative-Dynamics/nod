@@ -1,0 +1,8 @@
+{
+  "id": "greeting-hey",
+  "category": "greeting",
+  "turns": [
+    "hey"
+  ],
+  "expect": "A casual hello back. One short line. No 'what's on your mind', no probing."
+}

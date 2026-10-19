@@ -1,0 +1,29 @@
+{
+  "id": "recall-correction",
+  "kind": "recall",
+  "expect": "A later correction wins: Montreal, not Toronto.",
+  "turns": [
+    "my sister Leila is moving to Toronto in March and I'm kind of gutted",
+    "work was long today",
+    "had leftovers for dinner",
+    "watched half a movie and fell asleep",
+    "the commute was awful",
+    "finally did laundry",
+    "my coworker brought donuts",
+    "it's been raining all week",
+    "I keep meaning to call my friends back",
+    "update on Leila: the Toronto job fell through, she's moving to Montreal instead",
+    "didn't sleep great",
+    "tried a new coffee place, it was fine",
+    "the train was late again",
+    "spent the evening doom scrolling",
+    "went for a short walk",
+    "my neighbor's dog barked all night",
+    "cleaned my desk finally",
+    "work meeting ran over by an hour",
+    "wait where is Leila moving now?"
+  ],
+  "replyMustInclude": [
+    "Montreal"
+  ]
+}

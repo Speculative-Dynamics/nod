@@ -1,0 +1,11 @@
+{
+  "id": "flow-deepening",
+  "category": "multi-turn",
+  "turns": [
+    "work's been weird",
+    "my team lead keeps redoing my work without telling me",
+    "like I find out in the PR that my whole approach got replaced",
+    "I don't even know if I should say something"
+  ],
+  "expect": "Follows the thread specifically across turns (team lead, PR). Last turn: offers a view if asked, no list of options."
+}

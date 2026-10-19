@@ -1,0 +1,11 @@
+{
+  "id": "spiral-perspective-mode",
+  "category": "spiral",
+  "turns": [
+    "nobody ever texts me first. I think people just tolerate me."
+  ],
+  "expect": "With 'offer perspective' on: names the pattern or offers a different angle. Still warm, no prescriptions.",
+  "context": {
+    "personalization": "HOW THIS PERSON LIKES TO BE HEARD:\n- This person wants you to push a little harder. When they're spiraling, stuck, or missing something obvious, offer a different angle or name what you see. Still a friend's voice, not a coach's. No prescriptions."
+  }
+}

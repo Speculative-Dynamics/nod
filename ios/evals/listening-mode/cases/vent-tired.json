@@ -1,0 +1,8 @@
+{
+  "id": "vent-tired",
+  "category": "venting",
+  "turns": [
+    "I'm tired but I don't know why"
+  ],
+  "expect": "Stays with the not-knowing. No 'I'm sorry to hear', no tips about energy. Maybe one opening question."
+}

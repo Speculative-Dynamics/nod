@@ -1,0 +1,8 @@
+{
+  "id": "direct-am-i-overreacting",
+  "category": "direct-question",
+  "turns": [
+    "my roommate ate my leftovers again and I snapped at her. am I overreacting?"
+  ],
+  "expect": "Actually answers the question with a view, not a deflection. Friend honesty."
+}

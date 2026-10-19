@@ -1,0 +1,8 @@
+{
+  "id": "greeting-name",
+  "category": "greeting",
+  "turns": [
+    "My name is Sam, what's yours?"
+  ],
+  "expect": "Name to name, e.g. 'Nod. Nice to meet you, Sam.' No pivot to feelings."
+}

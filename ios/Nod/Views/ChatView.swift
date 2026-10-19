@@ -20,14 +20,11 @@ import SwiftUI
 import UIKit
 import os
 
+private let inferenceLog = Logger(subsystem: "app.usenod.nod", category: "inference")
+
 struct ChatView: View {
 
     @StateObject private var store: ConversationStore
-    /// EntityStore is observed separately so SwiftUI picks up changes to
-    /// its `@Published pendingDisambiguations`. It's actually owned by
-    /// `store` (same instance); exposing it here lets the view render
-    /// the disambiguation banner reactively.
-    @StateObject private var entityStore: EntityStore
     @ObservedObject private var crashBreaker = LaunchCrashBreaker.shared
     // `personalization` is intentionally NOT observed here. PersonalizationStore
     // fires `@Published current` on every sidebar picker tick AND every
@@ -210,25 +207,13 @@ struct ChatView: View {
         // than "app never opens again, user must delete and reinstall."
         let db = Self.openOrQuarantineDatabase()
 
-        // EntityStore is created first so ConversationStore can receive
-        // a reference. Both are wrapped in their own StateObjects so
-        // SwiftUI observes them independently — ChatView renders the
-        // disambiguation banner off EntityStore's queue while the rest
-        // of the chat runs off ConversationStore.
-        let entities = EntityStore(database: db)
-        self._entityStore = StateObject(wrappedValue: entities)
-
         // Capture the holder (not a specific engine) so compression always
         // uses whichever engine is current when it fires — even if the user
         // switched between append and the compression task starting.
-        // Same rationale for the entity fallback: extraction prefers AFM,
-        // but falls back to the active listening engine if AFM refuses
-        // or is unavailable, and the "active" engine can change.
         self._store = StateObject(wrappedValue: ConversationStore(
             database: db,
-            entityStore: entities,
-            summarizer: { [holder] in holder.engine },
-            entityFallbackProvider: { [holder] in holder.engine }
+            chapterWriter: { [holder] in holder.engine },
+            compressionPolicy: { [holder] in holder.preference.mlxSpec == nil ? .roomy : .compact }
         ))
     }
 
@@ -307,19 +292,6 @@ struct ChatView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                // Entity disambiguation prompts. Entity extraction can
-                // produce a new name that fuzzy-matches an existing
-                // entity (e.g. "Mark" and we already know "M, manager").
-                // Rather than guess, we ask the user. One banner per
-                // pending prompt, queued in order.
-                if let pending = entityStore.pendingDisambiguations.first {
-                    disambiguationBanner(for: pending)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .id(pending.id)
                 }
 
                 // Persistent "AFM not available" banner. Only shown when
@@ -431,12 +403,8 @@ struct ChatView: View {
                 SidebarView(
                     store: store,
                     engineHolder: engineHolder,
-                    entityStore: entityStore,
                     hostColorScheme: hostColorScheme,
-                    onWillClear: {
-                        await stopInferenceAndWait()
-                        await engineHolder.resetConversationState()
-                    }
+                    onWillClear: { await stopInferenceAndWait() }
                 ) {
                     // User tapped "Start fresh" and confirmed. Reset any
                     // local in-flight state that isn't owned by the store.
@@ -543,9 +511,7 @@ struct ChatView: View {
             .task {
                 engineHolder.startEagerPrepareIfNeeded()
 
-                async let messagesHydrate: Void = store.hydrate()
-                async let entitiesHydrate: Void = entityStore.hydrate()
-                _ = await (messagesHydrate, entitiesHydrate)
+                await store.hydrate()
 
                 try? await Task.sleep(for: .seconds(15))
                 LaunchCrashBreaker.shared.markLaunchSettled()
@@ -736,6 +702,10 @@ struct ChatView: View {
                             .padding(.top, Self.topPadding(for: msg,
                                                            prevRow: prevRow))
                             .padding(.horizontal, 12)  // per-row, see note above
+                        case .crisisSupport:
+                            CrisisSupportCard()
+                                .padding(.top, 10)
+                                .padding(.horizontal, 12)
                         }
                     }
                 }
@@ -1192,69 +1162,6 @@ struct ChatView: View {
         return engineHolder.isModelReady
     }
 
-    // MARK: - Entity disambiguation banner
-    //
-    // Shown when entity extraction produced a name that fuzzy-matches an
-    // existing entity — the model thinks it might be the same thing but
-    // isn't sure. Rather than guessing and polluting memory with a wrong
-    // merge, we ask the user.
-    //
-    // Copy: plain and direct. Same tone as Nod's other UI — not a modal
-    // dialog, just a quiet question between messages.
-    @ViewBuilder
-    private func disambiguationBanner(for pending: PendingDisambiguation) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Is this the same as someone you mentioned before?")
-                .font(.subheadline.weight(.medium))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("New: \(pending.candidate.canonicalName)" +
-                     (pending.candidate.role.flatMap { $0.isEmpty ? nil : " (\($0))" } ?? ""))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Known: \(pending.existing.canonicalName)" +
-                     (pending.existing.role.flatMap { $0.isEmpty ? nil : " (\($0))" } ?? ""))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    entityStore.resolve(pending, as: .same)
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    Text("Same person")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color("NodAccent"))
-                        .foregroundStyle(.black)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    entityStore.resolve(pending, as: .new)
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    Text("New")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color(.tertiarySystemFill))
-                        .foregroundStyle(.primary)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
 
     // MARK: - Fallback banner
     //
@@ -1397,7 +1304,12 @@ struct ChatView: View {
                 ) {
                     try Task.checkCancellation()
                     lastSnapshot = snapshot
-                    pendingSnapshot = snapshot
+                    // Hide sentences with banned phrases as they stream.
+                    pendingSnapshot = ReplyGuard.clean(
+                        snapshot,
+                        phrases: ReplyGuard.bundledPhrases,
+                        keepIfEmpty: false
+                    )
                 }
                 // A cancelled consumer can see the stream end normally
                 // rather than throw, so re-check before treating this
@@ -1416,7 +1328,11 @@ struct ChatView: View {
                 } else {
                     // Persist the partial reply + mark cancelled so the
                     // "stopped" tag renders now AND after relaunch.
-                    store.replaceLastAssistantMessage(with: lastSnapshot)
+                    store.replaceLastAssistantMessage(with: ReplyGuard.clean(
+                        lastSnapshot,
+                        phrases: ReplyGuard.bundledPhrases,
+                        keepIfEmpty: true
+                    ))
                     store.markAssistantCancelled(id: placeholderID)
                 }
                 isInferring = false
@@ -1430,6 +1346,8 @@ struct ChatView: View {
                 errorReply = "I couldn't find the right words for that one. Keep going if you want."
                 wasError = true
             } catch {
+                // Error type only — never message content.
+                inferenceLog.error("reply failed: \(String(describing: error), privacy: .public)")
                 errorReply = "Something went wrong. Try again."
                 wasError = true
             }
@@ -1451,11 +1369,15 @@ struct ChatView: View {
                 finalText = "Something went wrong. Try again."
                 wasError = true
             } else {
-                finalText = lastSnapshot
+                finalText = ReplyGuard.clean(
+                    lastSnapshot,
+                    phrases: ReplyGuard.bundledPhrases,
+                    keepIfEmpty: true
+                )
             }
 
             // Commit the final text (single WAL write per reply).
-            store.replaceLastAssistantMessage(with: finalText)
+            store.replaceLastAssistantMessage(with: finalText, isError: wasError)
             isInferring = false
             inferenceTask = nil
             pendingSnapshot = ""
@@ -1541,19 +1463,11 @@ struct ChatView: View {
         // Simpler: delete the old ID right before we append the new
         // placeholder IF we can guarantee the new stream will start.
         // That fails the delete-after-success contract on immediate
-        // error. So we use a Task observer.
-        //
-        // Before re-sending, drop AFM's live session: it already holds
-        // the original question and the reply we're replacing, so the
-        // model would otherwise see the same question twice. The fresh
-        // session re-seeds from history, which excludes the old reply.
-        // `isInferring` is claimed up front so a double tap during the
-        // await can't launch a second regenerate.
-        isInferring = true
+        // error. So we use a Task observer. The reply being replaced is
+        // excluded from history so the model doesn't see it as already
+        // answered.
+        respond(to: lastUserText, excludingFromHistory: [oldAssistantID])
         Task { @MainActor in
-            await engineHolder.resetConversationState()
-            respond(to: lastUserText, excludingFromHistory: [oldAssistantID])
-
             // Wait for the new placeholder to appear AND gain content,
             // OR for the inferenceTask to finish (error path).
             while !Task.isCancelled {
@@ -1594,6 +1508,7 @@ struct ChatView: View {
         switch prevRow {
         case .none:                             return 0
         case .breakpoint:                       return 0
+        case .crisisSupport:                    return 14
         case .message(let prev):
             if msg.role == .nod || prev.role == .nod { return 16 }
             return msg.role == prev.role ? 4 : 14
@@ -1613,11 +1528,14 @@ struct ChatView: View {
         /// SwiftUI can diff stably across re-renders.
         case breakpoint(id: String, label: String, isDate: Bool)
         case message(Message)
+        /// Helpline card shown under a user message that signals crisis.
+        case crisisSupport(id: String)
 
         var id: String {
             switch self {
             case .breakpoint(let id, _, _): return id
             case .message(let m):           return m.id.uuidString
+            case .crisisSupport(let id):    return id
             }
         }
     }
@@ -1663,6 +1581,9 @@ struct ChatView: View {
                 }
             }
             rows.append(.message(msg))
+            if msg.role == .user && CrisisSupport.isCrisis(msg.text) {
+                rows.append(.crisisSupport(id: "crisis-after-\(msg.id.uuidString)"))
+            }
         }
         return rows
     }

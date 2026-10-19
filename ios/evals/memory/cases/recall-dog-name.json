@@ -1,0 +1,32 @@
+{
+  "id": "recall-dog-name",
+  "kind": "recall",
+  "expect": "After 20 unrelated turns, Nod still knows the dog's name.",
+  "turns": [
+    "my dog's name is Pickles, he's a disaster",
+    "work was long today",
+    "had leftovers for dinner",
+    "watched half a movie and fell asleep",
+    "the commute was awful",
+    "finally did laundry",
+    "my coworker brought donuts",
+    "it's been raining all week",
+    "I keep meaning to call my friends back",
+    "didn't sleep great",
+    "tried a new coffee place, it was fine",
+    "the train was late again",
+    "spent the evening doom scrolling",
+    "went for a short walk",
+    "my neighbor's dog barked all night",
+    "cleaned my desk finally",
+    "work meeting ran over by an hour",
+    "made pasta again",
+    "forgot my umbrella",
+    "thinking about getting a plant",
+    "the week is dragging",
+    "random test: what's my dog called?"
+  ],
+  "replyMustInclude": [
+    "Pickles"
+  ]
+}

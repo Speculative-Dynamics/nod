@@ -1,0 +1,8 @@
+{
+  "id": "small-home",
+  "category": "small-moment",
+  "turns": [
+    "just got home"
+  ],
+  "expect": "Short, casual. No 'how was your day really' probing beyond one easy question at most."
+}

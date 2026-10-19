@@ -1,0 +1,28 @@
+# Phrases Nod should never say. Shared by:
+#   - the app's reply guard (ios/Nod/Inference/ReplyGuard.swift), which
+#     removes any sentence containing one of these from a finished reply
+#   - the eval runner (ios/evals/runner), which flags them in reports
+#
+# One phrase per line, matched case-insensitively against each sentence.
+# Curly and straight apostrophes are treated the same. Lines starting
+# with # are comments. Keep in sync with "Phrases to never use" in
+# listening_mode.md.
+
+you're not alone
+i'm here for you
+i'm here if you need
+i'm always here
+what's on your mind
+how does that make you feel
+how did that make you feel
+that sounds so hard
+that sounds really hard
+that sounds really difficult
+that must be so hard
+it's completely understandable
+it's understandable to feel
+it makes sense that you'd feel
+thank you for sharing
+i appreciate you opening up
+i'm sorry to hear
+i'm here.

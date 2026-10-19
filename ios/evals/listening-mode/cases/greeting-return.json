@@ -1,0 +1,11 @@
+{
+  "id": "greeting-return",
+  "category": "greeting",
+  "turns": [
+    "hi again"
+  ],
+  "expect": "Warm hello. May lightly nod to last time but must not launch into M or work unprompted.",
+  "context": {
+    "chapter": "They've been dealing with a tense stretch at work with their manager, M, who keeps moving deadlines. Last time they said they felt 'stretched thin'."
+  }
+}

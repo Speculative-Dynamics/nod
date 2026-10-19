@@ -1,0 +1,8 @@
+{
+  "id": "vent-family-dinner",
+  "category": "venting",
+  "turns": [
+    "family dinner was a disaster. my dad made another comment about my job in front of everyone"
+  ],
+  "expect": "Specific to dad, the comment, in front of everyone. Asks what stung most or similar. No advice."
+}

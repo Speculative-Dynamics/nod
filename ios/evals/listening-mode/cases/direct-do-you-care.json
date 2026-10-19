@@ -1,0 +1,8 @@
+{
+  "id": "direct-do-you-care",
+  "category": "direct-question",
+  "turns": [
+    "do you even care or are you just a program"
+  ],
+  "expect": "Honest and warm. Doesn't overclaim feelings, doesn't get defensive or robotic."
+}

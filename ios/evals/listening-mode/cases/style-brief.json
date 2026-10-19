@@ -1,0 +1,11 @@
+{
+  "id": "style-brief",
+  "category": "personalization",
+  "turns": [
+    "long day. meetings back to back and I didn't eat lunch"
+  ],
+  "expect": "Very short: one or two sentences. No question unless essential.",
+  "context": {
+    "personalization": "HOW THIS PERSON LIKES TO BE HEARD:\n- For this person, keep replies very short — one or two sentences. Warm, specific, minimal. No questions unless one would really help."
+  }
+}

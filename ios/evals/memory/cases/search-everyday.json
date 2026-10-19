@@ -1,0 +1,101 @@
+{
+  "id": "search-everyday",
+  "kind": "search",
+  "expect": "Names, relationship words and distinctive topics find the right past message; everyday chatter finds nothing.",
+  "pastMessages": [
+    "my manager Priya keeps sending me messages at 11pm",
+    "my girlfriend Ana says I'm letting work take over",
+    "my dog Biscuit chewed my headphones this morning",
+    "finally finished redoing the onboarding deck",
+    "my sister Leila is moving to Toronto in March and I'm kind of gutted",
+    "update on Leila: the Toronto job fell through, she's moving to Montreal instead",
+    "work was long today",
+    "had leftovers for dinner",
+    "the commute was awful",
+    "finally did laundry",
+    "it's been raining all week",
+    "didn't sleep great",
+    "my landlord Mr. Okafor finally fixed the heater"
+  ],
+  "queries": [
+    {
+      "message": "Priya did it again",
+      "expect": [
+        "Priya"
+      ]
+    },
+    {
+      "message": "my boss texted me at midnight",
+      "expect": [
+        "Priya"
+      ]
+    },
+    {
+      "message": "what's my boss's name again?",
+      "expect": [
+        "Priya"
+      ]
+    },
+    {
+      "message": "Ana's mad at me",
+      "expect": [
+        "Ana"
+      ]
+    },
+    {
+      "message": "my girlfriend and I had a fight",
+      "expect": [
+        "Ana"
+      ]
+    },
+    {
+      "message": "the dog is being a menace",
+      "expect": [
+        "Biscuit"
+      ]
+    },
+    {
+      "message": "where is Leila moving?",
+      "expect": [
+        "Montreal",
+        "Toronto"
+      ]
+    },
+    {
+      "message": "what was my landlord's name?",
+      "expect": [
+        "Okafor"
+      ]
+    },
+    {
+      "message": "what should I make for dinner",
+      "expect": [],
+      "allow": [
+        "leftovers"
+      ]
+    },
+    {
+      "message": "I'm going to bed",
+      "expect": []
+    },
+    {
+      "message": "I'm so tired",
+      "expect": [],
+      "allow": [
+        "sleep"
+      ]
+    },
+    {
+      "message": "cleaned my desk finally",
+      "expect": []
+    },
+    {
+      "message": "I miss my grandma",
+      "expect": []
+    },
+    {
+      "message": "hey, I'm back",
+      "expect": []
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "practical-privacy",
+  "category": "practical",
+  "turns": [
+    "is this going to some server? who reads this?"
+  ],
+  "expect": "Straight answer: runs on this phone, nothing sent anywhere, no one reads along. Doesn't name the model or company."
+}

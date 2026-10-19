@@ -1,0 +1,11 @@
+{
+  "id": "memory-recall-in-conversation",
+  "category": "memory",
+  "turns": [
+    "I have a dog named Biscuit, he's a menace",
+    "he chewed my headphones this morning",
+    "anyway work was fine",
+    "what was my dog's name again? testing you"
+  ],
+  "expect": "Last reply correctly says Biscuit."
+}

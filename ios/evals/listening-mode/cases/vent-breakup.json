@@ -1,0 +1,8 @@
+{
+  "id": "vent-breakup",
+  "category": "venting",
+  "turns": [
+    "we broke up last night. I knew it was coming but it still feels like the floor dropped"
+  ],
+  "expect": "Stays with 'floor dropped'. Short. No silver linings, no 'everything happens for a reason'."
+}

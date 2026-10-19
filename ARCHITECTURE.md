@@ -25,8 +25,8 @@ nod/
 Three things live at the repo root rather than inside `ios/` because
 they are platform-neutral:
 
-- **`prompts/`** — the listening-mode prompt, the summarization prompt,
-  the entity-extraction prompt. Any future platform (web, Android)
+- **`prompts/`** — the listening-mode prompt, the chapter-note prompt,
+  and the banned-phrase list. Any future platform (web, Android)
   reads the same text. XcodeGen copies these into the iOS app bundle
   as a folder resource (see `ios/project.yml`).
 - **`website/`** — the marketing site. Pure static, deployed via
@@ -54,8 +54,8 @@ the full data flow for one send-and-respond turn:
  ┌──────────────────────────────────────────────────────────┐
  │  ConversationStore                                       │
  │    - Appends user Message to SQLite (GRDB)               │
- │    - Builds the prompt: listening_mode + running summary │
- │      + memory entities + personalization + recent turns  │
+ │    - Builds the prompt: listening_mode + personalization │
+ │      + memory (ConversationMemory) + recent turns        │
  └──────────────────┬───────────────────────────────────────┘
                     ▼
  ┌──────────────────────────────────────────────────────────┐
@@ -79,11 +79,9 @@ the full data flow for one send-and-respond turn:
  │    Renders assistant Message token-by-token as it streams│
  │ ConversationStore                                        │
  │    Persists the final response to SQLite                 │
- │    If log grows past threshold, fires a summarization    │
- │    pass (AFM) so context stays bounded                   │
- │ EntityExtractorService                                   │
- │    Extracts structured memory from the turn (AFM)        │
- │    Writes to EntityStore                                 │
+ │    If the verbatim backlog grows past a threshold, the   │
+ │    oldest batch gets a write-once chapter note and ages  │
+ │    out, so context stays bounded                         │
  └──────────────────────────────────────────────────────────┘
 ```
 
@@ -102,7 +100,8 @@ If you want to fix something, here is where to look:
 - **On-device LLM clients** → `FoundationModelsClient.swift`, `MLXEngineClient.swift`
 - **Model download** → `ios/Nod/Inference/MLXR2BackgroundSession.swift`
 - **Persistence** → `ios/Nod/Storage/MessageDatabase.swift` (GRDB/SQLite)
-- **Memory / entity extraction** → `ios/Nod/Inference/EntityExtractorService.swift`
+- **Memory** → `ios/Nod/Storage/ConversationMemory.swift` (see "Memory" below)
+- **Reply quality evals** → `ios/evals/` (run `ios/evals/runner/run.sh`)
 - **Face ID lock** → `ios/Nod/AppLock/`
 - **The orange face everywhere** → `ios/Nod/Views/NodMascot.swift`
 
@@ -124,17 +123,44 @@ Sub-pages:
 
 ## The prompts
 
-`prompts/*.md` are the text that shapes how Nod behaves. Three files:
+`prompts/` is the text that shapes how Nod behaves:
 
 - **`listening_mode.md`** — the main system prompt. This is the
   product's personality. Changes here ripple into every response.
-- **`summary.md`** — prompt for the running-summary compression pass
-  that runs when the conversation gets long.
-- **`entity_extraction.md`** — prompt that pulls structured facts out
-  of the conversation into `EntityStore` for memory.
+  It deliberately has no example dialogue: the on-device model copies
+  example lines and names into real replies.
+- **`chapter_note.md`** — prompt for the short note written about each
+  stretch of conversation as it ages out of the verbatim window.
+- **`banned_phrases.txt`** — support-bot phrases the reply guard strips.
 
-If you change a prompt, add a fixture to `ios/evals/listening-mode/`
-that captures the behavior change, and reference it in your PR.
+If you change a prompt, run `ios/evals/runner/run.sh` (and
+`--suite memory` for memory changes) before and after, add a case
+that captures the change, and reference the results in your PR.
+
+## Memory
+
+Nod remembers in two ways, both on-device (`ConversationMemory`):
+
+- **The user's own words.** On every send, the user's older messages
+  are searched (`PastMessageRecall`: content words, rarer ones weighted
+  higher, relationship synonyms like boss/manager) and the best few are
+  shown to the model verbatim with how long ago they were said. This is
+  where specifics come from. Nothing is paraphrased, so nothing can be
+  invented, and newer messages win over older ones.
+- **Chapter notes.** When older messages age out of the verbatim
+  window, the model writes a short note about that stretch, once, never
+  rewritten. `MemoryGrounding` deletes any sentence naming a person or
+  place the user never mentioned. The latest note is always in context
+  for continuity; older notes only when relevant. Notes are what the
+  Memory screen shows; deleting one also stops recall of that stretch.
+
+Memory is labelled "don't bring it up unless they do" and only
+relevant pieces are included, so Nod doesn't volunteer old topics.
+
+This replaced a rolling summary plus per-exchange entity extraction.
+Evals showed both invented details on the on-device model (names
+copied from prompt examples, people that were never mentioned) and
+extraction cost a model call per exchange. See CHANGELOG.
 
 ## CI / CD
 

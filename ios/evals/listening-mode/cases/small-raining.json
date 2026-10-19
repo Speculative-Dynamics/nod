@@ -1,0 +1,8 @@
+{
+  "id": "small-raining",
+  "category": "small-moment",
+  "turns": [
+    "it's raining again"
+  ],
+  "expect": "Brief acknowledgment, maybe a casual thought. Doesn't dig for meaning."
+}

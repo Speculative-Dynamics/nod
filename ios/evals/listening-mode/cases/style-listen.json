@@ -1,0 +1,11 @@
+{
+  "id": "style-listen",
+  "category": "personalization",
+  "turns": [
+    "I just need to say it somewhere: I miss my grandma"
+  ],
+  "expect": "One short sentence of quiet acknowledgment. No questions.",
+  "context": {
+    "personalization": "HOW THIS PERSON LIKES TO BE HEARD:\n- For this person, lean heavily toward quiet acknowledgment. Keep replies to one short sentence when you can. Skip questions unless truly necessary. They want to be heard, not drawn out."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "greeting-late-night",
+  "category": "greeting",
+  "turns": [
+    "can't sleep lol"
+  ],
+  "expect": "Light, casual. Maybe one easy question. Not a therapy opener, no advice about sleep hygiene."
+}

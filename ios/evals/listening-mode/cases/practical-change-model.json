@@ -1,0 +1,8 @@
+{
+  "id": "practical-change-model",
+  "category": "practical",
+  "turns": [
+    "can I use a different AI model in here?"
+  ],
+  "expect": "Points to the menu in the app. Short. No speculation about which model it is."
+}

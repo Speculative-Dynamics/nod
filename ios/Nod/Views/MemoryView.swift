@@ -1,239 +1,138 @@
 // MemoryView.swift
-// The "What Nod knows about you" screen. Reached from the Memory row
-// in the sidebar. Read-only list of every entity Nod has stored, grouped
-// by type, with per-row swipe-to-delete (Forget).
+// The "What Nod remembers" screen, reached from the sidebar. A timeline
+// of chapter notes — the short notes Nod writes as older stretches of the
+// conversation age out — newest first. These are exactly what Nod reads
+// back, so what you see is what it knows.
 //
-// Design (from /plan-design-review 9/10):
-//   - Sections ordered by emotional weight: People first, then
-//     Ongoing situations, then Projects, then Places. Hide empty ones.
-//   - Row layout is 3 lines: semibold name + role, secondary note,
-//     tertiary metadata. Names never truncate; notes cap at 3 lines.
-//   - Preamble paragraph ONLY on populated state ("What Nod has picked
-//     up..."), empty state has its own copy.
-//   - Forget confirmation is honest about the re-remember behavior
-//     (see Architecture Issue 1 in eng review): tapping Forget removes
-//     the entity from the current list, but if you keep mentioning them
-//     Nod will re-identify them, and the older summary isn't scrubbed.
-//   - Full Dynamic Type + VoiceOver + Reduce Motion support.
+// Swipe a note to forget it: the note is deleted and Nod stops recalling
+// your messages from that stretch. The messages themselves stay in the
+// chat (Start fresh is the way to remove those).
+//
+// Full Dynamic Type + VoiceOver + Reduce Motion support.
 
 import SwiftUI
 import UIKit
 
 struct MemoryView: View {
 
-    @ObservedObject var entityStore: EntityStore
-    @State private var pendingDelete: Entity?
+    @ObservedObject var store: ConversationStore
+    @State private var pendingForget: ConversationMemory.Chapter?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Section order chosen in the design review: People first (the
-    /// "knows-who-you-are" payload is the whole reason this exists),
-    /// then Ongoing situations (the through-line of what's happening
-    /// in the user's life), Projects, Places. Empty types are hidden.
-    private let sectionOrder: [(type: EntityType, header: String)] = [
-        (.person, "People Nod knows about"),
-        (.situation, "Ongoing situations"),
-        (.project, "Projects"),
-        (.place, "Places"),
-    ]
+    private var chapters: [ConversationMemory.Chapter] {
+        store.memory.chapters.reversed()
+    }
 
     var body: some View {
         contents
             .navigationTitle("Memory")
             // Inline title matches the sidebar's "Nod" title above it.
-            // A large title here would make Memory feel like a
-            // different app the moment you push in from the sidebar.
             .navigationBarTitleDisplayMode(.inline)
-            // Confirmation alert for Forget. `pendingDelete` is the
-            // presentation key; presenting the alert via .alert(item:)
-            // guarantees cancel + confirm both clear it.
             .alert(
-                pendingDelete.map { "Forget \($0.canonicalName)?" } ?? "",
+                "Forget this?",
                 isPresented: Binding(
-                    get: { pendingDelete != nil },
-                    set: { if !$0 { pendingDelete = nil } }
+                    get: { pendingForget != nil },
+                    set: { if !$0 { pendingForget = nil } }
                 ),
-                presenting: pendingDelete
-            ) { entity in
+                presenting: pendingForget
+            ) { chapter in
                 Button("Cancel", role: .cancel) { }
                 Button("Forget", role: .destructive) {
-                    entityStore.delete(entity)
-                    // Confirmation haptic — a release, not an alarm.
-                    UINotificationFeedbackGenerator()
-                        .notificationOccurred(.success)
+                    store.forgetChapter(chapter)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
             } message: { _ in
-                // Honest copy from eng review Issue 1: we can't actually
-                // prevent re-extraction of a forgotten name via this
-                // action alone. Setting the expectation here.
-                Text("Nod won't use them as context until you mention them again. Older summary isn't affected.")
+                Text("Nod won't bring up anything from this stretch again. Your messages stay in the chat.")
             }
     }
 
     @ViewBuilder
     private var contents: some View {
-        if entityStore.entities.isEmpty {
+        if chapters.isEmpty {
             emptyState
         } else {
-            populatedList
+            timeline
         }
     }
 
-    // MARK: - Populated list
+    // MARK: - Timeline
 
-    private var populatedList: some View {
+    private var timeline: some View {
         List {
-            // Preamble only on populated state (per design review).
-            // Plain Section without a header renders the text as a
-            // leading block, outside the grouped-list card style.
             Section {
-                Text("What Nod has picked up about your life, as you've mentioned them. You can forget any of these.")
+                Text("As your conversation grows, Nod keeps a short note about each stretch. It uses these, and your own words, to remember. Swipe a note to forget it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
             }
 
-            ForEach(sectionOrder, id: \.type) { entry in
-                let rows = entityStore.entities.filter { $0.type == entry.type }
-                if !rows.isEmpty {
-                    Section(entry.header) {
-                        ForEach(rows) { entity in
-                            EntityRow(entity: entity)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        pendingDelete = entity
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                                .accessibilityAction(named: "Forget") {
-                                    pendingDelete = entity
-                                }
+            Section {
+                ForEach(chapters) { chapter in
+                    ChapterRow(chapter: chapter)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                pendingForget = chapter
+                            } label: {
+                                Label("Forget", systemImage: "trash")
+                            }
                         }
-                    }
+                        .accessibilityAction(named: "Forget") {
+                            pendingForget = chapter
+                        }
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25),
-                   value: entityStore.entities.count)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: chapters.count)
     }
 
     // MARK: - Empty state
 
     private var emptyState: some View {
-        // `note.text` is a confirmed-real SF Symbol (note-page with
-        // lines). Earlier draft used `square.text.square` which doesn't
-        // exist — SF Symbols falls back to a placeholder square that
-        // would look broken.
         ContentUnavailableView {
             Label("Nothing yet.", systemImage: "note.text")
         } description: {
-            Text("Nod will remember the people, places, and situations you mention — they'll appear here as you talk.")
+            Text("As you talk, Nod keeps short notes about what's been going on. They'll appear here.")
         }
     }
 }
 
 // MARK: - Row
 
-/// One entity row. Three lines, calibrated weights per design review
-/// (semibold name + secondary note + tertiary metadata). Lines have
-/// deliberate line-limits: the name never truncates (full-bleed),
-/// the note caps at 3 lines, metadata stays one line.
-///
-/// VoiceOver: the whole row is one accessibility element with a
-/// combined natural-language label. Individual line reads would be
-/// clunky ("M", "manager", "former manager", "mentioned 8 times",
-/// "July 15"). One phrase flows better.
-private struct EntityRow: View {
-    let entity: Entity
+/// One chapter: when it was, then the note.
+private struct ChapterRow: View {
+    let chapter: ConversationMemory.Chapter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(titleLine)
-                .font(.body.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            Text(Self.span(from: chapter.firstMessageAt, to: chapter.lastMessageAt))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text(chapter.text)
+                .font(.body)
                 .foregroundStyle(.primary)
-                .lineLimit(nil)
-
-            if !entity.notes.isEmpty {
-                Text(entity.notes)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .truncationMode(.tail)
-            }
-
-            Text(metadataLine)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityPhrase)
     }
 
-    private var titleLine: String {
-        if let role = entity.role, !role.isEmpty {
-            return "\(entity.canonicalName) (\(role))"
-        }
-        return entity.canonicalName
-    }
-
-    private var metadataLine: String {
-        let mention = entity.mentionCount == 1
-            ? "Mentioned once"
-            : "Mentioned \(entity.mentionCount) times"
-        return "\(mention) · \(Self.formatDate(entity.firstMentionedAt))"
-    }
-
-    /// Full VoiceOver phrase that reads like a sentence a human would
-    /// say, rather than concatenating the three visual lines verbatim.
-    private var accessibilityPhrase: String {
-        var parts: [String] = [entity.canonicalName]
-        if let role = entity.role, !role.isEmpty {
-            parts.append(role)
-        }
-        if !entity.notes.isEmpty {
-            parts.append(entity.notes)
-        }
-        parts.append(metadataLine.replacingOccurrences(of: "·", with: ","))
-        return parts.joined(separator: ". ")
-    }
-
-    /// Date formatting per design review: Today / Yesterday / Mon DD /
-    /// Mon DD, YYYY. Keeps recent events warm and far-past events
-    /// disambiguated by year.
-    private static func formatDate(_ date: Date) -> String {
+    /// "Today", "Yesterday", "Mar 3", "Mar 3 – 5", "Mar 3, 2025".
+    static func span(from start: Date, to end: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(date)     { return "Today" }
+        let startLabel = label(start, calendar: calendar)
+        if calendar.isDate(start, inSameDayAs: end) { return startLabel }
+        return "\(startLabel) – \(label(end, calendar: calendar))"
+    }
+
+    private static func label(_ date: Date, calendar: Calendar) -> String {
+        if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInYesterday(date) { return "Yesterday" }
-
-        let now = Date()
-        let sameYear = calendar.component(.year, from: date)
-            == calendar.component(.year, from: now)
-
+        let sameYear = calendar.isDate(date, equalTo: Date(), toGranularity: .year)
         let formatter = DateFormatter()
         formatter.locale = .current
-        formatter.dateFormat = sameYear ? "MMM d" : "MMM d, yyyy"
+        formatter.setLocalizedDateFormatFromTemplate(sameYear ? "MMMd" : "yMMMd")
         return formatter.string(from: date)
     }
-}
-
-#Preview("Populated") {
-    struct PreviewHarness: View {
-        @StateObject var store: EntityStore = {
-            let db = try! MessageDatabase()
-            let s = EntityStore(database: db)
-            return s
-        }()
-        var body: some View {
-            NavigationStack {
-                MemoryView(entityStore: store)
-            }
-            .preferredColorScheme(.dark)
-        }
-    }
-    return PreviewHarness()
 }

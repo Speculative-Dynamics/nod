@@ -1,8 +1,8 @@
 # Nod — iOS app
 
 Native SwiftUI app. iOS 26+ deployment target. All inference runs on-device —
-Apple FoundationModels for memory and summarization, MLX Swift for the
-listening model (Qwen 3, Qwen 3.5, or Gemma 4 E2B).
+Apple FoundationModels by default, or MLX Swift with Qwen 3, Qwen 3.5, or
+Gemma 4 E2B.
 
 Product positioning and "why" live in [the repo root README](../README.md).
 This file is for anyone building or hacking on the iOS code.
@@ -50,8 +50,8 @@ XcodeGen installed.
 vent/
 ├── prompts/                         # ALL LLM prompts (repo root, reusable across platforms)
 │   ├── listening_mode.md            # THE listening-mode system prompt
-│   ├── summary.md                   # running-summary compression prompt
-│   └── entity_extraction.md         # memory entity extraction prompt
+│   ├── chapter_note.md              # memory note for each aged-out stretch
+│   └── banned_phrases.txt           # phrases the reply guard strips
 │
 └── ios/
     ├── README.md                    # you are here
@@ -59,7 +59,9 @@ vent/
     ├── Nod.xcodeproj/               # committed so first-clone builds
     ├── Nod.xcscheme                 # shared scheme
     ├── evals/
-    │   └── listening-mode/          # vent-transcript regression fixtures
+    │   ├── listening-mode/          # scripted conversations for reply quality
+    │   ├── memory/                  # recall, search and grounding cases
+    │   └── runner/                  # Mac runner: run.sh compiles shared app code
     └── Nod/                         # Swift source
         ├── NodApp.swift             # @main, SwiftUI App entry point
         ├── AppDelegate.swift        # background-URLSession re-attachment
@@ -70,7 +72,12 @@ vent/
         │   ├── AppLockManager.swift    # Face ID state + auth flow
         │   └── AppLockOverlay.swift    # locked-screen UI
         ├── Inference/
-        │   ├── InferenceEngine.swift           # shared protocol + error enum
+        │   ├── InferenceEngine.swift           # shared engine protocols
+        │   ├── InferenceError.swift            # error enum
+        │   ├── ListeningTurns.swift            # turn + context assembly (shared with evals)
+        │   ├── AFMListening.swift              # one AFM reply: transcript, budget, stream
+        │   ├── AFMMemory.swift                 # AFM chapter notes
+        │   ├── ReplyGuard.swift                # strips banned phrases
         │   ├── EngineHolder.swift              # routes between AFM and MLX
         │   ├── EnginePreference.swift          # which model the user picked
         │   ├── FoundationModelsClient.swift    # Apple on-device LLM (AFM)
@@ -81,23 +88,22 @@ vent/
         │   ├── DownloadMetrics.swift           # progress numbers for the card
         │   ├── DownloadTuning.swift            # throttle + retry parameters
         │   ├── SpeedWindow.swift               # rolling-average download speed
-        │   ├── DictationRecognizer.swift       # iOS 26 SpeechAnalyzer wrapper
-        │   ├── EntityExtractorService.swift    # FoundationModels memory extraction
-        │   └── ExtractedEntity.swift           # @Generable schema for memory
+        │   └── DictationRecognizer.swift       # iOS 26 SpeechAnalyzer wrapper
         ├── Storage/
         │   ├── Message.swift                   # data model
         │   ├── MessageDatabase.swift           # GRDB.swift SQLite persistence
-        │   ├── ConversationStore.swift         # store + running summary + compression
-        │   ├── Entity.swift                    # memory entity record
-        │   ├── EntityStore.swift               # entity CRUD + semantic search
-        │   └── EntityEmbedder.swift            # NLEmbedding vector gen
+        │   ├── ConversationStore.swift         # store + compression into chapters
+        │   ├── ConversationMemory.swift        # chapters + recall → model context
+        │   ├── PastMessageRecall.swift         # search the user's past messages
+        │   └── MemoryGrounding.swift           # drops invented names from notes
         ├── Personalization/
         │   └── PersonalizationStore.swift      # sidebar toggles + free-form field
         ├── Views/
         │   ├── ChatView.swift                  # main chat screen
         │   ├── EmptyStateView.swift            # zero-messages first-launch view
         │   ├── SidebarView.swift               # settings + memory + danger-zone
-        │   ├── MemoryView.swift                # browse and purge entity memory
+        │   ├── MemoryView.swift                # chapter-note timeline, swipe to forget
+        │   ├── CrisisSupportCard.swift         # helpline card for crisis messages
         │   ├── SplashView.swift                # 2s cold-launch animation
         │   ├── NodMascot.swift                 # canonical face + eye + blinker
         │   ├── MiniNodFace.swift               # nav-bar mascot wrapper
@@ -117,8 +123,8 @@ resource (see `project.yml`).
 - **`NodApp`** mounts `ChatView`. `ChatView` owns the conversation and composes everything else.
 - **`EngineHolder`** is the routing layer. It picks between `FoundationModelsClient` (Apple Intelligence) and `MLXEngineClient` (on-device 4B models via MLX) based on device capability and user preference.
 - **`MLXR2BackgroundSession`** does the heavy model download via iOS background URLSession so it survives app suspend and kill. `MLXEngineClient` orchestrates it and emits progress events through `DownloadEvent` / `DownloadMetrics`.
-- **`ConversationStore`** is the message log. `MessageDatabase` (GRDB/SQLite) persists. When the log grows past a threshold, `ConversationStore` fires a FoundationModels summarization so the context stays bounded.
-- **`EntityExtractorService`** + **`EntityStore`** are the "memory" layer — AFM extracts structured facts from each turn, embeds them, and they flow back into the system prompt.
+- **`ConversationStore`** is the message log. `MessageDatabase` (GRDB/SQLite) persists. When the verbatim backlog grows past a threshold, its oldest batch gets a chapter note and ages out, so the context stays bounded.
+- **`ConversationMemory`** is the memory layer: chapter notes plus search over the user's own past messages, turned into the memory part of each prompt. See "Memory" in `../ARCHITECTURE.md`.
 - **`AppLockManager`** guards the whole app behind Face ID when the user opts in. `AppLockOverlay` is what shows while locked.
 - **`DictationRecognizer`** wraps iOS 26's `SpeechAnalyzer` + `SpeechTranscriber` for voice input. Runs entirely on-device.
 - **`NodMascot`** (in `Views/`) is the single source of truth for the orange face — see the comments in that file for the tokens and the relationship to the app icon.

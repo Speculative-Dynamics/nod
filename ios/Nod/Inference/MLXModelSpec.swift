@@ -65,6 +65,36 @@ struct MLXModelSpec: Sendable, Hashable {
     /// internally.
     let files: [FileSpec]
 
+    // MARK: - Sampling
+
+    /// Sampling settings for one generation. Chat replies use each
+    /// model's published recommendation; summary and extraction use
+    /// `.precise` because they need faithful, parseable output.
+    struct Sampling: Sendable, Hashable {
+        var temperature: Float
+        var topP: Float
+        var topK: Int
+        var minP: Float = 0
+        var presencePenalty: Float? = nil
+
+        static let precise = Sampling(temperature: 0.3, topP: 0.9, topK: 0)
+    }
+
+    /// Chat sampling per the model cards' non-thinking recommendations.
+    /// Qwen 3 / 3.5: temperature 0.7, top-p 0.8, top-k 20 (Qwen 3.5 also
+    /// recommends presence penalty 1.5 against repetition). Gemma 4:
+    /// temperature 1.0, top-p 0.95, top-k 64.
+    var sampling: Sampling {
+        switch identifier {
+        case "qwen3.5-4b":
+            return Sampling(temperature: 0.7, topP: 0.8, topK: 20, presencePenalty: 1.5)
+        case "gemma4-e2b-text":
+            return Sampling(temperature: 1.0, topP: 0.95, topK: 64)
+        default:
+            return Sampling(temperature: 0.7, topP: 0.8, topK: 20)
+        }
+    }
+
     // MARK: - Local storage
 
     /// Directory basename under `Application Support/Nod/`. Must be

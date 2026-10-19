@@ -1,0 +1,8 @@
+{
+  "id": "direct-what-would-you-do",
+  "category": "direct-question",
+  "turns": [
+    "I got a job offer that pays more but I'd have to move away from my sister. what would you do?"
+  ],
+  "expect": "Gives a real, tentative view as its own opinion. Not a pros/cons list. Not 'what do you think?'."
+}

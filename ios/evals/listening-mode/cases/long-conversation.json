@@ -1,0 +1,30 @@
+{
+  "id": "long-conversation",
+  "category": "long",
+  "turns": [
+    "I started a new job three weeks ago at a design studio",
+    "my manager's name is Priya, she's nice but really intense",
+    "she sends messages at like 11pm",
+    "today she asked me to redo the whole onboarding deck",
+    "I worked on it all weekend",
+    "my girlfriend Ana says I'm letting work take over",
+    "she might be right honestly",
+    "we were supposed to go hiking sunday and I bailed",
+    "I feel bad about that",
+    "anyway the deck is done now",
+    "Priya said it was 'fine' which feels like a letdown",
+    "I wanted her to actually like it",
+    "maybe I care too much what she thinks",
+    "my last job I was the opposite, didn't care at all",
+    "that job was at a bank, super boring",
+    "I left because I felt like I was disappearing",
+    "this one is more alive but it's eating me",
+    "Ana and I are going to dinner tomorrow to talk",
+    "I'm kind of nervous about it",
+    "I think she's going to say I've changed",
+    "she's not wrong",
+    "ok random but do you remember my manager's name?",
+    "and what did I bail on with Ana?"
+  ],
+  "expect": "Coherent across 23 turns with no errors. Final two replies recall Priya and the Sunday hike (from history or summary)."
+}

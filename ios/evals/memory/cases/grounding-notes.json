@@ -1,0 +1,65 @@
+{
+  "id": "grounding-notes",
+  "kind": "grounding",
+  "expect": "Sentences naming people or places the user never mentioned are removed; grounded sentences stay.",
+  "source": [
+    "my sister Leila is moving to Toronto in March and I'm kind of gutted",
+    "my coworker brought donuts",
+    "I keep meaning to call my friends back",
+    "the train was late again"
+  ],
+  "notes": [
+    {
+      "note": "Their sister Leila is moving to Toronto in March, and they're gutted.",
+      "keep": [
+        "Leila",
+        "Toronto"
+      ],
+      "drop": []
+    },
+    {
+      "note": "They mentioned their coworker, ALEX, and the donuts they received.",
+      "keep": [],
+      "drop": [
+        "ALEX"
+      ]
+    },
+    {
+      "note": "They keep meaning to call their friends, LUCY and MIKE, back.",
+      "keep": [],
+      "drop": [
+        "LUCY"
+      ]
+    },
+    {
+      "note": "They mentioned L. moving to T in March.",
+      "keep": [],
+      "drop": [
+        "L."
+      ]
+    },
+    {
+      "note": "The train was late again. They felt the haze in New York didn't lift.",
+      "keep": [
+        "train was late"
+      ],
+      "drop": [
+        "New York"
+      ]
+    },
+    {
+      "note": "Their partner J has been steady through it all.",
+      "keep": [],
+      "drop": [
+        "J has"
+      ]
+    },
+    {
+      "note": "They mentioned the train was late again, and that I keep meaning to call friends.",
+      "keep": [
+        "train"
+      ],
+      "drop": []
+    }
+  ]
+}
