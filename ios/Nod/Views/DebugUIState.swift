@@ -9,6 +9,9 @@
 //   -nodDownload downloading | wifi | network | paused | loading |
 //                failNetwork | failDisk | failOther
 //       Show the download/readiness bar in that state.
+//   -nodLocked YES
+//       Show the Face ID lock screen and keep it up (the Simulator
+//       has no passcode, so it would otherwise unlock at once).
 //
 // Compiled out of release builds.
 
@@ -33,6 +36,8 @@ enum DebugUIState {
     /// True when no downloadable model should fit ("-nodAFM none").
     static var forceNoMLX: Bool { argument("-nodAFM") == "none" }
 
+    static var forceLocked: Bool { argument("-nodLocked") == "YES" }
+
     static var forcedDownloadState: MLXEngineClient.State? {
         let total = MLXModelSpec.qwen35_4b.totalBytes
         let partial = DownloadMetrics(
@@ -54,6 +59,7 @@ enum DebugUIState {
     #else
     static let forcedAFMStatus: DeviceCapability.AFMStatus? = nil
     static let forceNoMLX = false
+    static let forceLocked = false
     static let forcedDownloadState: MLXEngineClient.State? = nil
     #endif
 }
