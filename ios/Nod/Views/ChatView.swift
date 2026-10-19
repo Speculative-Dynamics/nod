@@ -184,7 +184,10 @@ struct ChatView: View {
     /// the surface doesn't look like a half-loaded chat. This property
     /// is also the single source of truth for that hide.
     private var isShowingAFMOnboarding: Bool {
-        engineHolder.preference == .apple
+        // Wait for hydrate: before it, `messages` is empty even when
+        // there's history, and hydrate runs from normalChat's .task.
+        store.isHydrated
+            && engineHolder.preference == .apple
             && !DeviceCapability.canRunAFM
             && store.messages.isEmpty
     }

@@ -509,8 +509,8 @@ final class MessageDatabase: @unchecked Sendable {
         }
         // `was_cancelled` is present in rows fetched after v3 migration;
         // absent in any theoretical pre-migration read path. Default false.
-        let wasCancelled = (row["was_cancelled"] as? Int) == 1
-        let isError = (row["is_error"] as? Int) == 1
+        let wasCancelled: Bool = row["was_cancelled"] ?? false
+        let isError: Bool = row["is_error"] ?? false
         return Message(
             id: id,
             role: role,
