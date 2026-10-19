@@ -127,7 +127,7 @@ func runMemorySuite(listeningPrompt: String) async throws -> (report: String, js
         }
     }
 
-    var header = "# Memory eval — \(label)\n\n"
+    var header = "# Memory eval — \(label)\n\n- Model: \(backendDescription)\n- Peak memory: \(backendPeakMemoryGB().map { String(format: "%.2f GB", $0) } ?? "n/a")\n"
     for kind in ["recall", "search", "grounding"] {
         if let t = totals[kind] { header += "- \(kind): \(t.pass)/\(t.total) passed\n" }
     }

@@ -2,54 +2,45 @@
 // User's choice of inference engine. Persisted in UserDefaults so it
 // survives app restarts.
 //
-// Default is Apple FoundationModels (.apple) — zero download, works on
-// any Apple-Intelligence-capable device. MLX models are opt-in because
-// each one costs a 2.3-3.0 GB download and won't fit on older iPhones.
-//
-// Sidebar ordering: Apple first (always-special), then MLX in
-// release-date DESC order — newest on-device model up top to invite
-// exploration. Matches the allCases iteration used by SidebarView.
+// The lineup, chosen from the evals (ios/evals):
+//   - Apple Intelligence: the default. Built in, no download.
+//   - Qwen 3.5 4B: the best downloadable model, for 8 GB iPhones.
+//   - Qwen 3.5 2B: the light one, for 6 GB iPhones.
+// Gemma 4 E2B and Qwen 3 4B were retired; users on them are moved to
+// the best model their phone fits (see EnginePreferenceStore).
 
 import Foundation
 import FoundationModels
 
 enum EnginePreference: String, CaseIterable, Sendable {
-    case apple      // Apple FoundationModels (AFM). Zero download, gated by Apple Intelligence.
-    case gemma4     // Gemma 4 E2B Text (Apr 2026) via MLX. ~2.6 GB download.
-    case qwen35     // Qwen 3.5 4B (Mar 2026) via MLX. ~3.0 GB download.
+    case apple                      // Apple FoundationModels. Gated by Apple Intelligence.
+    case qwen35                     // Qwen 3.5 4B via MLX. ~3.0 GB download.
+    case qwen35_2b = "qwen3.5-2b"   // Qwen 3.5 2B via MLX. ~1.75 GB download.
 
-    // Raw value `"qwen"` preserves backwards compatibility with the old
-    // two-engine world. Users who selected Qwen before this refactor
-    // still land on Qwen 3 Instruct 2507 after upgrade, no migration
-    // code needed — their UserDefaults value already matches.
-    case qwen3 = "qwen"
+    /// Stored values of engines that no longer exist.
+    static let retiredRawValues: Set<String> = ["qwen", "gemma4"]
+
+    /// The best downloadable model this phone can run, if any.
+    static var bestDownloadable: EnginePreference? {
+        [.qwen35, .qwen35_2b].first { $0.mlxSpec?.fitsThisDevice == true }
+    }
 
     /// Human-readable label for the sidebar row.
     var displayName: String {
         switch self {
-        case .apple:   return "Apple Intelligence"
-        case .qwen3:   return "Qwen 3 Instruct 2507"
-        case .qwen35:  return "Qwen 3.5 4B"
-        case .gemma4:  return "Gemma 4 E2B Text"
+        case .apple:     return "Apple Intelligence"
+        case .qwen35:    return "Qwen 3.5 4B"
+        case .qwen35_2b: return "Qwen 3.5 2B"
         }
     }
 
-    /// One-line description. For AFM this is the metadata line (there's
-    /// no release month / size to show). For MLX engines, the sidebar
-    /// composes date + size instead; tagline is unused there.
-    ///
-    /// AFM tagline says "no download" rather than "works offline." The
-    /// old "fast · works offline" phrasing was misleading — ALL Nod
-    /// engines work offline once loaded; MLX models just download once
-    /// first. The only trait genuinely distinctive about AFM is that it
-    /// ships with iOS and needs no download. That's what the tagline
-    /// says now.
+    /// One-line description. For MLX engines the sidebar composes role,
+    /// date and size instead; tagline is used for Apple only.
     var tagline: String {
         switch self {
-        case .apple:   return "Built-in · no download"
-        case .qwen3:   return "Text-only · tuned for chat"
-        case .qwen35:  return "Multimodal arch · text-only use"
-        case .gemma4:  return "Text-only · fresh training data"
+        case .apple:     return "Built-in · no download"
+        case .qwen35:    return "Most capable download"
+        case .qwen35_2b: return "Lighter · smaller download"
         }
     }
 
@@ -58,9 +49,8 @@ enum EnginePreference: String, CaseIterable, Sendable {
     var mlxSpec: MLXModelSpec? {
         switch self {
         case .apple:   return nil
-        case .qwen3:   return .qwen3_instruct_2507
         case .qwen35:  return .qwen35_4b
-        case .gemma4:  return .gemma4_e2b_text
+        case .qwen35_2b: return .qwen35_2b
         }
     }
 
@@ -73,15 +63,11 @@ enum EnginePreference: String, CaseIterable, Sendable {
     /// about this, causing users to hit a send-time error every first
     /// message. Now the sidebar row renders dimmed with an honest reason.
     ///
-    /// MLX 4B-class models need ~6 GB resident — we gate on total
-    /// physical memory.
+    /// MLX models are gated per model on physical RAM (see
+    /// `MLXModelSpec.minimumDeviceMemory`).
     var isAvailable: Bool {
-        switch self {
-        case .apple:
-            return DeviceCapability.canRunAFM
-        case .qwen3, .qwen35, .gemma4:
-            return DeviceCapability.canRunMLX4BClass
-        }
+        if let spec = mlxSpec { return spec.fitsThisDevice }
+        return DeviceCapability.canRunAFM
     }
 
     /// One-line reason shown when the engine row is disabled. nil if available.
@@ -100,8 +86,9 @@ enum EnginePreference: String, CaseIterable, Sendable {
             case .disabledInSettings:  return "Turn on in Settings → Apple Intelligence"
             case .notSupported:        return "Not supported on this iPhone"
             }
-        case .qwen3, .qwen35, .gemma4:
-            return "Needs iPhone 15 Pro or newer"
+        default:
+            let gb = Int(((mlxSpec?.minimumDeviceMemory ?? 0) + 500_000_000) / 1_000_000_000)
+            return "Needs an iPhone with \(gb) GB of memory or more"
         }
     }
 }
@@ -109,18 +96,9 @@ enum EnginePreference: String, CaseIterable, Sendable {
 /// Runtime device checks for engine availability.
 enum DeviceCapability {
 
-    /// Minimum physical RAM to run a 4B-class MLX model (4-bit)
-    /// comfortably. 5.5 GB covers iPhone 14/15 base (6 GB), iPhone 15
-    /// Pro+ (8 GB), and excludes iPhone 13 / 12 / 11 (4 GB). Threshold
-    /// set slightly under the advertised spec to absorb reporting
-    /// variance.
-    private static let mlx4BMemoryBytes: UInt64 = 5_500_000_000
-
-    /// All current MLX specs (Qwen 3, Qwen 3.5, Gemma 4 E2B) fall under
-    /// the same memory envelope — they're all quantized to 4-bit and
-    /// all target iPhone 15 Pro as the baseline.
-    static var canRunMLX4BClass: Bool {
-        ProcessInfo.processInfo.physicalMemory >= mlx4BMemoryBytes
+    /// Whether at least one downloadable model fits this phone.
+    static var canRunAnyMLX: Bool {
+        EnginePreference.allCases.contains { $0.mlxSpec?.fitsThisDevice == true }
     }
 
     /// Tri-state for Apple FoundationModels availability on this
@@ -194,11 +172,15 @@ enum EnginePreferenceStore {
 
     static var current: EnginePreference {
         get {
-            guard let raw = UserDefaults.standard.string(forKey: key),
-                  let value = EnginePreference(rawValue: raw) else {
-                return .apple
+            guard let raw = UserDefaults.standard.string(forKey: key) else { return .apple }
+            if let value = EnginePreference(rawValue: raw) { return value }
+            // Retired engine: move to the best model this phone fits.
+            if EnginePreference.retiredRawValues.contains(raw) {
+                let replacement = EnginePreference.bestDownloadable ?? .apple
+                UserDefaults.standard.set(replacement.rawValue, forKey: key)
+                return replacement
             }
-            return value
+            return .apple
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: key)

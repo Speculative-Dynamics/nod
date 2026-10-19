@@ -64,6 +64,20 @@ var label = "run"
 var caseFilter: String?
 var temperature: Double? = AFMListening.listeningTemperature
 var suite = "listening"
+/// MLX prefill step size override (tokens per step).
+var prefillSpec: Int?
+/// AFM sampling mode: "nucleus:0.9", "topk:40", or nil for the default.
+var samplingSpec: String?
+var samplingMode: GenerationOptions.SamplingMode? {
+    guard let spec = samplingSpec else { return nil }
+    let parts = spec.split(separator: ":")
+    guard parts.count == 2 else { return nil }
+    switch parts[0] {
+    case "nucleus": return Double(parts[1]).map { .random(probabilityThreshold: $0) }
+    case "topk": return Int(parts[1]).map { .random(top: $0) }
+    default: return nil
+    }
+}
 /// Memory design for recall cases: entities (the app today), episodic, or both.
 var memoryStrategy = "entities"
 var repoRoot = FileManager.default.currentDirectoryPath
@@ -74,7 +88,10 @@ do {
         case "--prompt": promptPath = args.next() ?? promptPath
         case "--label": label = args.next() ?? label
         case "--case": caseFilter = args.next()
+        case "--engine": engineSpec = args.next() ?? engineSpec
+        case "--prefill": prefillSpec = args.next().flatMap(Int.init)
         case "--suite": suite = args.next() ?? suite
+        case "--sampling": samplingSpec = args.next()
         case "--memory": memoryStrategy = args.next() ?? memoryStrategy
         case "--temperature":
             // A number, or "default" for the model's own default.
@@ -126,16 +143,15 @@ func flags(for reply: String, guarded: String) -> [String] {
     if guarded.contains("**") || guarded.contains("\n- ") || guarded.contains("\n1.") {
         out.append("markdown/list")
     }
+    if guarded.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) {
+        out.append("emoji")
+    }
     return out
 }
 
 // MARK: - Run
 
-guard case .available = SystemLanguageModel.default.availability else {
-    print("Apple's on-device model isn't available: \(SystemLanguageModel.default.availability)")
-    print("Check System Settings → Apple Intelligence & Siri.")
-    exit(1)
-}
+await prepareBackend()
 
 let listeningPrompt: String
 do {
@@ -221,7 +237,8 @@ var report = """
 # Listening eval — \(label)
 
 - Prompt: `\(promptPath)`
-- Model: Apple on-device (context \(AFMListening.contextSize) tokens, temperature \(temperature.map { String($0) } ?? "default"))
+- Model: \(backendDescription)\(mlxModelPath == nil ? ", temperature \(temperature.map { String($0) } ?? "default"), sampling \(samplingSpec ?? "default")" : "")
+- Peak memory: \(backendPeakMemoryGB().map { String(format: "%.2f GB", $0) } ?? "n/a")
 - Cases: \(results.count), turns: \(totalTurns)
 - Turns with any flag: \(flaggedTurns)
 - Turns with a banned phrase (before guard): \(bannedTurns)

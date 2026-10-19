@@ -64,9 +64,10 @@ struct PipelineConversation {
         var raw = ""
         var errorText: String?
         do {
-            for try await snapshot in AFMListening.streamReply(
+            for try await snapshot in replyStream(
                 prompt: listeningPrompt, context: context, history: history,
-                userMessage: userText, maxTokens: maxTokens, temperature: temperature
+                userMessage: userText, maxTokens: maxTokens, temperature: temperature,
+                samplingMode: samplingMode
             ) { raw = snapshot }
         } catch {
             errorText = String(describing: error)
@@ -96,7 +97,7 @@ struct PipelineConversation {
         let oldest = Array(history.prefix(Self.batchSize))
         let conversational = oldest.filter { !$0.isError }
         modelCalls += 1
-        if let note = try? await AFMMemory.chapterNote(prompt: chapterPrompt, messages: conversational),
+        if let note = try? await writeChapterNote(prompt: chapterPrompt, messages: conversational),
            let chapter = ConversationMemory.makeChapter(note: note, covering: conversational, now: clock) {
             memory.addChapter(chapter)
         }

@@ -86,6 +86,9 @@ final class EngineHolder: ObservableObject {
     private let backgroundUnloadDelay: Duration = .seconds(60)
 
     init() {
+        // Free the storage of retired models (off the main thread).
+        Task.detached(priority: .background) { MLXModelSpec.deleteRetiredModels() }
+
         let stored = EnginePreferenceStore.current
         // If the stored preference isn't available on THIS device (e.g.
         // user restored a backup from an 8GB phone to a 4GB one), fall
@@ -341,7 +344,7 @@ final class EngineHolder: ObservableObject {
         switch pref {
         case .apple:
             return try? FoundationModelsClient()
-        case .qwen3, .qwen35, .gemma4:
+        case .qwen35, .qwen35_2b:
             guard let spec = pref.mlxSpec else { return nil }
             return try? MLXEngineClient(spec: spec)
         }

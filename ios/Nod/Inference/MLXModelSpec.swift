@@ -67,33 +67,52 @@ struct MLXModelSpec: Sendable, Hashable {
 
     // MARK: - Sampling
 
-    /// Sampling settings for one generation. Chat replies use each
-    /// model's published recommendation; summary and extraction use
-    /// `.precise` because they need faithful, parseable output.
-    struct Sampling: Sendable, Hashable {
-        var temperature: Float
-        var topP: Float
-        var topK: Int
-        var minP: Float = 0
-        var presencePenalty: Float? = nil
+    typealias Sampling = MLXSampling
 
-        static let precise = Sampling(temperature: 0.3, topP: 0.9, topK: 0)
-    }
+    // MARK: - Memory
 
-    /// Chat sampling per the model cards' non-thinking recommendations.
-    /// Qwen 3 / 3.5: temperature 0.7, top-p 0.8, top-k 20 (Qwen 3.5 also
-    /// recommends presence penalty 1.5 against repetition). Gemma 4:
-    /// temperature 1.0, top-p 0.95, top-k 64.
-    var sampling: Sampling {
+    /// Peak memory while loaded and generating (weights + KV cache +
+    /// activations), measured with the eval runner on a long
+    /// conversation. Used to check free memory before loading.
+    var peakMemoryBytes: UInt64 {
         switch identifier {
-        case "qwen3.5-4b":
-            return Sampling(temperature: 0.7, topP: 0.8, topK: 20, presencePenalty: 1.5)
-        case "gemma4-e2b-text":
-            return Sampling(temperature: 1.0, topP: 0.95, topK: 64)
-        default:
-            return Sampling(temperature: 0.7, topP: 0.8, topK: 20)
+        case "qwen3.5-2b": return 2_100_000_000   // measured 2.04 GB
+        default: return 3_600_000_000             // Qwen 3.5 4B: measured 3.54 GB
         }
     }
+
+    /// Smallest iPhone (physical RAM) this model is offered on. iOS lets
+    /// an app with the increased-memory-limit entitlement use roughly
+    /// half to two-thirds of physical RAM, so this is about twice the
+    /// measured peak, rounded to real iPhone memory sizes.
+    var minimumDeviceMemory: UInt64 {
+        switch identifier {
+        case "qwen3.5-2b": return 5_500_000_000   // 6 GB iPhones and up
+        default: return 7_500_000_000             // 8 GB iPhones (15 Pro and newer)
+        }
+    }
+
+    /// On-disk folders of retired models (Qwen 3 4B, Gemma 4 E2B).
+    /// Deleted at launch to give users their storage back.
+    static let retiredDirectoryNames = ["Qwen3-4B-4bit", "Gemma4-E2B-IT-Text-int4"]
+
+    static func deleteRetiredModels() {
+        for name in retiredDirectoryNames {
+            let dir = URL.applicationSupportDirectory.appending(path: "Nod").appending(path: name)
+            if FileManager.default.fileExists(atPath: dir.path) {
+                try? FileManager.default.removeItem(at: dir)
+            }
+        }
+    }
+
+    /// Whether this phone has enough RAM to offer this model at all.
+    var fitsThisDevice: Bool {
+        ProcessInfo.processInfo.physicalMemory >= minimumDeviceMemory
+    }
+
+    /// Chat sampling per each model family's recommendation (see
+    /// MLXSampling).
+    var sampling: MLXSampling { .qwen35 }
 
     // MARK: - Local storage
 
@@ -177,65 +196,6 @@ struct MLXModelSpec: Sendable, Hashable {
 extension MLXModelSpec {
 
     // ==========================================================================
-    // Qwen 3 4B Instruct 2507 — July 2025
-    // ==========================================================================
-    // Alibaba's Jul 2025 instruct refresh of Qwen 3 4B. Text-only
-    // (model_type: qwen3) — the newest pure-text Qwen release as of
-    // April 2026. Our original shipped model; kept as the default MLX
-    // option for its smaller size and proven performance on iPhone 15
-    // Pro.
-    //
-    // Hashes + sizes inherited from the pre-refactor single-model
-    // client's r2Files manifest; bit-identical to what existing users
-    // have on disk, so the upgrade preserves their download.
-    static let qwen3_instruct_2507 = MLXModelSpec(
-        identifier: "qwen3-instruct-2507",
-        displayName: "Qwen 3 Instruct 2507",
-        releaseMonth: "Jul 2025",
-        tagline: "Text-only · tuned for chat",
-        roleLabel: "Proven",
-        r2BaseURL: URL(
-            string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3-4b-instruct-2507/v1"
-        )!,
-        files: [
-            .init(name: "config.json",
-                  sha256: "574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849",
-                  size: 938),
-            .init(name: "merges.txt",
-                  sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
-                  size: 1_671_853),
-            .init(name: "model.safetensors",
-                  sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f",
-                  size: 2_263_022_417),
-            .init(name: "model.safetensors.index.json",
-                  sha256: "388d811b8b7c2608dd04cce1bcb04a8bf715d19b42790894e6d3427ff429a777",
-                  size: 63_964),
-            .init(name: "tokenizer.json",
-                  sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-                  size: 11_422_654),
-            .init(name: "tokenizer_config.json",
-                  sha256: "4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9",
-                  size: 5_440),
-            .init(name: "vocab.json",
-                  sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
-                  size: 2_776_833),
-            .init(name: "added_tokens.json",
-                  sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
-                  size: 707),
-            .init(name: "special_tokens_map.json",
-                  sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
-                  size: 613),
-            .init(name: "chat_template.jinja",
-                  sha256: "40c21f34cf67d8c760ef72f8ad3ae5afad514299d4b06e91dd9a8d705af7b541",
-                  size: 4_040),
-            .init(name: "generation_config.json",
-                  sha256: "835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48",
-                  size: 238),
-        ],
-        directoryName: "Qwen3-4B-4bit"  // unchanged — preserves existing on-disk files
-    )
-
-    // ==========================================================================
     // Qwen 3.5 4B — March 2, 2026
     // ==========================================================================
     // The Mar 2026 release is a unified vision-language foundation
@@ -260,7 +220,7 @@ extension MLXModelSpec {
         displayName: "Qwen 3.5 4B",
         releaseMonth: "Mar 2026",
         tagline: "Multimodal arch · text-only use",
-        roleLabel: "Recent",
+        roleLabel: "Best",
         r2BaseURL: URL(
             string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3.5-4b-4bit/v1"
         )!,
@@ -300,48 +260,58 @@ extension MLXModelSpec {
     )
 
     // ==========================================================================
-    // Gemma 4 E2B Text — April 2, 2026
+    // Qwen 3.5 2B — March 2026
     // ==========================================================================
-    // Google DeepMind's Apr 2026 release. "E2B" = Effective 2B parameters
-    // via matformer sparse activation. Training cutoff January 2025.
-    // This is the true text-only MLX variant (model_type: gemma4_text),
-    // distinct from the full multimodal `gemma4` repos which are 3.6-5 GB.
+    // The light option: about half the download and memory of the 4B
+    // models (~2.0 GB peak in evals vs ~3.5 GB), so it fits 6 GB
+    // iPhones that can't run Apple Intelligence. Evals: 4/4 recall,
+    // 11/63 flagged replies (Qwen 3.5 4B: 4/4, 3/63).
     //
-    // Source: mlx-community/Gemma4-E2B-IT-Text-int4. Hashes computed
-    // directly from the HF source; user uploads these exact bytes to
-    // our R2 bucket.
-    static let gemma4_e2b_text = MLXModelSpec(
-        identifier: "gemma4-e2b-text",
-        displayName: "Gemma 4 E2B Text",
-        releaseMonth: "Apr 2026",
-        tagline: "Text-only · fresh training data",
-        roleLabel: "Latest",
+    // Source: mlx-community/Qwen3.5-2B-4bit. Hashes computed from the
+    // Hugging Face files; upload with
+    // `ios/scripts/upload_models_to_r2.sh qwen35_2b`.
+    static let qwen35_2b = MLXModelSpec(
+        identifier: "qwen3.5-2b",
+        displayName: "Qwen 3.5 2B",
+        releaseMonth: "Mar 2026",
+        tagline: "Lighter · smaller download",
+        roleLabel: "Light",
         r2BaseURL: URL(
-            string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/gemma4-e2b-text-int4/v1"
+            string: "https://pub-6cf269f2cf044828b0b016d58295da25.r2.dev/qwen3.5-2b-4bit/v1"
         )!,
         files: [
             .init(name: "chat_template.jinja",
-                  sha256: "781d10940fbc44be40064b5d43a056fc486c84ceaa55538226368b57314132bf",
-                  size: 16_317),
+                  sha256: "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+                  size: 7_755),
             .init(name: "config.json",
-                  sha256: "6520ef3831fd604aaca8c1f7796ca392f071843be8fd797aa7b029b06dc3086b",
-                  size: 2_774),
-            .init(name: "generation_config.json",
-                  sha256: "f59b6fa8fb6cf135f525fd203cd70c54016174fb0c3c78d1e40890f2f51395b3",
-                  size: 207),
+                  sha256: "beb7fc5a6e0405fe332821cf1a8ef7b69bb390a8c8933171647de5579debf949",
+                  size: 3_113),
             .init(name: "model.safetensors",
-                  sha256: "12fd23751e57dbe38fc9f69e2e7eea247e207b203ee27ea9fff0b1b56e1d621b",
-                  size: 2_634_535_262),
+                  sha256: "713fe7e5d3c3965f7106b0d0ee17615f7869c23c8d327996df8c1196fbcf07d5",
+                  size: 1_722_271_785),
             .init(name: "model.safetensors.index.json",
-                  sha256: "da9f33c151eff339ee0f66a2485e757af4aeb10ba3d551bf69bc8cad0110ae54",
-                  size: 84_084),
+                  sha256: "8294c05cca7d53a6c33e3db2b379539bd296d054e0b689711b16b6ac93c7e49d",
+                  size: 81_722),
+            .init(name: "preprocessor_config.json",
+                  sha256: "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+                  size: 390),
+            .init(name: "processor_config.json",
+                  sha256: "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b",
+                  size: 1_300),
             .init(name: "tokenizer.json",
-                  sha256: "12499b770c7ac2057affc48617f65ede6f1a7b849574967c177998691027afc6",
-                  size: 36_459_693),
+                  sha256: "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+                  size: 19_989_343),
             .init(name: "tokenizer_config.json",
-                  sha256: "bbf66f6258a0e597b9f35b87db524a042bf208541731fcc6c4b60f19dc10c958",
-                  size: 1_837),
+                  sha256: "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+                  size: 1_139),
+            .init(name: "video_preprocessor_config.json",
+                  sha256: "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+                  size: 385),
+            .init(name: "vocab.json",
+                  sha256: "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+                  size: 6_722_759),
         ],
-        directoryName: "Gemma4-E2B-IT-Text-int4"
+        directoryName: "Qwen3.5-2B-4bit"
     )
+
 }

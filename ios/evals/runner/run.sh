@@ -9,7 +9,8 @@
 #   ios/evals/runner/run.sh                       # all cases, current prompt
 #   ios/evals/runner/run.sh --label new-prompt --prompt /path/to/prompt.md
 #   ios/evals/runner/run.sh --case greeting       # cases whose id contains "greeting"
-#   ios/evals/runner/run.sh --suite memory        # extraction, retrieval, dedupe, recall
+#   ios/evals/runner/run.sh --suite memory        # recall, search, grounding
+#   ios/evals/runner/run.sh --engine mlx:/path/to/model   # an MLX model folder
 #
 # Output: ios/evals/results/<timestamp>-<label>/{report.md,results.json}
 
@@ -20,6 +21,15 @@ repo="$(cd "$here/../../.." && pwd)"
 app="$repo/ios/Nod"
 build="$here/.build"
 mkdir -p "$build"
+
+case " $* " in
+  *" --engine mlx:"*)
+    # MLX engines need the Swift package build (Metal shaders).
+    (cd "$here" && xcodebuild -quiet -scheme NodEval -destination 'platform=macOS,arch=arm64' \
+      -derivedDataPath "$build/xcode" -configuration Release build >&2)
+    exec "$build/xcode/Build/Products/Release/nod-eval" --repo "$repo" "$@"
+    ;;
+esac
 
 swiftc -O -target arm64-apple-macos26.0 -o "$build/nod-eval" \
   "$here/main.swift" \
@@ -33,6 +43,7 @@ swiftc -O -target arm64-apple-macos26.0 -o "$build/nod-eval" \
   "$app/Inference/ListeningTurns.swift" \
   "$app/Inference/AFMListening.swift" \
   "$app/Inference/AFMMemory.swift" \
-  "$app/Inference/ReplyGuard.swift"
+  "$app/Inference/ReplyGuard.swift" \
+  "$here/backend.swift"
 
 exec "$build/nod-eval" --repo "$repo" "$@"

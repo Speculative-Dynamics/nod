@@ -265,7 +265,7 @@ struct ChatView: View {
         if isShowingAFMOnboarding {
             AFMUnavailableOnboarding(
                 afmStatus: DeviceCapability.afmStatus,
-                canRunMLX: DeviceCapability.canRunMLX4BClass,
+                canRunMLX: DeviceCapability.canRunAnyMLX,
                 onPickModel: { pref in
                     engineHolder.setPreference(pref)
                 }
@@ -1417,7 +1417,7 @@ struct ChatView: View {
             case .available:
                 return "Apple Intelligence is warming up. Try sending again in a moment."
             }
-        case .qwen3, .qwen35, .gemma4:
+        case .qwen35, .qwen35_2b:
             return "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
         }
     }
@@ -2131,20 +2131,20 @@ private struct MLXReadinessBar: View {
 //
 // First-run empty state shown when the user's active preference is
 // Apple Intelligence but AFM isn't available on this device. Three
-// branches, keyed on `DeviceCapability.afmStatus` + `canRunMLX4BClass`:
+// branches, keyed on `DeviceCapability.afmStatus` + `canRunAnyMLX`:
 //
 //   1. disabledInSettings: AFM-capable hardware, user disabled it. Copy
-//      mentions the Settings path; Qwen 3 is the recommended download.
+//      mentions the Settings path; the best model that fits is the
+//      recommended download.
 //   2. notSupported + canRunMLX: hardware can't run AFM (iPhone 15 base
 //      et al). Same layout, different body copy — no Settings path.
 //   3. notSupported + !canRunMLX: dead-end. Honest "needs newer iPhone"
 //      with no CTAs. No model downloads would fit either.
 //
 // Layout: 88pt mascot centered, welcome headline, body copy, primary
-// CTA (NodAccent-filled card = recommended model, Qwen 3 Instruct 2507
-// because proven > newest for a first-time user committing to a 5-min
-// download), OR divider, two secondary cards (Gemma 4, Qwen 3.5 in
-// newest-first order), footer.
+// CTA (NodAccent-filled card = the best model this phone fits), and on
+// phones that fit both, an OR divider and the light model as the
+// alternative, then a footer.
 //
 // Tap on any model → `onPickModel(pref)` → ChatView calls
 // `engineHolder.setPreference(...)` which kicks off the download.
@@ -2254,16 +2254,21 @@ private struct AFMUnavailableOnboarding: View {
             .padding(.horizontal, 4)
     }
 
-    /// Primary + OR + two secondary. Recommended = Qwen 3 (proven),
-    /// alternates newest-first (Gemma 4, Qwen 3.5).
+    /// The best model this phone fits as the recommendation; on phones
+    /// that fit both, the light model as the alternative.
     @ViewBuilder
     private var modelPickerStack: some View {
-        modelCard(pref: .qwen3, style: .primary, roleOverride: "Recommended")
-        orDivider
-        modelCard(pref: .gemma4, style: .secondary, roleOverride: nil)
-            .padding(.top, 8)
-        modelCard(pref: .qwen35, style: .secondary, roleOverride: nil)
-            .padding(.top, 8)
+        let fitting = [EnginePreference.qwen35, .qwen35_2b].filter { $0.isAvailable }
+        if let first = fitting.first {
+            modelCard(pref: first, style: .primary, roleOverride: "Recommended")
+        }
+        if fitting.count > 1 {
+            orDivider
+            ForEach(fitting.dropFirst(), id: \.self) { pref in
+                modelCard(pref: pref, style: .secondary, roleOverride: nil)
+                    .padding(.top, 8)
+            }
+        }
     }
 
     private var orDivider: some View {
