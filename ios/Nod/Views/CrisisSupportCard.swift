@@ -69,6 +69,9 @@ struct CrisisSupportCard: View {
                     if let number = resource.call, let url = URL(string: "tel:\(number)") {
                         Button("Call \(number)") { openURL(url) }
                             .buttonStyle(.borderedProminent)
+                            // Black on NodAccent, like every other
+                            // filled orange button (white is ~3:1).
+                            .foregroundStyle(.black)
                     }
                     if let number = resource.text, let url = URL(string: "sms:\(number)") {
                         Button("Text \(number)") { openURL(url) }

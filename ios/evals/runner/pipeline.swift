@@ -80,7 +80,7 @@ struct PipelineConversation {
         memory.addUserMessage(id: user.id, text: userText, date: clock)
         history.append(Message(
             role: .assistant,
-            text: errorText == nil ? shown : "Something went wrong. Try again.",
+            text: errorText == nil ? shown : "Nod couldn't reply this time.",
             isError: errorText != nil,
             createdAt: clock.addingTimeInterval(5)
         ))

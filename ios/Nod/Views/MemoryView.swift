@@ -25,8 +25,8 @@ struct MemoryView: View {
 
     var body: some View {
         contents
-            .navigationTitle("Memory")
-            // Inline title matches the sidebar's "Nod" title above it.
+            .navigationTitle("What Nod remembers")
+            // Same words as the row that opens it. Inline matches the sidebar.
             .navigationBarTitleDisplayMode(.inline)
             .alert(
                 "Forget this?",
@@ -76,6 +76,8 @@ struct MemoryView: View {
                             } label: {
                                 Label("Forget", systemImage: "trash")
                             }
+                            // The app tint would otherwise turn it orange.
+                            .tint(.red)
                         }
                         .accessibilityAction(named: "Forget") {
                             pendingForget = chapter

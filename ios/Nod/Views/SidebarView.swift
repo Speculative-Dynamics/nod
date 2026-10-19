@@ -89,7 +89,7 @@ struct SidebarView: View {
                 // How Nod talks to you.
                 Section {
                     Picker(
-                        "Response style",
+                        "Reply length",
                         selection: Binding(
                             get: { personalization.current.responseStyle },
                             set: { personalization.current.responseStyle = $0 }
@@ -101,7 +101,7 @@ struct SidebarView: View {
                     }
 
                     Picker(
-                        "How Nod responds",
+                        "Approach",
                         selection: Binding(
                             get: { personalization.current.nodMode },
                             set: { personalization.current.nodMode = $0 }
@@ -221,20 +221,6 @@ struct SidebarView: View {
                 }
 
                 Section {
-                    // Plain button keeps the row styling aligned with the
-                    // rest of the sidebar while the alert carries the
-                    // destructive emphasis.
-                    Button {
-                        showingClearConfirmation = true
-                    } label: {
-                        Label("Start fresh", systemImage: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text("Clears every message and Nod's memory of your conversation. This can't be undone.")
-                }
-
-                Section {
                     if let url = feedbackURL {
                         Link(destination: url) {
                             Label("Send feedback", systemImage: "envelope")
@@ -292,6 +278,18 @@ struct SidebarView: View {
                     }
                 }
 
+                // Destructive, so it sits last before About and reads red.
+                Section {
+                    Button(role: .destructive) {
+                        showingClearConfirmation = true
+                    } label: {
+                        Label("Start fresh", systemImage: "arrow.counterclockwise")
+                            .foregroundStyle(.red)
+                    }
+                } footer: {
+                    Text("Clears every message and Nod's memory of your conversation. This can't be undone.")
+                }
+
                 Section {
                     HStack {
                         Text("Version")
@@ -333,7 +331,7 @@ struct SidebarView: View {
                     }
                 }
             } message: {
-                Text("This clears every message and Nod's memory of your conversation. It can't be undone.")
+                Text(clearConfirmationMessage)
             }
             // Delete Model alert. Match the same cancel/destructive pattern
             // as "Start fresh" so destructive confirmations read the same
@@ -379,6 +377,15 @@ struct SidebarView: View {
                 systemFallback: hostColorScheme
             )
         )
+    }
+
+    /// Says exactly what Start fresh will delete.
+    private var clearConfirmationMessage: String {
+        let messages = store.messages.count
+        let notes = store.memory.chapters.count
+        var parts = ["\(messages) \(messages == 1 ? "message" : "messages")"]
+        if notes > 0 { parts.append("\(notes) memory \(notes == 1 ? "note" : "notes")") }
+        return "This deletes \(parts.joined(separator: " and ")). It can't be undone."
     }
 
     private var appVersion: String {

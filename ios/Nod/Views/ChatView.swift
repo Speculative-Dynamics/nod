@@ -43,6 +43,12 @@ struct ChatView: View {
     /// doesn't track that nil transition reliably, so we pass the
     /// value down as an explicit prop.
     @Environment(\.colorScheme) private var hostColorScheme
+
+    /// Mic and send buttons grow with Dynamic Type, capped so the text
+    /// field keeps room at accessibility sizes.
+    @ScaledMetric(relativeTo: .body) private var scaledInputButton: CGFloat = 32
+    private var inputButtonSize: CGFloat { min(scaledInputButton, 44) }
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var inputText: String = ""
     @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
@@ -171,6 +177,12 @@ struct ChatView: View {
     /// this value. Starts at true (fresh chat, empty content, no
     /// scrolling possible = user is implicitly at bottom).
     @State private var isAtBottom: Bool = true
+    /// Set when the user sends or regenerates; cleared when they scroll
+    /// by hand. While set, the list follows the reply. `isAtBottom`
+    /// alone drops out while the send's own scroll is in flight, and an
+    /// instant failure lands the user message, placeholder and error in
+    /// one update, which left the reply (or its error) below the fold.
+    @State private var followReply: Bool = false
 
     /// True when the AFM-unavailable onboarding card should take over
     /// the screen in place of the normal empty state. This happens when
@@ -698,7 +710,9 @@ struct ChatView: View {
                             // output to be iterated on. Long-press the
                             // bubble to find it; power users will, casual
                             // users won't reach for it, and that's the
-                            // right balance for this product.
+                            // right balance for this product. Failed
+                            // replies are the exception: their error row
+                            // shows Try again inline.
                             MessageBubble(
                                 message: msg,
                                 isLast: isLastAssistant,
@@ -793,7 +807,8 @@ struct ChatView: View {
                 // sent, we follow them to the new one.
                 let userJustSent = newCount > oldCount
                     && msgs.last?.role == .user
-                if (isAtBottom || userJustSent), let newLastId {
+                if userJustSent { followReply = true }
+                if (isAtBottom || userJustSent || followReply), let newLastId {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(newLastId, anchor: .bottom)
                     }
@@ -814,7 +829,8 @@ struct ChatView: View {
                       last.role == .assistant,
                       (oldText?.isEmpty ?? true),
                       let newText, !newText.isEmpty,
-                      !isAtBottom
+                      !isAtBottom,
+                      !followReply   // we're already scrolling to it
                 else { return }
                 hasNewMessageBelow = true
             }
@@ -823,12 +839,20 @@ struct ChatView: View {
             // Count doesn't change on replaceLastAssistantMessage, so
             // we need a separate trigger from count-onChange.
             .onChange(of: store.messages.last?.text) { _, _ in
-                guard let newLastId = store.messages.last?.id,
-                      isAtBottom
-                else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(newLastId, anchor: .bottom)
+                guard !store.messages.isEmpty, isAtBottom || followReply else { return }
+                // Next run loop, and to the content edge rather than the
+                // row id: a lazy row's height is only an estimate until
+                // laid out, so scrollTo(id) stopped short of a taller
+                // error row or a longer reply.
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
                 }
+            }
+            // Scrolling by hand means they're reading; stop following.
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { followReply = false }
             }
             // Keyboard-open → scroll to bottom. Standard chat-app behavior:
             // when the user taps the input, they want to compose the NEXT
@@ -929,7 +953,9 @@ struct ChatView: View {
             // words (a trust break on a venting app) before tapping
             // send. `committedAt` is the trigger; the overlay modifier
             // drives opacity 0→1→0 over ~1.5s.
-            TextField("Type what's on your mind…", text: $inputText, axis: .vertical)
+            // Shorter at accessibility sizes so it isn't cut to "Type what's o…".
+            TextField(typeSize.isAccessibilitySize ? "Say anything" : "Type what's on your mind…",
+                      text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
@@ -965,9 +991,9 @@ struct ChatView: View {
                 ZStack {
                     Circle()
                         .fill(sendButtonFill(for: role))
-                        .frame(width: 32, height: 32)
+                        .frame(width: inputButtonSize, height: inputButtonSize)
                     Image(systemName: role.iconName)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: inputButtonSize * 0.44, weight: .bold))
                         .foregroundStyle(sendButtonIconColor(for: role))
                         .contentTransition(.symbolEffect(.replace.downUp))
                 }
@@ -1007,9 +1033,9 @@ struct ChatView: View {
             }
         } label: {
             Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: inputButtonSize * 0.5, weight: .semibold))
                 .foregroundStyle(isRecording ? .black : Color("NodAccent"))
-                .frame(width: 32, height: 32)
+                .frame(width: inputButtonSize, height: inputButtonSize)
                 .background(
                     Circle().fill(
                         isRecording ? Color("NodAccent") : Color(.secondarySystemBackground)
@@ -1227,6 +1253,7 @@ struct ChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         guard sendEnabled else { return }
+        followReply = true
         inputText = ""
         store.append(Message(role: .user, text: text))
         triggerNod()
@@ -1357,7 +1384,7 @@ struct ChatView: View {
             } catch {
                 // Error type only — never message content.
                 inferenceLog.error("reply failed: \(String(describing: error), privacy: .public)")
-                errorReply = "Something went wrong. Try again."
+                errorReply = "Nod couldn't reply this time."
                 wasError = true
             }
 
@@ -1375,7 +1402,7 @@ struct ChatView: View {
                 // tokens inside a <think> block). Without this the
                 // placeholder stays empty and typing-dots show
                 // indefinitely with no way to recover.
-                finalText = "Something went wrong. Try again."
+                finalText = "Nod couldn't reply this time."
                 wasError = true
             } else {
                 finalText = ReplyGuard.clean(
@@ -1452,6 +1479,7 @@ struct ChatView: View {
     private func regenerate() {
         guard !isInferring else { return }
         guard let last = store.messages.last, last.role == .assistant else { return }
+        followReply = true
         let oldAssistantID = last.id
 
         // Find the most recent user message via backward search.
@@ -1462,6 +1490,15 @@ struct ChatView: View {
         }
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+        // A failed reply has nothing worth keeping on screen, so replace
+        // it now rather than stacking another error under it if the
+        // retry fails too.
+        if last.isError {
+            store.removeAssistantMessage(id: oldAssistantID)
+            respond(to: lastUserText)
+            return
+        }
 
         // Pre-regenerate cleanup: schedule the old reply for deletion
         // AFTER the new reply lands a token. Implement via a one-shot
@@ -1667,12 +1704,16 @@ struct MessageBubble: View {
     var onRegenerate: (() -> Void)? = nil
 
     @State private var nodTriggerForThisBubble: Int = 0
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack {
             if message.role == .user {
                 Spacer(minLength: 40)
                 bubble(color: Color(.tertiarySystemFill))
+            } else if message.role == .assistant && message.isError {
+                errorRow
+                Spacer(minLength: 40)
             } else if message.role == .assistant {
                 // Bubble goes directly into the HStack — NOT wrapped in
                 // a VStack. An earlier version wrapped it in a
@@ -1715,6 +1756,40 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+    }
+
+    /// A failed reply. Styled as a notice from the app, not as Nod
+    /// speaking, with Try again on the latest one (the only reply that
+    /// can be regenerated).
+    private var errorRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(.red)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message.text)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if isLast, let onRegenerate {
+                    Button("Try again", action: onRegenerate)
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(Color("NodAccent"))
+                        .foregroundStyle(.black)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                // Stronger in dark mode, where 8% red disappears on black.
+                .fill(Color.red.opacity(colorScheme == .dark ? 0.18 : 0.08))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Nod couldn't reply: \(message.text)")
     }
 
     @ViewBuilder
@@ -1984,6 +2059,8 @@ private struct MLXReadinessBar: View {
             Text(body)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                // Wrap instead of truncating at large text sizes.
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 if showCellularLink {
@@ -2164,15 +2241,33 @@ private struct AFMUnavailableOnboarding: View {
     let canRunMLX: Bool
     let onPickModel: (EnginePreference) -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
+        // Explanation scrolls; the actions stay pinned at the bottom,
+        // where thumbs are and where large text can't push them away.
         ScrollView {
             VStack(spacing: 0) {
                 heroMascot
-                content
-                Spacer(minLength: 40)
+                explanation
+                // At accessibility sizes only the main button is pinned;
+                // pinning everything would leave the explanation no room.
+                if typeSize.isAccessibilitySize { secondaryActions }
             }
             .padding(.horizontal, 24)
             .frame(maxWidth: .infinity)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                primaryAction
+                if !typeSize.isAccessibilitySize { secondaryActions }
+            }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity)
+                .background(Color(.systemBackground))
         }
         .accessibilityLabel(accessibilityIntro)
     }
@@ -2185,74 +2280,80 @@ private struct AFMUnavailableOnboarding: View {
     /// a frozen 88pt face reads cold on a screen users sit with.
     private var heroMascot: some View {
         NodMascotBlinker(size: 88)
-            .padding(.top, 64)
+            .padding(.top, typeSize.isAccessibilitySize ? 24 : 64)
             .padding(.bottom, 28)
             .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)
     }
 
     // MARK: Branch router
 
-    @ViewBuilder
-    private var content: some View {
+    private enum Branch { case afmDisabled, mlxOnly, neither }
+
+    private var branch: Branch {
         switch afmStatus {
-        case .available:
-            // Shouldn't reach this view when AFM is available, but be
-            // defensive: show the MLX-only copy as a safe fallback.
-            mlxOnlyBranch
-        case .disabledInSettings:
-            afmDisabledBranch
-        case .notSupported:
-            if canRunMLX {
-                mlxOnlyBranch
-            } else {
-                neitherBranch
+        // Shouldn't reach this view when AFM is available, but be
+        // defensive: show the MLX-only copy as a safe fallback.
+        case .available: return .mlxOnly
+        case .disabledInSettings: return .afmDisabled
+        case .notSupported: return canRunMLX ? .mlxOnly : .neither
+        }
+    }
+
+    @ViewBuilder
+    private var explanation: some View {
+        switch branch {
+        case .afmDisabled:
+            welcomeHeadline("One quick step.")
+            bodyCopy("Nod uses Apple Intelligence, which is turned off on this iPhone. Turn it on in Settings → Apple Intelligence & Siri, then come back. No download needed.")
+        case .mlxOnly:
+            welcomeHeadline("One-time download.")
+            bodyCopy("This iPhone doesn't have Apple Intelligence, so Nod brings its own AI that runs right here on your phone. It downloads once, then works offline.")
+        case .neither:
+            // Dead end: no AFM, and no MLX model fits.
+            welcomeHeadline("Nod needs a newer iPhone.")
+            bodyCopy("Nod runs the AI on your device, and the models won't fit in this iPhone's memory.")
+            requirementsCard
+            Text("We'd rather be honest than give you a bad experience. The whole point is that your conversations stay on your device.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 18)
+                .padding(.horizontal, 8)
+        }
+    }
+
+    /// The one action that stays pinned at every text size.
+    @ViewBuilder
+    private var primaryAction: some View {
+        switch branch {
+        case .afmDisabled:
+            if let best = EnginePreference.bestDownloadable {
+                secondaryDownloadLink(best, label: "Or download Nod's own model instead")
             }
+        case .mlxOnly:
+            if let best = EnginePreference.bestDownloadable {
+                downloadButton(best)
+            }
+        case .neither:
+            EmptyView()
         }
     }
 
-    // MARK: Branch: AFM off in Settings
-
     @ViewBuilder
-    private var afmDisabledBranch: some View {
-        welcomeHeadline("One quick step.")
-        bodyCopy("Nod uses Apple Intelligence, which is turned off on this iPhone. Turn it on in Settings → Apple Intelligence & Siri, then come back. No download needed.")
-        if let best = EnginePreference.bestDownloadable {
-            orDivider
-            secondaryDownloadLink(best, label: "Or download Nod's own model instead")
-        }
-        onDeviceFooter
-    }
-
-    // MARK: Branch: MLX-only (AFM hardware-unsupported + MLX available)
-
-    @ViewBuilder
-    private var mlxOnlyBranch: some View {
-        welcomeHeadline("One-time download.")
-        bodyCopy("This iPhone doesn't have Apple Intelligence, so Nod brings its own AI that runs right here on your phone. It downloads once, then works offline.")
-        if let best = EnginePreference.bestDownloadable {
-            downloadButton(best)
+    private var secondaryActions: some View {
+        switch branch {
+        case .afmDisabled:
+            onDeviceFooter
+        case .mlxOnly:
             // A smaller option, only when the phone fits both.
-            if best == .qwen35, EnginePreference.qwen35_2b.isAvailable {
+            if EnginePreference.bestDownloadable == .qwen35, EnginePreference.qwen35_2b.isAvailable {
                 secondaryDownloadLink(.qwen35_2b, label: "Smaller download instead")
                     .padding(.top, 14)
             }
+            onDeviceFooter
+        case .neither:
+            EmptyView()
         }
-        onDeviceFooter
-    }
-
-    // MARK: Branch: Neither (no AFM, no MLX) — dead end
-
-    @ViewBuilder
-    private var neitherBranch: some View {
-        welcomeHeadline("Nod needs a newer iPhone.")
-        bodyCopy("Nod runs the AI on your device, and the models won't fit in this iPhone's memory.")
-        requirementsCard
-        Text("We'd rather be honest than give you a bad experience. The whole point is that your conversations stay on your device.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.top, 18)
-            .padding(.horizontal, 8)
     }
 
     // MARK: Shared pieces
@@ -2285,6 +2386,8 @@ private struct AFMUnavailableOnboarding: View {
                     .font(.headline)
                 Text("\(size) · a few minutes on Wi-Fi")
                     .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(Color.black.opacity(0.65))
                     .monospacedDigit()
             }
@@ -2311,15 +2414,6 @@ private struct AFMUnavailableOnboarding: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(label), \(size)")
-    }
-
-    private var orDivider: some View {
-        Text("OR")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .tracking(0.6)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
     }
 
     private var requirementsCard: some View {
