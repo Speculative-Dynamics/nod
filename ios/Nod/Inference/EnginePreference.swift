@@ -98,7 +98,8 @@ enum DeviceCapability {
 
     /// Whether at least one downloadable model fits this phone.
     static var canRunAnyMLX: Bool {
-        EnginePreference.allCases.contains { $0.mlxSpec?.fitsThisDevice == true }
+        if DebugUIState.forceNoMLX { return false }
+        return EnginePreference.allCases.contains { $0.mlxSpec?.fitsThisDevice == true }
     }
 
     /// Tri-state for Apple FoundationModels availability on this
@@ -131,6 +132,7 @@ enum DeviceCapability {
     /// with associated values in later iOS betas — pattern matching is
     /// more future-proof than `==` equality.
     static var afmStatus: AFMStatus {
+        if let forced = DebugUIState.forcedAFMStatus { return forced }
         switch SystemLanguageModel.default.availability {
         case .available:
             return .available

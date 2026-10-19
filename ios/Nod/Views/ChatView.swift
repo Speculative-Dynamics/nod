@@ -358,7 +358,7 @@ struct ChatView: View {
                 // EngineHolder), the entire body would re-evaluate 1500
                 // times, murdering 120 fps. Now only this subview reacts
                 // to the 5 Hz flood; ChatView stays at rest.
-                if engineHolder.preference.mlxSpec != nil {
+                if engineHolder.preference.mlxSpec != nil || DebugUIState.forcedDownloadState != nil {
                     MLXReadinessBar(
                         observer: engineHolder.downloadObserver,
                         modelDisplayName: activeModelDisplayName,
@@ -515,6 +515,9 @@ struct ChatView: View {
             // .task cancels automatically if the view disappears.
             .task {
                 engineHolder.startEagerPrepareIfNeeded()
+                if let forced = DebugUIState.forcedDownloadState {
+                    engineHolder.downloadObserver.state = forced
+                }
 
                 await store.hydrate()
 
@@ -1216,7 +1219,8 @@ struct ChatView: View {
 
     /// Total bytes for the active model's manifest. Zero if AFM.
     private var activeModelTotalBytes: Int64 {
-        engineHolder.preference.mlxSpec?.totalBytes ?? 0
+        engineHolder.preference.mlxSpec?.totalBytes
+            ?? (DebugUIState.forcedDownloadState != nil ? MLXModelSpec.qwen35_4b.totalBytes : 0)
     }
 
     private func sendMessage() {
