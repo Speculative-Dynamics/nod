@@ -76,6 +76,11 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-xcode27-
 
+      # Xcode 27 ships the Metal Toolchain as a separate download. MLX
+      # compiles Metal shaders during the build and fails without it.
+      - name: Install Metal Toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Resolve Swift packages
         working-directory: ios
         run: |
