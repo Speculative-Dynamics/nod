@@ -4,7 +4,7 @@
 // Visual: 80pt Nod face (NodMascotBlinker) slowly blinking. Centered
 // vertically above the input field. Headline is time-of-day aware
 // ("Good morning", "I'm listening.", "How was today?", etc.). Body is
-// one line of gentle guidance.
+// one line of gentle guidance, plus a quiet privacy line.
 //
 // The input field IS the CTA. No buttons, no "Get Started."
 
@@ -38,6 +38,12 @@ struct EmptyStateView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(greeting.headline). \(greeting.subline)")
+
+            // Why Nod is different, said once and quietly.
+            Label("Everything you say stays on this iPhone.", systemImage: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { greeting = Greeting.forNow() }
