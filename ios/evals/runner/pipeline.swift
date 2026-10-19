@@ -56,7 +56,8 @@ struct PipelineConversation {
                 personalization: personalization,
                 latestChapter: seedChapter,
                 olderChapters: [],
-                pastMessages: seedPastMessages
+                pastMessages: seedPastMessages,
+                userMessage: userText
             )
         }
 

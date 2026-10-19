@@ -15,6 +15,10 @@ struct NodApp: App {
     // can hand us the background URLSession completion handler via the
     // AppDelegate's application(_:handleEvents...:). Everything else stays
     // in the SwiftUI lifecycle.
+    /// Debug `-nodReset YES`: must run before any stored property below
+    /// reads the database or UserDefaults, so it's the first one.
+    private let debugReset: Void = DebugUIState.resetIfRequested()
+
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
@@ -24,6 +28,9 @@ struct NodApp: App {
         // to .apple for this run so we break the loop. Safe no-op on a
         // normal launch. Runs synchronously; the work is one UserDefaults
         // read + one UserDefaults write.
+        if DebugUIState.simulateCrashedLastLaunch {
+            LaunchCrashBreaker.shared.debugMarkPreviousLaunchUnfinished()
+        }
         LaunchCrashBreaker.shared.markLaunchStarted()
 
         // MLX's GPU buffer cache is the silent memory hog on iOS. By default
@@ -45,7 +52,7 @@ struct NodApp: App {
     // Resets to true on every cold launch (the @State default). Warm launches
     // (resume from background) skip the splash because the process — and thus
     // this State — is preserved. Standard iOS splash behavior.
-    @State private var isLaunching = true
+    @State private var isLaunching = !DebugUIState.skipSplash
 
     // Optional Face ID gate. Owned at app level so scenePhase transitions
     // can feed it, and so the sidebar toggle flips state for everyone.
@@ -76,6 +83,15 @@ struct NodApp: App {
                     AppLockOverlay(lock: appLock)
                         .transition(.opacity)
                         .zIndex(1)
+                } else if appLock.isObscured {
+                    // Privacy cover while not active (App Switcher
+                    // snapshot). No Face ID prompt: it just hides.
+                    ZStack {
+                        Soft.background.ignoresSafeArea()
+                        NodMascot(size: 80)
+                    }
+                    .accessibilityHidden(true)
+                    .zIndex(1)
                 }
 
                 if isLaunching {
@@ -119,10 +135,15 @@ struct NodApp: App {
                 switch newPhase {
                 case .background:
                     appLock.handleBackgrounded()
+                    // Reaching the background is a clean launch. Without
+                    // this, closing Nod within 15 s (or iOS ending it in
+                    // the background) looked like a crash and switched the
+                    // engine on the next launch.
+                    LaunchCrashBreaker.shared.markLaunchSettled()
                 case .active:
                     appLock.handleForegrounded()
                 case .inactive:
-                    break
+                    appLock.handleInactive()
                 @unknown default:
                     break
                 }

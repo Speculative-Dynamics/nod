@@ -40,6 +40,11 @@ final class AppLockManager: ObservableObject {
     /// on `isEnabled` at init time: locked on cold launch if enabled.
     @Published private(set) var isLocked: Bool
 
+    /// True while the app isn't active and the lock is on: a plain cover
+    /// hides the conversation from the App Switcher snapshot (and from
+    /// anyone glancing while Control Center is down).
+    @Published private(set) var isObscured = false
+
     /// True while a Face ID prompt is in flight. Used to stop the overlay
     /// from stacking two prompts if onAppear fires twice.
     @Published private(set) var isAuthenticating = false
@@ -61,12 +66,19 @@ final class AppLockManager: ObservableObject {
 
     // MARK: - Lifecycle hooks (called from NodApp scenePhase observer)
 
+    func handleInactive() {
+        guard isEnabled else { return }
+        isObscured = true
+    }
+
     func handleBackgrounded() {
         guard isEnabled else { return }
+        isObscured = true
         lastBackgroundedAt = Date()
     }
 
     func handleForegrounded() {
+        isObscured = false
         guard isEnabled else { return }
         guard let at = lastBackgroundedAt else { return }
         if Date().timeIntervalSince(at) > relockGrace {

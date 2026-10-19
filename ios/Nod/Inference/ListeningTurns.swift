@@ -32,7 +32,8 @@ enum ListeningTurns {
         personalization: String,
         latestChapter: String,
         olderChapters: [String],
-        pastMessages: [String]
+        pastMessages: [String],
+        userMessage: String = ""
     ) -> String {
         var parts: [String] = []
         if !personalization.isEmpty {
@@ -49,7 +50,23 @@ enum ListeningTurns {
             let lines = pastMessages.map { "- \($0)" }.joined(separator: "\n")
             parts.append("THINGS THEY TOLD YOU BEFORE, IN THEIR WORDS (newest first). Don't bring these up yourself. If they ask about something here, answer from it plainly:\n\(lines)")
         }
+        // Recall instruction: only when the user's own past words were
+        // recalled AND they're asking something. In the listening prompt
+        // it made Apple's model ask more questions on every reply; shown
+        // whenever recall fired, it still did in long conversations.
+        if !pastMessages.isEmpty, isAsking(userMessage) {
+            parts.append("When they want a detail from these back (a name, a place, what happened), give it plainly.")
+        }
         return parts.joined(separator: "\n\n")
+    }
+
+    /// True when a message reads as a question ("where is Leila moving
+    /// again", "what's my boss's name?").
+    static func isAsking(_ message: String) -> Bool {
+        let text = message.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.contains("?") { return true }
+        let openers = ["what", "where", "who", "when", "which", "how", "remind me", "do you remember", "did i"]
+        return openers.contains { text.hasPrefix($0) || text.contains(", \($0)") || text.contains(": \($0)") }
     }
 
     /// The system message: listening prompt, then the per-turn context

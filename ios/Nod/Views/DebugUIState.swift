@@ -12,6 +12,14 @@
 //   -nodRecording YES
 //       Show the dictation UI as if recording (stop button, edge glow).
 //       Simulator voice input often lacks its language assets.
+//   -nodFakeEngine on | slow | fail | failFirst
+//       Replace the reply engine with ScriptedEngine (end-to-end tests).
+//   -nodReset YES
+//       Start from a clean app: conversation, memory and settings wiped.
+//   -nodSkipSplash YES
+//       Skip the launch animation.
+//   -nodCrashedLastLaunch YES
+//       Treat the previous launch as one that crashed before settling.
 //   -nodLocked YES
 //       Show the Face ID lock screen and keep it up (the Simulator
 //       has no passcode, so it would otherwise unlock at once).
@@ -43,6 +51,34 @@ enum DebugUIState {
 
     static var forceRecording: Bool { argument("-nodRecording") == "YES" }
 
+    static var fakeEngineMode: String? { argument("-nodFakeEngine") }
+
+    static var skipSplash: Bool { argument("-nodSkipSplash") == "YES" }
+
+    static var simulateCrashedLastLaunch: Bool { argument("-nodCrashedLastLaunch") == "YES" }
+
+    private nonisolated(unsafe) static var didReset = false
+
+    /// Wipes Nod's files (conversation database, pending writes, personal
+    /// note) and all UserDefaults when launched with `-nodReset YES`. Must run before
+    /// anything reads them (see NodApp's first stored property).
+    static func resetIfRequested() {
+        guard argument("-nodReset") == "YES", !didReset else { return }
+        didReset = true
+        let fm = FileManager.default
+        if let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first,
+           let names = try? fm.contentsOfDirectory(atPath: library.path) {
+            // The conversation database, its pending writes, and the
+            // personal note ("Anything else"), which lives in its own file.
+            for name in names where name.hasPrefix("nod-") {
+                try? fm.removeItem(at: library.appendingPathComponent(name))
+            }
+        }
+        if let domain = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+        }
+    }
+
     static var forcedDownloadState: MLXEngineClient.State? {
         let total = MLXModelSpec.qwen35_4b.totalBytes
         let partial = DownloadMetrics(
@@ -66,6 +102,10 @@ enum DebugUIState {
     static let forceNoMLX = false
     static let forceLocked = false
     static let forceRecording = false
+    static let fakeEngineMode: String? = nil
+    static let skipSplash = false
+    static let simulateCrashedLastLaunch = false
+    static func resetIfRequested() {}
     static let forcedDownloadState: MLXEngineClient.State? = nil
     #endif
 }

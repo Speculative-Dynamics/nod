@@ -594,6 +594,15 @@ struct ChatView: View {
             .onChange(of: store.messages.last?.text) { _, _ in
                 cachedRows = Self.chatRows(from: store.messages)
             }
+            // And on the last message's flags. Stopping a reply sets
+            // wasCancelled without changing count or (usually) text, so
+            // the "stopped" tag only appeared after a relaunch.
+            .onChange(of: store.messages.last?.wasCancelled) { _, _ in
+                cachedRows = Self.chatRows(from: store.messages)
+            }
+            .onChange(of: store.messages.last?.isError) { _, _ in
+                cachedRows = Self.chatRows(from: store.messages)
+            }
             // Two-strike memory-warning handler. LaunchCrashBreaker runs
             // the state machine (strike 1 → emit firstStrike, strike 2 →
             // flip to Apple). We observe the reason here and actually
@@ -629,21 +638,17 @@ struct ChatView: View {
                         // Intentionally no swipe-up branch.
                     }
             )
-            // iPad keyboard shortcuts. On iPhone these are harmless — no
-            // hardware keyboard means they never fire. Cmd+Return sends
-            // (sendMessage self-gates on sendEnabled). Cmd+K focuses the
-            // input so you can start typing without tapping. Kept always
-            // enabled: disabling Cmd+K based on focus state is backwards —
-            // that's precisely when you'd want the shortcut.
+            // Hardware keyboard: Cmd+K focuses the input so you can start
+            // typing without tapping; kept always enabled (that's exactly
+            // when you'd want it). There's no Cmd+Return send: a focused
+            // text view swallows the key before any app shortcut sees it,
+            // and Nod is iPhone-only, so it isn't worth a custom text view.
             .background(
-                ZStack {
-                    Button("") { sendMessage() }
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .hidden()
-                    Button("") { inputFocused = true }
-                        .keyboardShortcut("k", modifiers: .command)
-                        .hidden()
-                }
+                Button("") { inputFocused = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
             )
         }
     }
@@ -895,13 +900,13 @@ struct ChatView: View {
             .overlay(alignment: .bottomTrailing) {
                 if hasNewMessageBelow {
                     Button {
-                        if let lastId = store.messages.last?.id {
-                            withAnimation(.easeOut(duration: 0.25)) {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                            hasNewMessageBelow = false
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        // To the content edge, not the row id: a lazy row's
+                        // height is an estimate until it's laid out.
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            scrollPosition.scrollTo(edge: .bottom)
                         }
+                        hasNewMessageBelow = false
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down")
@@ -968,8 +973,7 @@ struct ChatView: View {
                 // No .submitLabel(.send)/.onSubmit here: with axis: .vertical
                 // and lineLimit(1...5), Return inserts a newline (iMessage
                 // behavior) and onSubmit never fires. A "send" label would
-                // lie. Hardware keyboards get Cmd+Return via the shortcut
-                // button in .background above.
+                // lie. Send with the arrow button.
 
             // Two-state right-side action button: send / stop.
             //   - Streaming → stop.fill, gray, tap cancels inference
@@ -2291,7 +2295,6 @@ private struct AFMUnavailableOnboarding: View {
                 .frame(maxWidth: .infinity)
                 .background(Soft.background)
         }
-        .accessibilityLabel(accessibilityIntro)
     }
 
     // MARK: Hero
@@ -2481,23 +2484,6 @@ private struct AFMUnavailableOnboarding: View {
         }
         let mb = Int((Double(bytes) / 1_000_000 / 10).rounded()) * 10
         return "\(mb) MB"
-    }
-
-    /// VoiceOver intro for the whole onboarding screen. Individual
-    /// cards have their own labels; this one provides orientation.
-    private var accessibilityIntro: String {
-        switch afmStatus {
-        case .available:
-            return "Download Nod's model to start."
-        case .disabledInSettings:
-            return "Apple Intelligence is off. Turn it on in Settings, or download Nod's own model."
-        case .notSupported:
-            if canRunMLX {
-                return "This iPhone doesn't have Apple Intelligence. Download Nod's own model to start."
-            } else {
-                return "Nod needs an iPhone with Apple Intelligence or at least 6 GB of memory."
-            }
-        }
     }
 }
 
