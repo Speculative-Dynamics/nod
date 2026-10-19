@@ -1,0 +1,13 @@
+{
+  "id": "memory-uses-entity",
+  "category": "memory",
+  "turns": [
+    "M did it again in the standup"
+  ],
+  "expect": "Recognizes M as the manager with the email history. Natural reference, not 'based on our previous conversations'.",
+  "context": {
+    "pastMessages": [
+      "(last week) \"M sent another passive-aggressive email today. That's the third one this week.\""
+    ]
+  }
+}

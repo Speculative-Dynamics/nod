@@ -6,18 +6,18 @@
 // relationship with Nod. This object is the in-memory view of that
 // relationship plus the compression machinery that lets it run forever.
 //
-// Compression ("the magic in the backend"): once the un-summarized message
-// count crosses HIGH_WATER_MARK, the oldest BATCH_SIZE messages get rolled
-// into the running summary. Everything between that summary and the latest
-// message is sent to the LLM as full-fidelity context.
+// What the model sees each turn:
+//   - the recent, not-yet-compressed messages, verbatim, as real turns
+//   - memory (ConversationMemory): the latest chapter note, older notes
+//     and past user messages relevant to what was just said
+// Once the verbatim backlog crosses the high-water mark, its oldest batch
+// gets a write-once chapter note and ages out of the verbatim window.
 
 import Foundation
 import OSLog
 import SwiftUI
 
-/// Diagnostic logger for conversation + memory pipeline events. Shared
-/// category with EntityStore so `category:memory` in Console surfaces
-/// the full trigger → extract → ingest → persist sequence in one stream.
+/// Diagnostic logger for compression and memory events.
 private let memoryLog = Logger(subsystem: "app.usenod.nod", category: "memory")
 
 @MainActor
@@ -28,6 +28,7 @@ final class ConversationStore: ObservableObject {
         case updateText(id: UUID, text: String)
         case delete(id: UUID)
         case setCancelled(id: UUID, cancelled: Bool)
+        case setError(id: UUID, isError: Bool)
 
         func apply(to database: MessageDatabase) throws {
             switch self {
@@ -39,6 +40,8 @@ final class ConversationStore: ObservableObject {
                 try database.deleteMessage(id: id)
             case .setCancelled(let id, let cancelled):
                 try database.setCancelled(id: id, cancelled: cancelled)
+            case .setError(let id, let isError):
+                try database.setError(id: id, isError: isError)
             }
         }
     }
@@ -69,62 +72,41 @@ final class ConversationStore: ObservableObject {
     // memory-optimization pass — each dropped full-fidelity turn saves
     // roughly 100-150 tokens of prompt, which is ~10-15 MB of peak KV
     // per generation.
-    private let HIGH_WATER_MARK = 12
-    private let BATCH_SIZE = 8
+    ///
+    /// These numbers are MLX's. Apple's model runs outside our memory
+    /// budget and its turn assembly trims to the context window, so it
+    /// keeps more recent turns verbatim (see `CompressionPolicy.roomy`).
+    struct CompressionPolicy: Sendable {
+        let highWaterMark: Int
+        let batchSize: Int
 
-    /// Max un-extracted messages handed to the incremental entity-extraction
-    /// pass per trigger. Sized so each call stays snappy (~1-2 s on Qwen)
-    /// and can fire after every completed exchange without feeling heavy.
-    /// Dedup in `EntityStore.ingest` absorbs overlap, so 5 is safe even if
-    /// compression later processes some of the same rows.
-    private let INCREMENTAL_EXTRACTION_WINDOW = 5
+        static let compact = CompressionPolicy(highWaterMark: 12, batchSize: 8)
+        static let roomy = CompressionPolicy(highWaterMark: 20, batchSize: 12)
+    }
+
+    private let compressionPolicy: () -> CompressionPolicy
 
     private let database: MessageDatabase
-    private let summarizer: () -> ConversationSummarizer?
+    private let chapterWriter: () -> ChapterWriter?
 
-    /// The running compressed summary. Mirrors what's in the summary table;
-    /// kept in memory so context-building for LLM calls is synchronous.
-    private(set) var summary: String = ""
+    /// Chapters and recall index. Published so the Memory screen updates
+    /// as chapters are written or forgotten.
+    @Published private(set) var memory = ConversationMemory()
 
     /// Compression runs on a background task. We hold the handle so we don't
     /// fire a second one while the first is still running.
     private var compressionTask: Task<Void, Never>?
 
-    /// Incremental entity-extraction runs on its own background task.
-    /// Fires after every completed exchange; single-flight (see
-    /// `maybeRunIncrementalExtraction` — subsequent triggers during an
-    /// in-flight run flip `extractionWantsRerun`, which schedules exactly
-    /// one catch-up pass when the current run finishes).
-    private var incrementalExtractionTask: Task<Void, Never>?
-    private var extractionWantsRerun: Bool = false
-
     private var pendingDiskWrites: [PendingDiskWrite] = []
-
-    /// Structured memory (people, places, projects, situations). Writes
-    /// run alongside compression (same batch, same task); reads run
-    /// per-turn inside `buildInferenceInputs` to inject entity context
-    /// when the user's current message references a known entity.
-    ///
-    /// Owned by the view layer (ChatView) so SwiftUI observes changes to
-    /// its published disambiguation queue without going through this
-    /// store. We keep the reference here so compression can ingest.
-    let entityStore: EntityStore
-
-    /// AFM-primary extraction orchestrator. Lazy-constructed with a
-    /// closure that reaches back for the CURRENT listening engine as
-    /// fallback — so switching engines doesn't strand extraction.
-    private let entityExtractor: EntityExtractorService
 
     init(
         database: MessageDatabase,
-        entityStore: EntityStore,
-        summarizer: @escaping () -> ConversationSummarizer?,
-        entityFallbackProvider: @escaping () -> (any ListeningEngine)?
+        chapterWriter: @escaping () -> ChapterWriter?,
+        compressionPolicy: @escaping () -> CompressionPolicy = { .compact }
     ) {
         self.database = database
-        self.entityStore = entityStore
-        self.summarizer = summarizer
-        self.entityExtractor = EntityExtractorService(fallbackProvider: entityFallbackProvider)
+        self.compressionPolicy = compressionPolicy
+        self.chapterWriter = chapterWriter
         // NOTE: No disk work here. All fetches + WAL replay moved to
         // `hydrate()` so ChatView.init can stay lightweight and the
         // splash animation isn't blocked by main-thread SQLite work
@@ -155,34 +137,34 @@ final class ConversationStore: ObservableObject {
         async let fetchedMessages: [Message] = Task.detached {
             (try? db.fetchAllMessages()) ?? []
         }.value
-        async let fetchedSummary: String = Task.detached {
-            (try? db.fetchSummary()) ?? ""
+        // Building the recall index tags every past message (NLTagger),
+        // so it happens off the main actor too.
+        async let fetchedMemory: ConversationMemory = Task.detached {
+            var memory = ConversationMemory()
+            for chapter in (try? db.fetchChapters()) ?? [] {
+                memory.addChapter(chapter)
+            }
+            for message in (try? db.fetchRecallableUserMessages()) ?? [] where !message.isError {
+                memory.addUserMessage(id: message.id, text: message.text, date: message.createdAt)
+            }
+            return memory
         }.value
         async let fetchedWAL: [PendingDiskWrite] = Task.detached {
             Self.loadPendingDiskWritesFromURL(walURL)
         }.value
 
         let loadedMessages = await fetchedMessages
-        let loadedSummary = await fetchedSummary
+        let loadedMemory = await fetchedMemory
         let loadedWAL = await fetchedWAL
 
         // Back on MainActor — apply to published state.
         self.messages = loadedMessages
-        self.summary = loadedSummary
+        self.memory = loadedMemory
         self.pendingDiskWrites = loadedWAL
         applyPendingWritesToMemory()
         flushPendingDiskWrites()
 
         self.isHydrated = true
-
-        // Catch-up pass for any messages that were un-extracted when the
-        // app was last killed (mid-extraction crash, or rows written by
-        // a previous version that didn't yet run incremental). Without
-        // this, those rows would wait for the next completed exchange
-        // before their entities surface in the sidebar — and for a user
-        // who opens the app to ask "what do you know about me?" before
-        // sending anything, that's a visible gap.
-        maybeRunIncrementalExtraction()
     }
 
     // MARK: - Appending messages
@@ -190,6 +172,9 @@ final class ConversationStore: ObservableObject {
     func append(_ message: Message) {
         messages.append(message)
         enqueueDiskWrite(.insert(message))
+        if message.role == .user, !message.text.isEmpty {
+            memory.addUserMessage(id: message.id, text: message.text, date: message.createdAt)
+        }
         // Only trigger compression on messages with actual text — skip the
         // empty assistant placeholder that ChatView inserts before streaming
         // tokens in, and skip nod (silent acknowledgment) messages.
@@ -203,23 +188,17 @@ final class ConversationStore: ObservableObject {
     /// completion — not per chunk. For per-chunk in-flight updates during
     /// streaming, use `updateLastAssistantMessageInMemory(with:)` which
     /// skips the WAL enqueue to avoid disk churn at 30 Hz.
-    func replaceLastAssistantMessage(with text: String) {
+    ///
+    /// `isError` marks the row as an app-written error notice, which keeps
+    /// it out of the model's history, summaries, and memory.
+    func replaceLastAssistantMessage(with text: String, isError: Bool = false) {
         guard let lastIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
-        let current = messages[lastIndex]
-        let updated = Message(
-            id: current.id,
-            role: .assistant,
-            text: text,
-            wasCancelled: current.wasCancelled,
-            createdAt: current.createdAt
-        )
+        let updated = messages[lastIndex].with(text: text, isError: isError)
         messages[lastIndex] = updated
         enqueueDiskWrite(.updateText(id: updated.id, text: text))
-        // Stream-completion is the natural trigger for incremental entity
-        // extraction: both the user's message and the assistant's reply
-        // are now on disk with stable text, and the 5-message sliding
-        // window has enough context to resolve pronouns and names.
-        maybeRunIncrementalExtraction()
+        if isError {
+            enqueueDiskWrite(.setError(id: updated.id, isError: true))
+        }
     }
 
     /// In-flight streaming update: mutates the last assistant message
@@ -233,14 +212,7 @@ final class ConversationStore: ObservableObject {
     /// at the end matches the pre-streaming cost exactly.
     func updateLastAssistantMessageInMemory(with text: String) {
         guard let lastIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
-        let current = messages[lastIndex]
-        messages[lastIndex] = Message(
-            id: current.id,
-            role: .assistant,
-            text: text,
-            wasCancelled: current.wasCancelled,
-            createdAt: current.createdAt
-        )
+        messages[lastIndex] = messages[lastIndex].with(text: text)
     }
 
     /// Remove the LAST assistant message (by position). Used when the
@@ -270,15 +242,8 @@ final class ConversationStore: ObservableObject {
     /// "stopped" so the tag shows on reload.
     func markAssistantCancelled(id: UUID, cancelled: Bool = true) {
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
-        let current = messages[index]
-        guard current.role == .assistant else { return }
-        messages[index] = Message(
-            id: current.id,
-            role: current.role,
-            text: current.text,
-            wasCancelled: cancelled,
-            createdAt: current.createdAt
-        )
+        guard messages[index].role == .assistant else { return }
+        messages[index] = messages[index].with(wasCancelled: cancelled)
         enqueueDiskWrite(.setCancelled(id: id, cancelled: cancelled))
     }
 
@@ -287,7 +252,7 @@ final class ConversationStore: ObservableObject {
     /// Bundle of inputs for an inference call.
     ///
     /// Split in two on purpose: `systemBlock` is what frames who Nod is and
-    /// what it knows (personalization + running summary). `history` is the
+    /// what it knows (personalization + memory). `history` is the
     /// recent un-summarized conversation as actual `Message` values so
     /// engines can pass them to the LLM as real chat turns — NOT narrated
     /// into a system-message paragraph. Chat-tuned models attend to turn
@@ -307,14 +272,10 @@ final class ConversationStore: ObservableObject {
     /// `InferenceInputs` so engines can consume `systemBlock` as a
     /// system-message string and `history` as real chat turns.
     ///
-    /// When `currentUserMessage` is non-nil, the system block will also
-    /// include a "PEOPLE AND SITUATIONS YOU KNOW ABOUT" section with the
-    /// entities this message references — by name, alias, or semantic
-    /// paraphrase. This is the memory-injection path: the model sees
-    /// context about "M" only when the user is actually talking about M.
-    /// Without that filter we'd risk Nod lapsing into pattern-surfacing
-    /// ("you've mentioned M a lot recently"), which the design explicitly
-    /// forbids.
+    /// The memory part of the system block (see ConversationMemory) holds
+    /// the latest chapter note plus older notes and past messages that
+    /// relate to `currentUserMessage`. Unrelated memory is never
+    /// included, so Nod has nothing to volunteer.
     ///
     /// `excludingFromHistory` drops specific rows from `history` — used
     /// by regenerate so the reply being replaced isn't shown to the
@@ -323,204 +284,117 @@ final class ConversationStore: ObservableObject {
         currentUserMessage: String? = nil,
         excludingFromHistory excluded: Set<UUID> = []
     ) -> InferenceInputs {
-        var parts: [String] = []
-
-        // Personalisation first so it frames how the rest of the context
-        // should be interpreted. Empty when the user has kept all defaults.
-        let personalization = PersonalizationStore.shared.current.promptBlock
-        if !personalization.isEmpty {
-            parts.append(personalization)
-        }
-
-        if !summary.isEmpty {
-            parts.append("WHAT YOU KNOW FROM EARLIER IN THIS ONGOING CONVERSATION:\n\(summary)")
-        }
-
-        // Entity injection — only when the current user message is
-        // provided AND we find entities it references. Empty set is the
-        // common case (user didn't mention any known entity), and the
-        // block is simply omitted in that case.
-        if let msg = currentUserMessage {
-            let relevant = entityStore.retrieveRelevant(for: msg)
-            if !relevant.isEmpty {
-                let lines = relevant.map { "- \($0.contextLine)" }.joined(separator: "\n")
-                parts.append("PEOPLE AND SITUATIONS YOU KNOW ABOUT (reference naturally if the user brings them up; never volunteer):\n\(lines)")
-            }
-        }
-
         var history: [Message] = []
+        var verbatimSince: Date?
         do {
             var recent = try database.fetchUnsummarizedMessages()
+            verbatimSince = recent.first?.createdAt
             // Drop the empty assistant placeholder that ChatView inserts
             // before streaming tokens back in.
             recent = recent.filter { !($0.role == .assistant && $0.text.isEmpty) }
-            recent = recent.filter { !excluded.contains($0.id) }
+            recent = recent.filter { !excluded.contains($0.id) && !$0.isError }
             // Drop the most recent user message — it's the current query.
             if let lastIndex = recent.lastIndex(where: { $0.role == .user }) {
                 recent.remove(at: lastIndex)
             }
             history = recent
         } catch {
-            // DB read failure: engines still see personalization + summary.
+            // DB read failure: engines still see personalization + memory.
             // Worse answer this turn, but not a crash.
         }
 
+        let systemBlock = memory.context(
+            for: currentUserMessage ?? "",
+            personalization: PersonalizationStore.shared.current.promptBlock,
+            verbatimSince: verbatimSince
+        )
+
         return InferenceInputs(
-            systemBlock: parts.joined(separator: "\n\n"),
+            systemBlock: systemBlock,
             history: history
         )
     }
-
-    // Note: an older `contextForInference()` method narrated history as
-    // flat text into a RECENT EXCHANGES section. That single-string shape
-    // is no longer used — both engines consume `buildInferenceInputs()`
-    // above and handle history their own way (MLX as real chat turns,
-    // AFM as a seed for `LanguageModelSession`). Deleted to avoid dead
-    // code drift.
 
     // MARK: - Compression
 
     private func maybeTriggerCompression() {
         guard compressionTask == nil else { return }
+        let policy = compressionPolicy()
         do {
             let count = try database.unsummarizedCount()
-            guard count >= HIGH_WATER_MARK else { return }
+            guard count >= policy.highWaterMark else { return }
         } catch {
             return
         }
-        guard let summarizer = summarizer() else { return }
+        guard let writer = chapterWriter() else { return }
 
         compressionTask = Task.detached(priority: .utility) { [weak self] in
-            await self?.runCompression(summarizer: summarizer)
+            await self?.runCompression(writer: writer, batchSize: policy.batchSize)
         }
     }
 
-    private func runCompression(summarizer: ConversationSummarizer) async {
+    /// Age the oldest batch out of the verbatim window: write a chapter
+    /// note about it (grounded against what the user said), then mark the
+    /// batch compressed and store the chapter in one transaction.
+    private func runCompression(writer: ChapterWriter, batchSize: Int) async {
         defer {
             Task { @MainActor in self.compressionTask = nil }
         }
         do {
-            let oldest = try database.fetchOldestUnsummarized(limit: BATCH_SIZE)
+            let oldest = try database.fetchOldestUnsummarized(limit: batchSize)
             guard !oldest.isEmpty else { return }
+            // Error notices are app chrome, not conversation.
+            let conversational = oldest.filter { !$0.isError && !$0.text.isEmpty }
 
-            let existingSummary = try database.fetchSummary()
+            var chapter: ConversationMemory.Chapter?
+            if !conversational.isEmpty {
+                do {
+                    let note = try await writer.chapterNote(messages: conversational)
+                    chapter = ConversationMemory.makeChapter(note: note, covering: conversational)
+                    if chapter == nil {
+                        memoryLog.info("compression: note had nothing grounded; batch ages out without a chapter")
+                    }
+                } catch where AFMListening.classify(error) == .refusal {
+                    // Retrying would refuse again forever and the backlog
+                    // would never shrink. Age the batch out without a note;
+                    // its messages are still recallable.
+                    memoryLog.error("compression: chapter note refused — batch ages out without a chapter")
+                }
+            }
 
-            // Run summary + entity extraction in parallel over the SAME
-            // batch of messages. Both read-only against `oldest`, so no
-            // contention. Extraction is best-effort and never throws
-            // (EntityExtractorService swallows errors), so it won't take
-            // down summarization.
-            async let newSummary = summarizer.summarize(
-                messages: oldest,
-                existingSummary: existingSummary
-            )
-            async let extracted = entityExtractor.extract(from: oldest)
-
-            let resolvedSummary = try await newSummary
-            let resolvedExtracted = await extracted
-
-            try database.setSummary(resolvedSummary)
-            // Atomic: summarize + mark-extracted in one transaction so a
-            // crash between the two columns can't leave
-            // `is_summarized = 1` with `entities_extracted_at = NULL`,
-            // which would make the next launch's incremental trigger
-            // re-extract this batch.
-            try database.markCompressed(ids: oldest.map(\.id))
-
-            self.summary = resolvedSummary
-            // Now async — precomputes embeddings off-main, applies state
-            // changes on-main. See EntityStore.ingest(_:) for detail.
-            memoryLog.info("compression: ingesting \(resolvedExtracted.items.count, privacy: .public) extracted items from batch of \(oldest.count, privacy: .public)")
-            await self.entityStore.ingest(resolvedExtracted)
+            try database.compress(ids: oldest.map(\.id), into: chapter)
+            if let chapter {
+                memory.addChapter(chapter)
+            }
         } catch {
-            // Compression is best-effort — if it fails this pass, the
-            // un-summarized backlog grows by one batch and we retry on
+            // Best-effort: the backlog grows by one batch and we retry on
             // the next high-water trip. The conversation keeps working.
             memoryLog.error("compression: pass failed — \(String(describing: error), privacy: .public)")
         }
     }
 
-    // MARK: - Incremental entity extraction
+    // MARK: - Memory screen
 
-    /// Schedule an incremental entity-extraction pass. Idempotent and
-    /// single-flight:
-    ///   - If no task is running, kicks one off.
-    ///   - If a task IS running, sets `extractionWantsRerun` so the
-    ///     in-flight run's `defer` block schedules exactly one catch-up
-    ///     when it finishes. Guarantees the freshest messages get
-    ///     processed without piling up tasks.
-    ///
-    /// Called from:
-    ///   - `replaceLastAssistantMessage` — the natural per-exchange trigger
-    ///   - `hydrate()` — catch-up pass on launch for anything that was
-    ///     in-flight when the app was killed
-    private func maybeRunIncrementalExtraction() {
-        if incrementalExtractionTask != nil {
-            memoryLog.info("incremental: trigger coalesced — task already running")
-            extractionWantsRerun = true
-            return
-        }
-        memoryLog.info("incremental: scheduling extraction task")
-        incrementalExtractionTask = Task.detached(priority: .utility) { [weak self] in
-            await self?.runIncrementalExtraction()
-        }
-    }
-
-    private func runIncrementalExtraction() async {
-        defer {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let shouldRerun = self.extractionWantsRerun
-                self.extractionWantsRerun = false
-                self.incrementalExtractionTask = nil
-                // A message arrived mid-run — schedule exactly one
-                // catch-up pass. The new task will re-check the DB for
-                // any still-unextracted rows.
-                if shouldRerun {
-                    memoryLog.info("incremental: rerun requested, scheduling catch-up")
-                    self.maybeRunIncrementalExtraction()
-                }
-            }
-        }
+    /// Forget a chapter: its note goes, and Nod stops recalling the
+    /// user's messages from that stretch. The messages stay in the chat.
+    func forgetChapter(_ chapter: ConversationMemory.Chapter) {
         do {
-            let batch = try database.fetchUnextractedMessages(limit: INCREMENTAL_EXTRACTION_WINDOW)
-            guard !batch.isEmpty else {
-                memoryLog.info("incremental: no unextracted messages, skipping")
-                return
-            }
-            memoryLog.info("incremental: processing \(batch.count, privacy: .public) unextracted messages")
-            await extractAndIngest(messages: batch)
-            try database.markEntitiesExtracted(ids: batch.map(\.id))
-            memoryLog.info("incremental: marked \(batch.count, privacy: .public) messages as extracted")
+            try database.forgetChapter(chapter)
+            memory.forgetChapter(id: chapter.id)
         } catch {
-            // Best-effort. If this pass fails, the watermark column stays
-            // NULL for the batch and the next trigger retries them. The
-            // compression pass (running at the 12-message mark via
-            // markCompressed) is the backstop that prevents permanent
-            // loss if incremental keeps failing.
-            memoryLog.error("incremental: pass failed — \(String(describing: error), privacy: .public)")
+            memoryLog.error("forgetChapter failed — \(String(describing: error), privacy: .public)")
         }
-    }
-
-    /// Run the extractor over a batch of messages and apply the results
-    /// to the entity store. Shared between compression and incremental
-    /// paths so the write-side logic lives in one place. Safe to call
-    /// with overlapping batches — `EntityStore.ingest` dedupes via
-    /// exact + alias + vector similarity.
-    private func extractAndIngest(messages batch: [Message]) async {
-        let extracted = await entityExtractor.extract(from: batch)
-        await entityStore.ingest(extracted)
     }
 
     // MARK: - Start fresh
 
-    /// Clears the entire conversation (messages and running summary) from
-    /// both memory and disk. The user opts into this explicitly via the
+    /// Clears the entire conversation (messages and memory) from both
+    /// memory and disk. The user opts into this explicitly via the
     /// sidebar's "Start fresh" action.
     ///
     /// Waits for any in-flight compression to fully cancel before wiping
     /// the database — otherwise a late-finishing compression task could
-    /// write a new summary into the just-cleared table.
+    /// write a new chapter into the just-cleared table.
     func clear() async {
         // Stop any pending compression and wait for it to actually exit.
         compressionTask?.cancel()
@@ -528,21 +402,6 @@ final class ConversationStore: ObservableObject {
             _ = await task.value
         }
         compressionTask = nil
-
-        // Same for the incremental extraction task. Without this, a
-        // late-finishing extraction could write entities into the store
-        // after `entityStore.resetInMemory()` below, ghost-repopulating
-        // the Memory view the user just asked to clear.
-        //
-        // Disarm rerun BEFORE the cancel+await so the in-flight task's
-        // defer block reads `extractionWantsRerun = false` and can't
-        // schedule a fresh extraction into the teardown window.
-        extractionWantsRerun = false
-        incrementalExtractionTask?.cancel()
-        if let task = incrementalExtractionTask {
-            _ = await task.value
-        }
-        incrementalExtractionTask = nil
 
         // Wipe disk in one transaction. If the write fails (e.g. disk full
         // at the exact moment the user hit "Start fresh"), bail without
@@ -556,11 +415,7 @@ final class ConversationStore: ObservableObject {
         pendingDiskWrites.removeAll()
         // Reset in-memory state so the UI flips to the empty state.
         messages.removeAll()
-        summary = ""
-        // `database.clearAll()` already wiped the entity rows; this
-        // resets the EntityStore's in-memory cache and published
-        // disambiguation queue to match, keeping UI consistent.
-        entityStore.resetInMemory()
+        memory = ConversationMemory()
     }
 
     var isConversationBackupEnabled: Bool {
@@ -612,26 +467,15 @@ final class ConversationStore: ObservableObject {
                 }
             case .updateText(let id, let text):
                 guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
-                let current = messages[index]
-                messages[index] = Message(
-                    id: current.id,
-                    role: current.role,
-                    text: text,
-                    wasCancelled: current.wasCancelled,
-                    createdAt: current.createdAt
-                )
+                messages[index] = messages[index].with(text: text)
             case .delete(let id):
                 messages.removeAll { $0.id == id }
             case .setCancelled(let id, let cancelled):
                 guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
-                let current = messages[index]
-                messages[index] = Message(
-                    id: current.id,
-                    role: current.role,
-                    text: current.text,
-                    wasCancelled: cancelled,
-                    createdAt: current.createdAt
-                )
+                messages[index] = messages[index].with(wasCancelled: cancelled)
+            case .setError(let id, let isError):
+                guard let index = messages.firstIndex(where: { $0.id == id }) else { continue }
+                messages[index] = messages[index].with(isError: isError)
             }
         }
         messages.sort { $0.createdAt < $1.createdAt }
@@ -668,8 +512,8 @@ final class ConversationStore: ObservableObject {
     }
 }
 
-/// What a summarizer has to be able to do. FoundationModelsClient (and later
-/// MLXEngineClient) will conform to this.
-protocol ConversationSummarizer: Sendable {
-    func summarize(messages: [Message], existingSummary: String) async throws -> String
+/// Writes the note for a chapter (see prompts/chapter_note.md). Every
+/// listening engine can do it.
+protocol ChapterWriter: Sendable {
+    func chapterNote(messages: [Message]) async throws -> String
 }

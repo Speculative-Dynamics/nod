@@ -1,0 +1,8 @@
+{
+  "id": "small-good-news",
+  "category": "small-moment",
+  "turns": [
+    "got the apartment!!"
+  ],
+  "expect": "Genuinely glad, specific to the apartment. Not over-the-top cheerleading, no 'proud of you'."
+}

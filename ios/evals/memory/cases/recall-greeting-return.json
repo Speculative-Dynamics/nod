@@ -1,0 +1,37 @@
+{
+  "id": "recall-greeting-return",
+  "kind": "recall",
+  "expect": "A plain hello after a heavy earlier stretch gets a plain hello back, not a recap.",
+  "turns": [
+    "my sister Leila is moving to Toronto in March and I'm kind of gutted",
+    "my manager Priya keeps messaging me at 11pm",
+    "work was long today",
+    "had leftovers for dinner",
+    "watched half a movie and fell asleep",
+    "the commute was awful",
+    "finally did laundry",
+    "my coworker brought donuts",
+    "it's been raining all week",
+    "I keep meaning to call my friends back",
+    "didn't sleep great",
+    "tried a new coffee place, it was fine",
+    "the train was late again",
+    "spent the evening doom scrolling",
+    "went for a short walk",
+    "my neighbor's dog barked all night",
+    "cleaned my desk finally",
+    "work meeting ran over by an hour",
+    "made pasta again",
+    "forgot my umbrella",
+    "thinking about getting a plant",
+    "the week is dragging",
+    "hey, I'm back"
+  ],
+  "replyMustNotInclude": [
+    "Leila",
+    "Toronto",
+    "Priya",
+    "sister",
+    "manager"
+  ]
+}

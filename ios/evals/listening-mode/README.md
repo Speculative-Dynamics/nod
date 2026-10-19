@@ -1,43 +1,68 @@
-# Listening-mode eval fixtures
+# Listening-mode evals
 
-This directory holds real vent transcripts used as regression tests for the
-listening-mode system prompt. Every prompt change gets run against these and
-the outputs diffed.
+Scripted conversations used to check how Nod replies. Run them before
+shipping any change to `prompts/`, to how turns are assembled, or to which
+model handles listening.
 
-## Format
+## Run
 
-One markdown file per fixture, named `NN-short-description.md`:
+Needs a Mac on macOS 26+ with Apple Intelligence turned on.
 
-```markdown
----
-title: "Interview frustration"
-date: 2026-04-19
-tags: [work, interview, technical]
----
-
-## User
-
-[exact text or paraphrased vent, redacted as needed]
-
-## Good response looks like
-
-[1-3 sentences describing what a 10/10 listening-mode reply would do]
-
-## Bad response would
-
-[1-3 sentences describing the failure modes for this specific input]
+```bash
+ios/evals/runner/run.sh                    # reply quality (this folder)
+ios/evals/runner/run.sh --suite memory     # memory (../memory/cases)
 ```
 
-## When to add fixtures
+The runner compiles the app's own shared code (`ListeningTurns`,
+`AFMListening`, `ReplyGuard`, `ConversationMemory` and friends) and plays
+every case through Apple's on-device model, one turn at a time, with
+chapter notes and past-message recall exactly as the app does them. Output goes to
+`ios/evals/results/<timestamp>-<label>/`:
 
-Add one whenever you vent something real to Nod and the reply either delights
-you or disappoints you. Hand-label what a good reply looks like. Over time this
-becomes your taste codified.
+- `report.md` — every reply, with automatic flags
+- `results.json` — the same, machine-readable
 
-Target: 5-10 fixtures before Phase 2. Grow to 20-30 by Phase 3.
+Useful flags:
 
-## When to run
+- `--case greeting` runs only cases whose id contains `greeting`
+- `--prompt /path/to/prompt.md --label try-x` compares a candidate prompt
 
-Before shipping any change to `prompts/listening_mode.md` at the repo root, or
-swapping which inference engine handles listening. Manually for now; scripted
-later.
+## What the flags mean
+
+- `banned: …` — a phrase from `prompts/banned_phrases.txt` appeared in the
+  raw reply. The app's reply guard removes that sentence; the report shows
+  both versions.
+- `advice/cheer: …` — fixing or cheerleading language ("have you tried",
+  "you should", "proud of you").
+- `long`, `questions` — more than 5 sentences, or more than one question.
+- `sympathy opener` — the reply starts with "I'm sorry".
+- `error: …` — generation failed (context overflow, refusal, …).
+
+Flags catch the mechanical failures. Whether a reply is warm, specific and
+matches the moment is a judgment call: read `report.md` against each
+case's `expect` note.
+
+## Cases
+
+One JSON file per case in `cases/`:
+
+```json
+{
+  "id": "vent-manager-email",
+  "category": "venting",
+  "context": {
+    "personalization": "HOW THIS PERSON LIKES TO BE HEARD: …",
+    "chapter": "a chapter note the conversation starts from",
+    "pastMessages": ["(last week) \"a past message, as the app recalls it\""]
+  },
+  "turns": ["first user message", "second user message"],
+  "expect": "what a good reply does, and what it must not do",
+  "maxTokens": 300
+}
+```
+
+`context` and `maxTokens` are optional. `personalization` is the literal
+block the app builds from the sidebar settings
+(`PersonalizationStore.promptBlock`).
+
+Add a case whenever Nod replies in a way that delights or disappoints you.

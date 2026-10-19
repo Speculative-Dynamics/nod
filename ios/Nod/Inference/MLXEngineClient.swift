@@ -137,8 +137,7 @@ actor MLXEngineClient: ListeningEngine {
     private(set) var state: State = .notLoaded
 
     private let listeningPrompt: String
-    private let summaryPrompt: String
-    private let extractionPrompt: String
+    private let chapterPrompt: String
 
     /// Loaded once, reused across calls. Nil until `prepare()` succeeds.
     /// ModelContainer is an actor — safe to hold here.
@@ -152,24 +151,11 @@ actor MLXEngineClient: ListeningEngine {
     /// EngineHolder attaches this to drive the download UI.
     private var stateContinuation: AsyncStream<State>.Continuation?
 
-    /// Ceiling for the summary-compression path. summary.md targets ~300
-    /// words ≈ 400 tokens; the previous 250-token cap was truncating
-    /// summaries mid-sentence, which fed a fragmented briefing back into
-    /// every subsequent inference.
-    ///
-    /// Listening replies no longer use a static cap — callers pass a
-    /// per-style `GenerationOptions.maxTokens` (200/300/400 for brief/
-    /// conversational/deeper). Every saved token is ~100 KB of KV on a
-    /// 28-layer / 8-KV-head 4B model, which matters on a 3 GB-budget
-    /// iPhone 15 Pro.
-    private static let maxSummaryTokens = 400
-
-    /// Ceiling for entity extraction. A realistic 8-message batch should
-    /// produce at most ~10 entities, each taking ~25 tokens in our JSON
-    /// wire format — so 300 tokens is ample with headroom to spare. This
-    /// is only used on the MLX fallback path; AFM's @Generable path
-    /// doesn't go through this ceiling.
-    private static let maxExtractionTokens = 300
+    /// Ceiling for chapter notes (two to four sentences). Listening
+    /// replies pass a per-style `GenerationOptions.maxTokens` instead.
+    /// Every saved token is ~100 KB of KV on a 28-layer / 8-KV-head 4B
+    /// model, which matters on a 3 GB-budget iPhone 15 Pro.
+    private static let maxChapterTokens = 200
 
     // MARK: - KV cache quantization
     //
@@ -215,8 +201,7 @@ actor MLXEngineClient: ListeningEngine {
     init(spec: MLXModelSpec) throws {
         self.spec = spec
         self.listeningPrompt  = try Self.loadPrompt(named: "listening_mode")
-        self.summaryPrompt    = try Self.loadPrompt(named: "summary")
-        self.extractionPrompt = try Self.loadPrompt(named: "entity_extraction")
+        self.chapterPrompt    = try Self.loadPrompt(named: "chapter_note")
     }
 
     private static func loadPrompt(named name: String) throws -> String {
@@ -454,12 +439,7 @@ actor MLXEngineClient: ListeningEngine {
             throw InferenceError.modelNotReady
         }
 
-        let instructions: String
-        if userContext.isEmpty {
-            instructions = listeningPrompt
-        } else {
-            instructions = listeningPrompt + "\n\n---\n\n" + userContext
-        }
+        let instructions = ListeningTurns.systemText(prompt: listeningPrompt, context: userContext)
 
         // Thinking mode handling, per-model:
         //   - Qwen 3 Instruct 2507: instruct-only build, no thinking branch
@@ -478,7 +458,8 @@ actor MLXEngineClient: ListeningEngine {
             instructions: instructions,
             history: history,
             userPrompt: userMessage,
-            maxTokens: options.maxTokens
+            maxTokens: options.maxTokens,
+            sampling: spec.sampling
         )
         return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -514,19 +495,18 @@ actor MLXEngineClient: ListeningEngine {
                         throw InferenceError.modelNotReady
                     }
 
-                    let instructions: String
-                    if userContext.isEmpty {
-                        instructions = await self.listeningPrompt
-                    } else {
-                        instructions = await self.listeningPrompt + "\n\n---\n\n" + userContext
-                    }
+                    let instructions = ListeningTurns.systemText(
+                        prompt: await self.listeningPrompt,
+                        context: userContext
+                    )
 
                     try await Self.generateStreaming(
                         container: container,
                         instructions: instructions,
                         history: history,
                         userPrompt: userMessage,
-                        maxTokens: options.maxTokens
+                        maxTokens: options.maxTokens,
+                        sampling: self.spec.sampling
                     ) { snapshot in
                         // Guard against cancellation before each yield.
                         // Throwing CancellationError breaks the MLX loop
@@ -558,176 +538,32 @@ actor MLXEngineClient: ListeningEngine {
         }
     }
 
-    // MARK: - ConversationSummarizer
+    // MARK: - ChapterWriter
 
-    func summarize(messages: [Message], existingSummary: String) async throws -> String {
+    func chapterNote(messages: [Message]) async throws -> String {
         if container == nil {
             try await prepare()
         }
         guard let container else {
             throw InferenceError.modelNotReady
         }
-
-        let transcript = messages.map { m -> String in
-            switch m.role {
-            case .user:      return "User: \(m.text)"
-            case .assistant: return "Nod: \(m.text)"
-            case .nod:       return "(Nod nodded silently.)"
-            }
-        }.joined(separator: "\n")
-
-        let instructionInput: String
-        if existingSummary.isEmpty {
-            instructionInput = """
-            \(summaryPrompt)
-
-            ---
-
-            EXISTING SUMMARY: (none yet — this is the first compression pass)
-
-            NEW EXCHANGES TO INCORPORATE:
-            \(transcript)
-            """
-        } else {
-            instructionInput = """
-            \(summaryPrompt)
-
-            ---
-
-            EXISTING SUMMARY:
-            \(existingSummary)
-
-            NEW EXCHANGES TO INCORPORATE:
-            \(transcript)
-            """
-        }
-
-        let raw = try await Self.generate(
-            container: container,
-            instructions: instructionInput,
-            history: [],  // summary is self-contained; transcript is in instructions
-            userPrompt: "Produce the updated summary now.",
-            maxTokens: Self.maxSummaryTokens
-        )
-        return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    // MARK: - EntityExtractor
-
-    /// Extract entities from a batch of messages via MLX. This is the
-    /// fallback path used when AFM is unavailable or refuses — AFM's
-    /// `@Generable` gives us guaranteed-valid JSON; this path has to
-    /// ask the model for JSON text and parse it defensively.
-    ///
-    /// On parse failure we return an empty list rather than throwing.
-    /// The alternative — throwing and letting extraction fail loudly —
-    /// would mean one bad generation wipes out memory for the whole
-    /// compression batch. Returning empty means we just miss a batch
-    /// of entities; the user can keep using the app, and the next
-    /// compression pass has another shot.
-    func extractEntities(from messages: [Message]) async throws -> ExtractedEntities {
-        if container == nil {
-            try await prepare()
-        }
-        guard let container else {
-            throw InferenceError.modelNotReady
-        }
-
-        let transcript = messages.map { m -> String in
-            switch m.role {
-            case .user:      return "User: \(m.text)"
-            case .assistant: return "Nod: \(m.text)"
-            case .nod:       return "(Nod nodded silently.)"
-            }
-        }.joined(separator: "\n")
-
-        // Hard-coded JSON contract because the model can't be trusted to
-        // follow `@Generable`-style shape hints alone. The "EXAMPLE" block
-        // is the most reliable way to get small models to hit the format.
         let instructions = """
-        \(extractionPrompt)
+        \(chapterPrompt)
 
         ---
 
-        Output format: ONE JSON object with a single key "items" containing
-        a list of entity objects. Each entity has exactly these fields:
-        "type" (string, one of "person"/"place"/"project"/"situation"),
-        "name" (string), "role" (string, empty if unknown),
-        "note" (string, empty if unknown).
-
-        Output ONLY the JSON. No markdown fences, no prose, no commentary.
-        If no entities are present, return {"items":[]}.
-
-        EXAMPLE INPUT:
-        User: M sent another passive-aggressive email today.
-
-        EXAMPLE OUTPUT:
-        {"items":[{"type":"person","name":"M","role":"","note":"sent a passive-aggressive email"}]}
-
-        ---
-
-        CONVERSATION CHUNK TO ANALYZE:
-        \(transcript)
+        EXCHANGES:
+        \(AFMMemory.transcript(messages))
         """
-
         let raw = try await Self.generate(
             container: container,
             instructions: instructions,
             history: [],
-            userPrompt: "Return the JSON now.",
-            maxTokens: Self.maxExtractionTokens
+            userPrompt: "Write the note now.",
+            maxTokens: Self.maxChapterTokens,
+            sampling: .precise
         )
-        let stripped = stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
-        return Self.parseExtractedJSON(stripped)
-    }
-
-    /// Defensive parser for the JSON the model is asked to produce.
-    /// Strips any stray prose around the JSON, parses, and falls back
-    /// to an empty list on any failure. Every failure mode here is
-    /// "return empty" — we never throw — because partial extraction
-    /// data silently corrupts the entity store, but zero extraction
-    /// just means we retry on the next compression.
-    private static func parseExtractedJSON(_ raw: String) -> ExtractedEntities {
-        // Find the first { ... } span. Small models sometimes wrap JSON
-        // in prose ("Here's the output:") or markdown fences (```json).
-        guard let startIdx = raw.firstIndex(of: "{"),
-              let endIdx = raw.lastIndex(of: "}") else {
-            return ExtractedEntities(items: [])
-        }
-        let jsonString = String(raw[startIdx...endIdx])
-        guard let data = jsonString.data(using: .utf8) else {
-            return ExtractedEntities(items: [])
-        }
-
-        // The model's JSON output maps cleanly to ExtractedEntities only
-        // if the fields align. We decode through Foundation's Codable
-        // using a local mirror struct that's the same shape — this
-        // avoids coupling the @Generable wire format to the JSON wire
-        // format (they just happen to match today).
-        struct WireEntity: Decodable {
-            let type: String?
-            let name: String?
-            let role: String?
-            let note: String?
-        }
-        struct WireEntities: Decodable {
-            let items: [WireEntity]?
-        }
-        guard let wire = try? JSONDecoder().decode(WireEntities.self, from: data) else {
-            return ExtractedEntities(items: [])
-        }
-        let items = (wire.items ?? []).compactMap { e -> ExtractedEntity? in
-            guard let type = e.type, let name = e.name, !name.isEmpty else {
-                return nil
-            }
-            return ExtractedEntity(
-                type: type,
-                name: name,
-                role: e.role ?? "",
-                note: e.note ?? ""
-            )
-        }
-        return ExtractedEntities(items: items)
+        return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Generation
@@ -741,32 +577,41 @@ actor MLXEngineClient: ListeningEngine {
     /// `.user` / `.assistant` `Chat.Message` values. The chat template
     /// renders them with the model's native turn tokens — way better
     /// recall than embedding them as narration in the system message.
-    /// `.nod` role maps to `.assistant("(I nodded.)")` so the silent
-    /// acknowledgment stays in context.
+    /// Turn assembly is shared with AFM via `ListeningTurns`.
+    /// System message, prior turns, then the user prompt — assembled by
+    /// the engine-neutral ListeningTurns so MLX and AFM see the same
+    /// conversation (errors dropped, turns merged and alternating).
+    private static func chatMessages(
+        instructions: String,
+        history: [Message],
+        userPrompt: String
+    ) -> [Chat.Message] {
+        let assembled = ListeningTurns.assemble(history: history, userMessage: userPrompt)
+        var chat: [Chat.Message] = [.system(instructions)]
+        for turn in assembled.turns {
+            switch turn.speaker {
+            case .user: chat.append(.user(turn.text))
+            case .nod: chat.append(.assistant(turn.text))
+            }
+        }
+        chat.append(.user(assembled.prompt))
+        return chat
+    }
+
     private static func generate(
         container: ModelContainer,
         instructions: String,
         history: [Message],
         userPrompt: String,
-        maxTokens: Int
+        maxTokens: Int,
+        sampling: MLXModelSpec.Sampling
     ) async throws -> String {
         try await container.perform { context in
-            var chat: [Chat.Message] = [.system(instructions)]
-            for msg in history {
-                switch msg.role {
-                case .user:
-                    chat.append(.user(msg.text))
-                case .assistant:
-                    // Defensive skip of any empty assistant turns that
-                    // slipped past the ConversationStore filter.
-                    if !msg.text.isEmpty {
-                        chat.append(.assistant(msg.text))
-                    }
-                case .nod:
-                    chat.append(.assistant("(I nodded.)"))
-                }
-            }
-            chat.append(.user(userPrompt))
+            let chat = Self.chatMessages(
+                instructions: instructions,
+                history: history,
+                userPrompt: userPrompt
+            )
             // Qwen 3.5's chat_template.jinja defaults `enable_thinking` to
             // true and prepends `<think>\n` to every generation. For a
             // listening-mode chat app that's terrible: the model burns
@@ -798,6 +643,11 @@ actor MLXEngineClient: ListeningEngine {
 
             var parameters = GenerateParameters()
             parameters.maxTokens = maxTokens
+            parameters.temperature = sampling.temperature
+            parameters.topP = sampling.topP
+            parameters.topK = sampling.topK
+            parameters.minP = sampling.minP
+            parameters.presencePenalty = sampling.presencePenalty
             // KV cache quantization. The token generator (TokenIterator
             // in MLXLMCommon) calls maybeQuantizeKVCache on every step
             // once cache.offset > quantizedKVStart, switching the cache
@@ -845,23 +695,15 @@ actor MLXEngineClient: ListeningEngine {
         history: [Message],
         userPrompt: String,
         maxTokens: Int,
+        sampling: MLXModelSpec.Sampling,
         onSnapshot: @escaping @Sendable (String) async throws -> Void
     ) async throws {
         try await container.perform { context in
-            var chat: [Chat.Message] = [.system(instructions)]
-            for msg in history {
-                switch msg.role {
-                case .user:
-                    chat.append(.user(msg.text))
-                case .assistant:
-                    if !msg.text.isEmpty {
-                        chat.append(.assistant(msg.text))
-                    }
-                case .nod:
-                    chat.append(.assistant("(I nodded.)"))
-                }
-            }
-            chat.append(.user(userPrompt))
+            let chat = Self.chatMessages(
+                instructions: instructions,
+                history: history,
+                userPrompt: userPrompt
+            )
             let userInput = UserInput(
                 chat: chat,
                 additionalContext: ["enable_thinking": false]
@@ -870,6 +712,11 @@ actor MLXEngineClient: ListeningEngine {
 
             var parameters = GenerateParameters()
             parameters.maxTokens = maxTokens
+            parameters.temperature = sampling.temperature
+            parameters.topP = sampling.topP
+            parameters.topK = sampling.topK
+            parameters.minP = sampling.minP
+            parameters.presencePenalty = sampling.presencePenalty
             parameters.kvBits = Self.kvBits
             parameters.kvGroupSize = Self.kvGroupSize
             parameters.quantizedKVStart = Self.quantizedKVStart

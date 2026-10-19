@@ -1,0 +1,8 @@
+{
+  "id": "vent-friend-cancelled",
+  "category": "venting",
+  "turns": [
+    "my best friend cancelled on my birthday dinner. again. said something came up"
+  ],
+  "expect": "Picks up 'again' and the birthday. Warm, specific. Doesn't defend or explain the friend."
+}

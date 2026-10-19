@@ -37,9 +37,8 @@ struct GenerationOptions: Sendable {
     /// on EOS or stop-token match; this is just the ceiling.
     var maxTokens: Int
 
-    /// The widest defaults any caller should use today. Summary
-    /// compression targets ~300 words ≈ 400 tokens; reply generation
-    /// varies by response-style (see `forResponseStyle`).
+    /// The widest defaults any caller should use today. Reply
+    /// generation varies by response-style (see `forResponseStyle`).
     static let `default` = GenerationOptions(maxTokens: 400)
 
     /// Sized for the three user-visible response styles. Callers that
@@ -118,8 +117,8 @@ protocol InferenceEngine: Sendable {
 extension InferenceEngine {
     /// Default atomic `respond` for engines that implement `streamResponse`.
     /// Collects to the LAST yielded snapshot. Rethrows stream errors and
-    /// honors `Task.isCancelled` — summarize/extract paths must fail
-    /// loudly on model errors, not silently return partial strings.
+    /// honors `Task.isCancelled` — callers must see model errors, not
+    /// silently get partial strings.
     ///
     /// Engines that have a cheaper native atomic path (AFM's single-shot
     /// `respond(to:)`) can still override this method to skip the stream
@@ -144,36 +143,6 @@ extension InferenceEngine {
     }
 }
 
-/// Errors any InferenceEngine may throw. Clients should handle these with
-/// user-visible messaging — never silent failures.
-enum InferenceError: Error {
-    case modelNotReady
-    case promptNotFound          // system prompt file missing from bundle (build bug)
-    case guardrailViolation      // AFM refused emotional content
-    case outOfMemory
-    case interrupted             // phone call, app suspension, etc.
-    // MLX-model download failures. Mapped from URLError in MLXEngineClient
-    // so ChatView / the readiness bar can show typed copy.
-    case downloadFailedNoNetwork
-    case downloadFailedDiskFull
-    case downloadFailedServer
-}
-
-/// Contract for the entity-extraction pass. Runs on a batch of
-/// conversation messages and returns a structured list of people,
-/// places, projects, and ongoing situations the user mentioned.
-///
-/// AFM is the strongly preferred implementation — its `@Generable`
-/// macro gives us guaranteed-valid JSON with no parsing layer. MLX
-/// engines implement this via an extractive JSON prompt + manual
-/// parsing, which is the fallback path when AFM refuses (guardrail)
-/// or is unavailable. See `EntityExtractorService` for the routing
-/// logic that prefers AFM and falls back.
-protocol EntityExtractor: Sendable {
-    func extractEntities(from messages: [Message]) async throws -> ExtractedEntities
-}
-
-/// Convenience bundle for engines that do BOTH listening responses,
-/// compression summarization, AND entity extraction. Lets ChatView
-/// hold a single `any ListeningEngine` instead of three refs.
-protocol ListeningEngine: InferenceEngine, ConversationSummarizer, EntityExtractor {}
+/// Everything ChatView needs from an engine: listening replies and
+/// chapter notes.
+protocol ListeningEngine: InferenceEngine, ChapterWriter {}

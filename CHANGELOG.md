@@ -11,6 +11,31 @@ per TestFlight upload.
 
 ## [Unreleased]
 
+### Reply quality
+- **Apple Intelligence conversations rebuilt per turn.** Each reply now starts a fresh session from the stored conversation, with earlier messages as real chat turns and trimmed to fit the model's context window. Fixes long chats eventually failing, the model losing the thread when remembered people changed, and replies after Start fresh or regenerate seeing stale turns.
+- **Real streaming on Apple Intelligence.** Replies appear as they're written, and Stop actually stops generation. The response-length setting now applies to Apple Intelligence too.
+- **Apple Intelligence keeps more recent messages word-for-word** (up to 20 before older ones become a chapter note, versus 12 for downloaded models).
+- **Rewritten listening prompt.** Roughly half the length, rules in priority order, and no example dialogue: evals showed the on-device model copying example lines and names ("Is this the same M?", "Sam") into unrelated replies.
+- **Apple Intelligence replies use temperature 1.0**, which stopped long conversations looping on the same question shape. A refusal is retried once before showing the gentle error.
+- **Banned-phrase guard.** Sentences containing phrases from `prompts/banned_phrases.txt` ("I'm sorry to hear…", "You're not alone") are removed from replies, including while streaming.
+- **Error notices stay out of the conversation.** "Something went wrong" bubbles are no longer sent back to the model or written into memory.
+- **Per-model sampling** for Qwen and Gemma, per their model cards. Chapter notes use steadier settings.
+- **Refusals** show a gentler message, and are recognized on iOS 27's new error types. A refused chapter note no longer stalls memory forever.
+- **Crisis support card.** A message that clearly signals crisis shows a fixed card with a local helpline (US, CA, UK, IE, AU, NZ, IN) and a link to findahelpline.com, independent of what the model says.
+
+### Memory, redesigned
+- **Nod remembers specifics from your own words.** Each time you write, your older messages are searched (names, distinctive words, and relationship words like boss/manager or girlfriend/partner) and the best few are shown to the model verbatim, with how long ago you said them. Nothing is paraphrased, so nothing gets invented, and a later correction wins.
+- **Chapter notes replace the rolling summary.** When older messages age out, Nod writes a short note about that stretch, once, never rewritten. Any sentence naming a person or place you never mentioned is deleted before it's saved.
+- **Memory screen is now a timeline of those notes.** Swipe one to forget it: the note goes, and Nod stops recalling that stretch. Your messages stay in the chat.
+- **Entity extraction is gone**, along with the "Is this the same person?" banner. It cost a model call after every exchange and saved noise like "the commute was awful". About half as many model calls overall.
+- **Fixed: summaries inventing details.** The old summary prompt's example (a partner "J", a job search, a fintech interview) leaked into real users' summaries. Existing summaries become your first chapter note; old entity data is deleted from disk.
+- Measured on the new memory evals: 7/7 recall cases (corrections, paraphrases, small details, not volunteering) at ~24 model calls per 22-message conversation, versus ~46 before.
+
+### Engineering
+- `ios/evals/memory/` and `--suite memory`: recall, past-message search and grounding cases.
+- `ios/evals/`: 33 scripted conversations and a Mac runner (`ios/evals/runner/run.sh`) that compiles the app's shared listening code and reports flagged replies.
+- The app now launches in the iOS Simulator (MLX setup is skipped there).
+
 ### Maintenance
 - Post-V1-audit housekeeping: renamed stale `qwen.download` log category to `mlx.download`, updated pre-rename `QwenClient` / `QwenR2BackgroundSession` references in comments and `project.yml` to their current names, rewrote `ios/README.md` to reflect the actual current source layout and build flow.
 - Added this CHANGELOG.

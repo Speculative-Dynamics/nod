@@ -1,0 +1,10 @@
+{
+  "id": "flow-short-replies",
+  "category": "multi-turn",
+  "turns": [
+    "ugh",
+    "everything",
+    "idk just tired of everything"
+  ],
+  "expect": "Matches the low energy. Short replies. Doesn't pile on questions."
+}

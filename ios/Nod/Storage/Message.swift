@@ -27,6 +27,12 @@ struct Message: Identifiable, Equatable, Codable {
     /// false on decoding old JSON (WAL replay) via the default argument.
     let wasCancelled: Bool
 
+    /// True when this assistant row is an app-written error notice
+    /// ("Something went wrong…") rather than a model reply. Error rows
+    /// stay visible in the chat but are never sent back to the model as
+    /// history, summarized, or mined for memory.
+    let isError: Bool
+
     let createdAt: Date
 
     init(
@@ -34,19 +40,33 @@ struct Message: Identifiable, Equatable, Codable {
         role: Role,
         text: String = "",
         wasCancelled: Bool = false,
+        isError: Bool = false,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.role = role
         self.text = text
         self.wasCancelled = wasCancelled
+        self.isError = isError
         self.createdAt = createdAt
     }
 
-    // Custom Codable so old WAL entries (no wasCancelled key) decode
-    // cleanly instead of throwing.
+    /// Copy with selected fields replaced.
+    func with(text: String? = nil, wasCancelled: Bool? = nil, isError: Bool? = nil) -> Message {
+        Message(
+            id: id,
+            role: role,
+            text: text ?? self.text,
+            wasCancelled: wasCancelled ?? self.wasCancelled,
+            isError: isError ?? self.isError,
+            createdAt: createdAt
+        )
+    }
+
+    // Custom Codable so old WAL entries (no wasCancelled / isError key)
+    // decode cleanly instead of throwing.
     enum CodingKeys: String, CodingKey {
-        case id, role, text, wasCancelled, createdAt
+        case id, role, text, wasCancelled, isError, createdAt
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +75,7 @@ struct Message: Identifiable, Equatable, Codable {
         self.role = try c.decode(Role.self, forKey: .role)
         self.text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         self.wasCancelled = try c.decodeIfPresent(Bool.self, forKey: .wasCancelled) ?? false
+        self.isError = try c.decodeIfPresent(Bool.self, forKey: .isError) ?? false
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
     }
 }

@@ -18,11 +18,6 @@ struct SidebarView: View {
     @ObservedObject var engineHolder: EngineHolder
     @EnvironmentObject private var appLock: AppLockManager
     @ObservedObject private var personalization = PersonalizationStore.shared
-    /// Observed separately from `store` so the Memory row's count badge
-    /// updates reactively when entities are added / deleted. Same
-    /// instance as `store.entityStore` — SwiftUI's @ObservedObject needs
-    /// the direct reference to track changes.
-    @ObservedObject var entityStore: EntityStore
     @Environment(\.dismiss) private var dismiss
     /// Color scheme of the host view (ChatView) at the moment this
     /// sheet renders. Passed as a prop (not read from @Environment
@@ -86,19 +81,19 @@ struct SidebarView: View {
                 // to you) so the flow reads: content → memory → voice.
                 Section {
                     NavigationLink {
-                        MemoryView(entityStore: entityStore)
+                        MemoryView(store: store)
                     } label: {
                         HStack {
-                            Text("What Nod knows about you")
+                            Text("What Nod remembers")
                             Spacer()
-                            Text("\(entityStore.entities.count)")
+                            Text("\(store.memory.chapters.count)")
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                                 .accessibilityHidden(true)
                         }
                     }
                     .accessibilityLabel(
-                        "What Nod knows about you. \(entityStore.entities.count) \(entityStore.entities.count == 1 ? "item" : "items")"
+                        "What Nod remembers. \(store.memory.chapters.count) \(store.memory.chapters.count == 1 ? "note" : "notes")"
                     )
                 } header: {
                     Text("Memory")
@@ -266,7 +261,7 @@ struct SidebarView: View {
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Nothing is sent to Nod's servers. When this is on, your messages, the running summary, and everything Nod knows about you are included in your own iCloud backup. Off by default.")
+                    Text("Nothing is sent to Nod's servers. When this is on, your messages, Nod's memory notes, and everything you've told Nod about yourself are included in your own iCloud backup. Off by default.")
                 }
 
                 Section {
@@ -588,14 +583,11 @@ struct SidebarView: View {
 #Preview {
     let db = try! MessageDatabase()
     let holder = EngineHolder()
-    let entities = EntityStore(database: db)
     let store = ConversationStore(
         database: db,
-        entityStore: entities,
-        summarizer: { [holder] in holder.engine },
-        entityFallbackProvider: { [holder] in holder.engine }
+        chapterWriter: { [holder] in holder.engine }
     )
-    SidebarView(store: store, engineHolder: holder, entityStore: entities, hostColorScheme: .dark, onWillClear: {}, onCleared: {})
+    SidebarView(store: store, engineHolder: holder, hostColorScheme: .dark, onWillClear: {}, onCleared: {})
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
 }

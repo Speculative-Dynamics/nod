@@ -1,0 +1,8 @@
+{
+  "id": "vent-manager-email",
+  "category": "venting",
+  "turns": [
+    "M sent another passive-aggressive email today. That's the third one this week."
+  ],
+  "expect": "Specific: third one this week, M. Friend voice. No 'that sounds hard'. No advice."
+}
