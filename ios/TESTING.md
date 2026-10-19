@@ -9,7 +9,7 @@ user-facing feature: starters, sending and streaming, Stop, errors and
 Try again, Copy/Share/Regenerate, the helpline card, persistence across
 relaunch, every setting reaching the engine, memory notes, recall,
 forgetting, Start fresh, onboarding branches, download states, the lock
-screen, crash recovery, keyboard shortcuts and large text.
+screen, crash recovery, the Cmd+K shortcut and large text.
 
 ```bash
 cd ios

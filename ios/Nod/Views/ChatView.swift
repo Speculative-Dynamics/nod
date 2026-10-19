@@ -638,12 +638,11 @@ struct ChatView: View {
                         // Intentionally no swipe-up branch.
                     }
             )
-            // Hardware keyboard shortcuts. Cmd+K focuses the input so you
-            // can start typing without tapping; kept always enabled
-            // (that's exactly when you'd want it). Cmd+Return comes from
-            // AppDelegate.keyCommands: a focused text view swallows it
-            // before a SwiftUI shortcut would fire. sendMessage self-gates
-            // on sendEnabled.
+            // Hardware keyboard: Cmd+K focuses the input so you can start
+            // typing without tapping; kept always enabled (that's exactly
+            // when you'd want it). There's no Cmd+Return send: a focused
+            // text view swallows the key before any app shortcut sees it,
+            // and Nod is iPhone-only, so it isn't worth a custom text view.
             .background(
                 Button("") { inputFocused = true }
                     .keyboardShortcut("k", modifiers: .command)
@@ -651,9 +650,6 @@ struct ChatView: View {
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             )
-            .onReceive(NotificationCenter.default.publisher(for: .nodSendShortcut)) { _ in
-                sendMessage()
-            }
         }
     }
 
@@ -977,8 +973,7 @@ struct ChatView: View {
                 // No .submitLabel(.send)/.onSubmit here: with axis: .vertical
                 // and lineLimit(1...5), Return inserts a newline (iMessage
                 // behavior) and onSubmit never fires. A "send" label would
-                // lie. Hardware keyboards get Cmd+Return via the shortcut
-                // button in .background above.
+                // lie. Send with the arrow button.
 
             // Two-state right-side action button: send / stop.
             //   - Streaming → stop.fill, gray, tap cancels inference

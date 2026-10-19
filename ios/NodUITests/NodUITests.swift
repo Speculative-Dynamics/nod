@@ -256,24 +256,6 @@ final class NodUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
-    func testCommandReturnSendsFromAHardwareKeyboard() throws {
-        #if targetEnvironment(simulator)
-        // Cmd+K reaches the app in the Simulator, but a synthesized
-        // Cmd+Return never arrives while the text field has focus, so
-        // this can only be checked on a device or the Mac.
-        throw XCTSkip("Cmd+Return into a focused field isn't deliverable in the Simulator")
-        #endif
-        launch()
-        messageField.tap()
-        messageField.typeText("sent with the keyboard")
-        app.typeKey(.return, modifierFlags: .command)
-        waitForReply(to: "sent with the keyboard")
-        messageField.tap()
-        messageField.typeText("and again")
-        app.typeKey(.return, modifierFlags: .command)
-        waitForReply(to: "and again")
-    }
-
     func testNewMessagePillWhenScrolledUp() {
         launch(engine: "slow")
         for i in 1...6 {
