@@ -15,6 +15,7 @@
 #   ./upload_models_to_r2.sh <model-id>
 #   where <model-id> is one of:
 #     qwen35_4b              (mlx-community/Qwen3.5-4B-4bit)
+#     qwen35_2b              (mlx-community/Qwen3.5-2B-4bit)
 #     gemma4_e2b_text        (mlx-community/Gemma4-E2B-IT-Text-int4)
 #
 # Env:
@@ -36,13 +37,18 @@ case "$MODEL_ID" in
     R2_PATH="qwen3.5-4b-4bit/v1"
     SWIFT_STATIC="qwen35_4b"
     ;;
+  qwen35_2b)
+    HF_REPO="mlx-community/Qwen3.5-2B-4bit"
+    R2_PATH="qwen3.5-2b-4bit/v1"
+    SWIFT_STATIC="qwen35_2b"
+    ;;
   gemma4_e2b_text)
     HF_REPO="mlx-community/Gemma4-E2B-IT-Text-int4"
     R2_PATH="gemma4-e2b-text-int4/v1"
     SWIFT_STATIC="gemma4_e2b_text"
     ;;
   *)
-    echo "Usage: $0 <qwen35_4b|gemma4_e2b_text>" >&2
+    echo "Usage: $0 <qwen35_4b|qwen35_2b|gemma4_e2b_text>" >&2
     exit 1
     ;;
 esac
@@ -127,7 +133,7 @@ while IFS=$'\t' read -r name expected_sha expected_size; do
   if [ "$actual_sha" != "$expected_sha" ]; then
     echo "  SHA MISMATCH: got $actual_sha, expected $expected_sha" >&2
     echo "  The HF source has changed since MLXModelSpec was pinned." >&2
-    echo "  Fix: run scripts/hash_models.sh and update MLXModelSpec.swift." >&2
+    echo "  Fix: recompute with `shasum -a 256` on the new files and update MLXModelSpec.swift." >&2
     exit 1
   fi
   echo "  verified ($actual_size bytes)"

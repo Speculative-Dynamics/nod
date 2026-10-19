@@ -62,7 +62,7 @@ the full data flow for one send-and-respond turn:
  │  EngineHolder (router)                                   │
  │    Routes to one of:                                     │
  │      - FoundationModelsClient   (Apple Intelligence)     │
- │      - MLXEngineClient          (Qwen 3 / 3.5 / Gemma 4) │
+ │      - MLXEngineClient          (Qwen 3.5 4B / 2B)       │
  │    based on EnginePreference and device capability.      │
  └──────────────────┬───────────────────────────────────────┘
                     ▼

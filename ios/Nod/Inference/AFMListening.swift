@@ -45,7 +45,8 @@ enum AFMListening {
         history: [Message],
         userMessage: String,
         maxTokens: Int,
-        temperature: Double? = listeningTemperature
+        temperature: Double? = listeningTemperature,
+        samplingMode: FoundationModels.GenerationOptions.SamplingMode? = nil
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let producer = Task {
@@ -68,6 +69,7 @@ enum AFMListening {
                         let stream = session.streamResponse(
                             to: assembled.prompt,
                             options: FoundationModels.GenerationOptions(
+                                samplingMode: samplingMode,
                                 temperature: temperature,
                                 maximumResponseTokens: maxTokens
                             )

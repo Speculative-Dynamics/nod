@@ -1,8 +1,8 @@
 # Nod — iOS app
 
 Native SwiftUI app. iOS 26+ deployment target. All inference runs on-device —
-Apple FoundationModels by default, or MLX Swift with Qwen 3, Qwen 3.5, or
-Gemma 4 E2B.
+Apple FoundationModels by default, or MLX Swift with Qwen 3.5 4B (8 GB
+iPhones) or Qwen 3.5 2B (6 GB iPhones).
 
 Product positioning and "why" live in [the repo root README](../README.md).
 This file is for anyone building or hacking on the iOS code.
@@ -82,7 +82,8 @@ vent/
         │   ├── EnginePreference.swift          # which model the user picked
         │   ├── FoundationModelsClient.swift    # Apple on-device LLM (AFM)
         │   ├── MLXEngineClient.swift           # MLX, parameterized by model spec
-        │   ├── MLXModelSpec.swift              # Qwen 3 / Qwen 3.5 / Gemma 4 specs
+        │   ├── MLXModelSpec.swift              # Qwen 3.5 4B / 2B specs + memory limits
+        │   ├── MLXGeneration.swift             # MLX generation (shared with evals)
         │   ├── MLXR2BackgroundSession.swift    # Background-Assets-style download
         │   ├── DownloadEvent.swift             # UI event enum from downloader
         │   ├── DownloadMetrics.swift           # progress numbers for the card

@@ -33,69 +33,8 @@ import MLXLMCommon
 import Tokenizers
 import os
 
-// No `import Hub` — mlx-swift-lm 3.x decoupled from the Hugging Face Hub
-// downloader package. By the time we reach loadModelContainer, the files
-// are already sitting on disk in Application Support thanks to
-// MLXR2BackgroundSession, so we just hand MLX the URL and let it read
-// config.json, tokenizer.json, etc. directly.
-//
-// We intentionally avoid mlx-swift-lm's `MLXHuggingFace` macro wrapper
-// here. The macro only expands to a small adapter that bridges MLX's
-// `TokenizerLoader` / `Tokenizer` protocols to swift-transformers'
-// `AutoTokenizer`. Inlining that adapter locally keeps the build graph
-// free of external macro targets, which avoids Xcode's "trust and enable
-// macro" gate for this app.
-
-private struct TransformersTokenizerLoader: TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
-        return TransformersTokenizerBridge(upstream)
-    }
-}
-
-private struct TransformersTokenizerBridge: MLXLMCommon.Tokenizer {
-    private let upstream: any Tokenizers.Tokenizer
-
-    init(_ upstream: any Tokenizers.Tokenizer) {
-        self.upstream = upstream
-    }
-
-    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
-        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
-    }
-
-    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
-        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
-    }
-
-    func convertTokenToId(_ token: String) -> Int? {
-        upstream.convertTokenToId(token)
-    }
-
-    func convertIdToToken(_ id: Int) -> String? {
-        upstream.convertIdToToken(id)
-    }
-
-    var bosToken: String? { upstream.bosToken }
-    var eosToken: String? { upstream.eosToken }
-    var unknownToken: String? { upstream.unknownToken }
-
-    func applyChatTemplate(
-        messages: [[String: any Sendable]],
-        tools: [[String: any Sendable]]?,
-        additionalContext: [String: any Sendable]?
-    ) throws -> [Int] {
-        do {
-            return try upstream.applyChatTemplate(
-                messages: messages,
-                tools: tools,
-                additionalContext: additionalContext
-            )
-        } catch Tokenizers.TokenizerError.missingChatTemplate {
-            throw MLXLMCommon.TokenizerError.missingChatTemplate
-        }
-    }
-}
+// Model files are already on disk (MLXR2BackgroundSession) by the time
+// we load; generation itself lives in MLXGeneration, shared with evals.
 
 private let log = Logger(subsystem: "app.usenod.nod", category: "mlx.client")
 
@@ -156,35 +95,6 @@ actor MLXEngineClient: ListeningEngine {
     /// Every saved token is ~100 KB of KV on a 28-layer / 8-KV-head 4B
     /// model, which matters on a 3 GB-budget iPhone 15 Pro.
     private static let maxChapterTokens = 200
-
-    // MARK: - KV cache quantization
-    //
-    // mlx-swift-lm 3.31.3 ships affine KV-cache quantization as a public
-    // `GenerateParameters` knob (QuantizedKVCache + maybeQuantizeKVCache
-    // in MLXLMCommon/KVCache.swift). 4-bit @ group-size 64 gives ~4x peak
-    // KV reduction (~185 MB saved per generation on our typical
-    // ~2,500-token inference of system + personalization + summary + 4
-    // recent turns + reply) against the iOS jetsam line.
-    //
-    // Published benchmarks on Qwen3-4B (mlx-lm#1059) show 0.995 logit
-    // cosine similarity to FP16 at 4-bit with perfect top-1 token
-    // accuracy — near-lossless for our use case.
-    //
-    // `quantizedKVStart = 256` keeps the first 256 tokens full-precision.
-    // That window covers the listening_mode.md system prompt and most
-    // personalization blocks, so the instruction-following parts of the
-    // cache never get quantized — only the conversational bulk beyond
-    // them. A small insurance policy against any quality drift.
-    //
-    // Next tier: PolarQuant / TurboQuant (3-bit, 4.6x compression,
-    // 0.957 cosine sim on Qwen3-4B). Swift PR open at
-    // ml-explore/mlx-swift-lm#160 but currently CONFLICTING, ports an
-    // early mlx-vlm snapshot missing later optimizations, and decode
-    // throughput is ~0.5x FP16 without fused Metal kernels. Revisit
-    // when the PR rebases and the Metal kernel follow-ups land.
-    private static let kvBits: Int = 4
-    private static let kvGroupSize: Int = 64
-    private static let quantizedKVStart: Int = 256
 
     // MARK: - R2 download source
     //
@@ -343,10 +253,16 @@ actor MLXEngineClient: ListeningEngine {
             // package's macro-based convenience wrapper. MLX picks up
             // config.json and wires the right architecture via the
             // registered model types.
-            let loaded = try await loadModelContainer(
-                from: modelDir,
-                using: TransformersTokenizerLoader()
-            )
+            // Check free memory first. Loading into too little memory
+            // gets the app killed by iOS; failing here gets the user a
+            // clear message and a chance to close other apps.
+            if let available = Self.availableMemory(), available < spec.peakMemoryBytes {
+                let neededGB = String(format: "%.1f", Double(spec.peakMemoryBytes) / 1e9)
+                log.error("load: \(available, privacy: .public) bytes free, \(self.spec.peakMemoryBytes, privacy: .public) needed")
+                setState(.failed("Not enough free memory right now (this model needs about \(neededGB) GB). Close some apps and try again."))
+                throw InferenceError.outOfMemory
+            }
+            let loaded = try await MLXGeneration.load(from: modelDir)
             try Task.checkCancellation()
             self.container = loaded
             setState(.ready)
@@ -365,6 +281,9 @@ actor MLXEngineClient: ListeningEngine {
             // the event stream, so state is already in .paused(...). Don't
             // overwrite with .failed — this isn't a failure.
             throw CancellationError()
+        } catch InferenceError.outOfMemory {
+            // State already set with a readable message above.
+            throw InferenceError.outOfMemory
         } catch {
             let mapped = Self.mapDownloadError(error)
             log.error("performLoad: failed \(String(describing: mapped), privacy: .public)")
@@ -441,19 +360,9 @@ actor MLXEngineClient: ListeningEngine {
 
         let instructions = ListeningTurns.systemText(prompt: listeningPrompt, context: userContext)
 
-        // Thinking mode handling, per-model:
-        //   - Qwen 3 Instruct 2507: instruct-only build, no thinking branch
-        //     in its chat template. Zero budget spent on reasoning.
-        //   - Qwen 3.5 4B: template defaults enable_thinking=true. We flip
-        //     it off inside `generate` via additionalContext so the model
-        //     spends its full token budget on the user-visible reply.
-        //   - Gemma 4 E2B: doesn't use the enable_thinking concept; its
-        //     template ignores the flag.
-        //
-        // `stripThinkingBlock` below stays as belt-and-suspenders — with
-        // enable_thinking=false Qwen 3.5 emits `<think>\n\n</think>\n\n`
-        // as a pre-closed prefix, which the strip handles cleanly.
-        let raw = try await Self.generate(
+        // Thinking is turned off in MLXGeneration (enable_thinking=false),
+        // and any leftover <think> block is stripped there.
+        return try await MLXGeneration.generate(
             container: container,
             instructions: instructions,
             history: history,
@@ -461,7 +370,6 @@ actor MLXEngineClient: ListeningEngine {
             maxTokens: options.maxTokens,
             sampling: spec.sampling
         )
-        return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Real per-token streaming for MLX. Each yielded element is the FULL
@@ -500,7 +408,7 @@ actor MLXEngineClient: ListeningEngine {
                         context: userContext
                     )
 
-                    try await Self.generateStreaming(
+                    try await MLXGeneration.stream(
                         container: container,
                         instructions: instructions,
                         history: history,
@@ -517,7 +425,7 @@ actor MLXEngineClient: ListeningEngine {
                         // cleaned is empty — typing-dots cover that
                         // window. Once the close tag lands we begin
                         // yielding snapshots of the user-visible reply.
-                        let cleaned = await self.stripThinkingBlock(snapshot)
+                        let cleaned = MLXGeneration.stripThinkingBlock(snapshot)
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if !cleaned.isEmpty {
                             continuation.yield(cleaned)
@@ -538,6 +446,16 @@ actor MLXEngineClient: ListeningEngine {
         }
     }
 
+    /// Bytes this app can still allocate before iOS terminates it. Nil
+    /// where that isn't measurable (Simulator, macOS).
+    private static func availableMemory() -> UInt64? {
+        #if os(iOS) && !targetEnvironment(simulator)
+        return UInt64(os_proc_available_memory())
+        #else
+        return nil
+        #endif
+    }
+
     // MARK: - ChapterWriter
 
     func chapterNote(messages: [Message]) async throws -> String {
@@ -547,224 +465,11 @@ actor MLXEngineClient: ListeningEngine {
         guard let container else {
             throw InferenceError.modelNotReady
         }
-        let instructions = """
-        \(chapterPrompt)
-
-        ---
-
-        EXCHANGES:
-        \(AFMMemory.transcript(messages))
-        """
-        let raw = try await Self.generate(
+        return try await MLXGeneration.chapterNote(
             container: container,
-            instructions: instructions,
-            history: [],
-            userPrompt: "Write the note now.",
-            maxTokens: Self.maxChapterTokens,
-            sampling: .precise
+            prompt: chapterPrompt,
+            messages: messages,
+            maxTokens: Self.maxChapterTokens
         )
-        return stripThinkingBlock(raw).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    // MARK: - Generation
-
-    /// Runs one generation pass inside the ModelContainer's isolation.
-    /// Everything non-Sendable (ModelContext, KV cache, MLXArrays) stays
-    /// on the container actor; only the resulting String crosses back.
-    ///
-    /// `history` is an ordered list of prior turns that get inserted
-    /// between the system message and the final user turn as real
-    /// `.user` / `.assistant` `Chat.Message` values. The chat template
-    /// renders them with the model's native turn tokens — way better
-    /// recall than embedding them as narration in the system message.
-    /// Turn assembly is shared with AFM via `ListeningTurns`.
-    /// System message, prior turns, then the user prompt — assembled by
-    /// the engine-neutral ListeningTurns so MLX and AFM see the same
-    /// conversation (errors dropped, turns merged and alternating).
-    private static func chatMessages(
-        instructions: String,
-        history: [Message],
-        userPrompt: String
-    ) -> [Chat.Message] {
-        let assembled = ListeningTurns.assemble(history: history, userMessage: userPrompt)
-        var chat: [Chat.Message] = [.system(instructions)]
-        for turn in assembled.turns {
-            switch turn.speaker {
-            case .user: chat.append(.user(turn.text))
-            case .nod: chat.append(.assistant(turn.text))
-            }
-        }
-        chat.append(.user(assembled.prompt))
-        return chat
-    }
-
-    private static func generate(
-        container: ModelContainer,
-        instructions: String,
-        history: [Message],
-        userPrompt: String,
-        maxTokens: Int,
-        sampling: MLXModelSpec.Sampling
-    ) async throws -> String {
-        try await container.perform { context in
-            let chat = Self.chatMessages(
-                instructions: instructions,
-                history: history,
-                userPrompt: userPrompt
-            )
-            // Qwen 3.5's chat_template.jinja defaults `enable_thinking` to
-            // true and prepends `<think>\n` to every generation. For a
-            // listening-mode chat app that's terrible: the model burns
-            // tokens reasoning before producing any user-visible reply,
-            // and on .brief (maxTokens=200) can hit the ceiling mid-think,
-            // leaving us an orphan-<think> buffer that stripThinkingBlock
-            // turns into an empty string ("Something went wrong").
-            //
-            // Passing enable_thinking=false flips to the template's else
-            // branch — `<think>\n\n</think>\n\n` — so the model starts
-            // already past the think window and spends its full budget on
-            // the actual reply.
-            //
-            // Per-model behavior of the flag (verified against each
-            // shipped chat_template.jinja):
-            //   - Qwen 3 Instruct 2507: instruct-only build, template has
-            //     no `enable_thinking` branch at all — key is ignored.
-            //   - Qwen 3.5 4B: default ON, flag flips it OFF. ← the fix.
-            //   - Gemma 4 E2B Text: template DOES reference
-            //     `enable_thinking` (emits `<|think|>\n` when true), but
-            //     default is already OFF. Our flag matches the default,
-            //     so it's a no-op here.
-            // Safe to pass unconditionally for all three.
-            let userInput = UserInput(
-                chat: chat,
-                additionalContext: ["enable_thinking": false]
-            )
-            let input = try await context.processor.prepare(input: userInput)
-
-            var parameters = GenerateParameters()
-            parameters.maxTokens = maxTokens
-            parameters.temperature = sampling.temperature
-            parameters.topP = sampling.topP
-            parameters.topK = sampling.topK
-            parameters.minP = sampling.minP
-            parameters.presencePenalty = sampling.presencePenalty
-            // KV cache quantization. The token generator (TokenIterator
-            // in MLXLMCommon) calls maybeQuantizeKVCache on every step
-            // once cache.offset > quantizedKVStart, switching the cache
-            // over to a QuantizedKVCache with these parameters.
-            parameters.kvBits = Self.kvBits
-            parameters.kvGroupSize = Self.kvGroupSize
-            parameters.quantizedKVStart = Self.quantizedKVStart
-            let stream = try MLXLMCommon.generate(
-                input: input,
-                parameters: parameters,
-                context: context
-            )
-
-            var output = ""
-            for try await generation in stream {
-                switch generation {
-                case .chunk(let chunk):
-                    output += chunk
-                case .info, .toolCall, .rejectedToolCall:
-                    break
-                }
-            }
-
-            Stream.gpu.synchronize()
-            return output
-        }
-    }
-
-    /// Streaming variant of `generate`: runs the same MLX token loop and
-    /// calls `onSnapshot` with the FULL accumulated reply each time a
-    /// chunk arrives. Accumulation happens here (inside the single
-    /// `container.perform` closure) so the caller's Sendable callback
-    /// doesn't need to juggle a captured mutable String across
-    /// concurrency boundaries.
-    ///
-    /// The inner `for try await generation in stream` loop honors
-    /// Task.cancellation at each suspension, so cancellation of the
-    /// outer Task breaks the loop within a token or two.
-    ///
-    /// `onSnapshot` is async-throwing so callers can use it as a
-    /// cancellation checkpoint.
-    private static func generateStreaming(
-        container: ModelContainer,
-        instructions: String,
-        history: [Message],
-        userPrompt: String,
-        maxTokens: Int,
-        sampling: MLXModelSpec.Sampling,
-        onSnapshot: @escaping @Sendable (String) async throws -> Void
-    ) async throws {
-        try await container.perform { context in
-            let chat = Self.chatMessages(
-                instructions: instructions,
-                history: history,
-                userPrompt: userPrompt
-            )
-            let userInput = UserInput(
-                chat: chat,
-                additionalContext: ["enable_thinking": false]
-            )
-            let input = try await context.processor.prepare(input: userInput)
-
-            var parameters = GenerateParameters()
-            parameters.maxTokens = maxTokens
-            parameters.temperature = sampling.temperature
-            parameters.topP = sampling.topP
-            parameters.topK = sampling.topK
-            parameters.minP = sampling.minP
-            parameters.presencePenalty = sampling.presencePenalty
-            parameters.kvBits = Self.kvBits
-            parameters.kvGroupSize = Self.kvGroupSize
-            parameters.quantizedKVStart = Self.quantizedKVStart
-            let stream = try MLXLMCommon.generate(
-                input: input,
-                parameters: parameters,
-                context: context
-            )
-
-            var accumulator = ""
-            for try await generation in stream {
-                switch generation {
-                case .chunk(let chunk):
-                    accumulator += chunk
-                    try await onSnapshot(accumulator)
-                case .info, .toolCall, .rejectedToolCall:
-                    break
-                }
-            }
-
-            Stream.gpu.synchronize()
-        }
-    }
-
-    // MARK: - Helpers
-
-    /// Belt-and-suspenders strip of Qwen's `<think>…</think>` block, even
-    /// if `/no_think` wasn't honored and we end up with one anyway.
-    ///
-    /// Three cases handled:
-    ///   • matched `<think>…</think>` → keep what's after the close
-    ///   • orphan `<think>` with no close (budget ran out mid-think, the
-    ///     exact failure mode we observed) → drop the whole buffer rather
-    ///     than leak raw reasoning to the user
-    ///   • no `<think>` at all → pass through untouched
-    private func stripThinkingBlock(_ text: String) -> String {
-        if let end = text.range(of: "</think>") {
-            return String(text[end.upperBound...])
-        }
-        if text.contains("<think>") {
-            // Everything after an unclosed `<think>` is internal reasoning
-            // we don't want to show. Show only what came before it (usually
-            // nothing, since thinking starts the buffer).
-            if let start = text.range(of: "<think>") {
-                return String(text[..<start.lowerBound])
-            }
-            return ""
-        }
-        return text
     }
 }

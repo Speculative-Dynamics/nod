@@ -43,6 +43,7 @@
 		A484A82A83997D60C288E522 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */; };
 		A74EDFFF340CBA0636A860F2 /* ListeningTurns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DCE40C6E610C7A47E6B879D /* ListeningTurns.swift */; };
 		AA00073895727FB4A2805062 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E6A0E3A753A5B5C2221D90 /* ConversationStore.swift */; };
+		AB6680A38DE320FEE9F7A859 /* MLXGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BBD0B7D3EF4359561F11C71 /* MLXGeneration.swift */; };
 		AC5251969A373FD5241916F5 /* 03-engines.png in Resources */ = {isa = PBXBuildFile; fileRef = 90A1A0D0C545888790FD7494 /* 03-engines.png */; };
 		AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0517337BBD8316AD61402BEF /* SidebarView.swift */; };
 		AFEE441085ADE17C5D17D3B5 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 7A8C846974EACAA6C64B06B8 /* MLXLLM */; };
@@ -77,6 +78,7 @@
 		222263F4E36038A02EDE3442 /* DictationRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecognizer.swift; sourceTree = "<group>"; };
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
 		2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockManager.swift; sourceTree = "<group>"; };
+		2BBD0B7D3EF4359561F11C71 /* MLXGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXGeneration.swift; sourceTree = "<group>"; };
 		2D6C64A19ABB068E1DA98A8A /* AFMListening.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMListening.swift; sourceTree = "<group>"; };
 		30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationStore.swift; sourceTree = "<group>"; };
 		420B40291D1B3DE220552641 /* NodApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodApp.swift; sourceTree = "<group>"; };
@@ -204,6 +206,7 @@
 				7177EDFFF769425F78339C52 /* InferenceError.swift */,
 				5DCE40C6E610C7A47E6B879D /* ListeningTurns.swift */,
 				495EE64172900DB2BC77D01B /* MLXEngineClient.swift */,
+				2BBD0B7D3EF4359561F11C71 /* MLXGeneration.swift */,
 				C1EA52E2C7A708C854BB9AF5 /* MLXModelSpec.swift */,
 				E4C6540C9C1E33F6B053CCD4 /* MLXR2BackgroundSession.swift */,
 				DA52E735F7C406D2FF33B7CE /* ReplyGuard.swift */,
@@ -400,6 +403,7 @@
 				2402546061ADBA7D14B734A8 /* LaunchCrashBreaker.swift in Sources */,
 				A74EDFFF340CBA0636A860F2 /* ListeningTurns.swift in Sources */,
 				10533DEC2A85635650C1859F /* MLXEngineClient.swift in Sources */,
+				AB6680A38DE320FEE9F7A859 /* MLXGeneration.swift in Sources */,
 				B289E4BB871E286AB3B42237 /* MLXModelSpec.swift in Sources */,
 				B5BC7D4A4DC14AAD114A01DE /* MLXR2BackgroundSession.swift in Sources */,
 				127189E23FBA7126849457BC /* MemoryGrounding.swift in Sources */,

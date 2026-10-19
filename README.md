@@ -53,10 +53,10 @@ box, that model is Apple's own on-device LLM — **FoundationModels**, part
 of Apple Intelligence. Nothing to download. It just works.
 
 If you'd rather run an open-weights model on your phone, open settings and
-switch the engine to **Qwen 3 Instruct 2507**, **Qwen 3.5 4B**, or
-**Gemma 4 E2B** — all via MLX Swift. When you switch for the first time,
-Nod downloads the weights (2–3 GB, Wi-Fi by default) once via Apple's
-Background Assets framework. After that, inference is fully offline.
+switch the engine to **Qwen 3.5 4B** (iPhones with 8 GB of memory) or the
+lighter **Qwen 3.5 2B** (6 GB and up), both via MLX Swift. When you
+switch for the first time, Nod downloads the weights once (about 3 GB or
+1.75 GB, Wi-Fi by default). After that, inference is fully offline.
 
 We don't see what you write. **No one does.** Not because we promise —
 because there is no pipe to send it through.
@@ -98,8 +98,8 @@ alone was taken, and besides, it matches the in-app button.
 
 Requires an iPhone with Apple Intelligence — **iOS 26.0 or later**. Works
 instantly on Apple's on-device model — no extra download needed. If you
-switch to an open-weights engine (Qwen or Gemma via MLX) in settings,
-Nod downloads the selected model once (2–3 GB, Wi-Fi only by default).
+switch to an open-weights engine (Qwen 3.5 via MLX) in settings,
+Nod downloads the selected model once (1.75–3 GB, Wi-Fi only by default).
 Otherwise, nothing is downloaded; nothing leaves the device.
 
 Available on the App Store as **[Just Nod](https://apps.apple.com/in/app/just-nod/id6762388689)**.

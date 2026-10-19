@@ -23,6 +23,12 @@ per TestFlight upload.
 - **Refusals** show a gentler message, and are recognized on iOS 27's new error types. A refused chapter note no longer stalls memory forever.
 - **Crisis support card.** A message that clearly signals crisis shows a fixed card with a local helpline (US, CA, UK, IE, AU, NZ, IN) and a link to findahelpline.com, independent of what the model says.
 
+### Models
+- **New lineup, chosen by evals:** Apple Intelligence (default), **Qwen 3.5 4B** for 8 GB iPhones (best results: 3/63 flagged replies, 4/4 recall), and **Qwen 3.5 2B** for 6 GB iPhones (4/4 recall at about 2 GB of memory).
+- **Retired Gemma 4 E2B and Qwen 3 4B.** Gemma missed recall questions even with the answer in context; Qwen 3 produced garbled, repetitive text in long chats. Users on them move to the best model their phone fits, and the old files are deleted.
+- **Memory checks per model.** Each model declares its measured peak memory and the smallest iPhone it's offered on, and the app checks free memory before loading instead of being killed by iOS.
+- Also benchmarked and not adopted: LFM2.5 1.2B and 2.6B (support-bot voice; printed reasoning), and Gemma 4 qat-mobile builds (format not loadable by mlx-swift-lm yet).
+
 ### Memory, redesigned
 - **Nod remembers specifics from your own words.** Each time you write, your older messages are searched (names, distinctive words, and relationship words like boss/manager or girlfriend/partner) and the best few are shown to the model verbatim, with how long ago you said them. Nothing is paraphrased, so nothing gets invented, and a later correction wins.
 - **Chapter notes replace the rolling summary.** When older messages age out, Nod writes a short note about that stretch, once, never rewritten. Any sentence naming a person or place you never mentioned is deleted before it's saved.

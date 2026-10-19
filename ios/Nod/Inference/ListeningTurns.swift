@@ -47,7 +47,7 @@ enum ListeningTurns {
         }
         if !pastMessages.isEmpty {
             let lines = pastMessages.map { "- \($0)" }.joined(separator: "\n")
-            parts.append("THINGS THEY TOLD YOU BEFORE, IN THEIR WORDS (newest first; use only if it's what they're talking about now):\n\(lines)")
+            parts.append("THINGS THEY TOLD YOU BEFORE, IN THEIR WORDS (newest first). Don't bring these up yourself. If they ask about something here, answer from it plainly:\n\(lines)")
         }
         return parts.joined(separator: "\n\n")
     }
