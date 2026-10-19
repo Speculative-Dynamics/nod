@@ -124,24 +124,31 @@ final class NodRealEngineTests: XCTestCase {
         var swipes = 0
         while !toggle.isHittable && swipes < 8 { app.collectionViews.firstMatch.swipeUp(); swipes += 1 }
         if (toggle.value as? String) != "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap() }
-        let cellular = app.switches.matching(NSPredicate(format: "label CONTAINS 'cellular'")).firstMatch
-        if cellular.waitForExistence(timeout: 5), (cellular.value as? String) != "1" { cellular.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap() }
+        // Wi-Fi only: never turn on cellular downloads on someone's phone.
         element(containing: "Qwen 3.5 4B").tap()
         app.buttons["Done"].firstMatch.tap()
-        // Download (~3 GB) then load. Generous timeout.
-        let field = messageField
-        let deadline = Date().addingTimeInterval(1800)
-        while Date() < deadline {
-            if element(containing: "Couldn't download").exists || element(containing: "Nod couldn't start").exists {
-                XCTFail("download or load failed")
-                return
-            }
-            if !element(containing: "Getting Nod ready").exists, !element(containing: "Waking Nod up").exists,
-               !element(containing: "Waiting for").exists, field.exists {
-                break
-            }
+        // Download (~3 GB) then load. First wait for the readiness card
+        // to appear, then for it to go away (the model is loaded).
+        func busy() -> Bool {
+            ["Getting Nod ready", "Waking Nod up", "Waiting for", "Download paused"]
+                .contains { element(containing: $0).exists }
+        }
+        func failed() -> Bool {
+            element(containing: "Couldn't download").exists
+                || element(containing: "Nod couldn't start").exists
+                || element(containing: "Not enough space").exists
+        }
+        let appeared = Date().addingTimeInterval(60)
+        while !busy() && Date() < appeared && !failed() { sleep(1) }
+        let deadline = Date().addingTimeInterval(2400)
+        while busy() && Date() < deadline {
+            XCTAssertFalse(failed(), "download or load failed")
+            if failed() { return }
             sleep(10)
         }
+        XCTAssertFalse(failed(), "download or load failed")
+        XCTAssertFalse(busy(), "still downloading after 40 min")
+        XCTAssertTrue(app.buttons["Send message"].waitForExistence(timeout: 30))
         let reply = sendAndWait("I had a rough day", timeout: 300)
         XCTAssertGreaterThan(reply.count, 10, reply)
     }
