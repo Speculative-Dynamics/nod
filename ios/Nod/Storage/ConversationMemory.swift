@@ -96,7 +96,8 @@ struct ConversationMemory: Sendable {
             personalization: personalization,
             latestChapter: latest?.text ?? "",
             olderChapters: older,
-            pastMessages: past
+            pastMessages: past,
+            userMessage: userMessage
         )
     }
 
