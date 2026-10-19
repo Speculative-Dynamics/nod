@@ -28,7 +28,11 @@ concurrency:
 jobs:
   build:
     name: Build (iPhone 17 Pro Simulator)
-    runs-on: macos-15
+    # Xcode 27 image: the app uses iOS 27 SDK APIs (FoundationModels'
+    # LanguageModelError, contextSize) guarded by #available, which only
+    # compile against the iOS 27 SDK. The macos-15/26 images top out at
+    # Xcode 26.x.
+    runs-on: xcode-27
 
     # 20 min ceiling — well above the expected 4-6 min warm, 10 min cold.
     # If we're here longer something is wrong and we should know fast.
@@ -38,16 +42,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Nod's deployment target is iOS 26, which requires Xcode 26+.
-      # Earlier Xcodes (16.x) only ship iOS 18 SDK and fail at
-      # destination resolution. `latest-stable` resolves to the newest
-      # released Xcode on the runner, which as of April 2026 on macos-15
-      # is Xcode 26.x. If we ever need a pin (e.g., to reproduce a CI
-      # bug), swap `latest-stable` for a concrete version like `26.2`.
-      - name: Select Xcode (latest-stable — needs Xcode 26+ for iOS 26 SDK)
+      # Pinned to the Xcode the app is developed with (27.0, iOS 27 SDK;
+      # deployment target stays iOS 26). Bump deliberately.
+      - name: Select Xcode 27.0
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '27.0'
 
       - name: Show build environment
         run: |
@@ -72,9 +72,9 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-          key: spm-${{ runner.os }}-xcode26-${{ hashFiles('ios/Nod.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode27-${{ hashFiles('ios/project.yml') }}
           restore-keys: |
-            spm-${{ runner.os }}-xcode26-
+            spm-${{ runner.os }}-xcode27-
 
       - name: Resolve Swift packages
         working-directory: ios
