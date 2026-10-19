@@ -117,66 +117,64 @@
 
                     <h2>Common questions</h2>
 
-                    <h3>The app says my device isn't supported. Why?</h3>
+                    <h3>Which iPhones does Nod work on?</h3>
                     <p>
-                        Nod requires an iPhone that supports Apple Intelligence
-                        and is running iOS 26.0 or later. That means iPhone 15
-                        Pro / Pro Max or any iPhone 16 or later. Older devices
-                        don't have the on-device model Nod is built around.
+                        Nod needs iOS 26 or later. On iPhones with Apple
+                        Intelligence (iPhone 15 Pro and newer), it works
+                        straight away. Other iPhones with at least 6&nbsp;GB of
+                        memory, such as iPhone 13 Pro and iPhone 14, download
+                        Nod's own AI once. iPhones with less memory can't run
+                        Nod, and the app will say so.
                     </p>
 
-                    <h3>I tapped the engine I want and nothing happened.</h3>
+                    <h3>Nod says it's downloading. What's happening?</h3>
                     <p>
-                        The first time you switch to an open-weights engine
-                        (Qwen 3, Qwen 3.5, or Gemma 4), Nod downloads its
-                        weights — about 2 to 3 GB. The download defaults to
-                        Wi-Fi only and runs in the background. You'll see a
-                        progress indicator in settings. Once it's done, that
-                        engine runs entirely on-device and never re-downloads.
+                        On iPhones without Apple Intelligence, Nod downloads
+                        its own AI the first time you open it: about 2 to
+                        3&nbsp;GB. It waits for Wi-Fi unless you allow cellular
+                        (Settings → Show advanced settings → Download over
+                        cellular). Progress shows above the message box. Once
+                        it's done, it never downloads again.
                     </p>
 
                     <h3>Why does the download seem stuck?</h3>
                     <p>
-                        A few common causes: you're on cellular and haven't
-                        opted into cellular downloads (toggle in settings),
-                        you're on a metered or restrictive network, or
-                        Background Assets is throttled by iOS while the device
-                        is in low power mode. Plug the device in, connect to
-                        Wi-Fi, and the download should resume automatically.
+                        Usually it's waiting for Wi-Fi, the network is blocking
+                        large downloads, or iOS is holding downloads back in
+                        Low Power Mode. Plug your iPhone in and connect to
+                        Wi-Fi; the download picks up where it left off.
                     </p>
 
                     <h3>Where are my conversations stored?</h3>
                     <p>
-                        In a local SQLite database on your iPhone, encrypted at
-                        rest by iOS. Nothing is uploaded. If you've enabled
-                        iCloud backup for your iPhone, the database is included
-                        in your standard iCloud backup under your Apple
-                        account — not anything we run.
+                        Only on your iPhone, encrypted by iOS. Nothing is
+                        uploaded to us. If you turn on <em>Back up conversation
+                        and memory</em> in Nod's settings, it's included in your
+                        own iCloud backup under your Apple account. It's off
+                        unless you turn it on.
                     </p>
 
                     <h3>How do I delete everything?</h3>
                     <p>
                         Inside the app, tap <em>Start fresh</em> in settings.
-                        That permanently deletes the local conversation,
-                        running summary, and memory on this device. To go
-                        further, delete the app — iOS removes the database
-                        with it.
+                        That permanently deletes your conversation and
+                        everything Nod remembers on this device. To remove just
+                        one memory, open <em>What Nod remembers</em> and forget
+                        that note. Deleting the app removes everything too.
                     </p>
 
                     <h3>Does Nod work offline?</h3>
                     <p>
-                        Yes. Once the engine you've selected is on the device
-                        (Apple Intelligence ships with iOS; the open-weights
-                        engines are downloaded once), Nod is as offline as
-                        your camera. Airplane Mode is a fine way to test it.
+                        Yes. Once Nod is set up (and, on some iPhones, its AI
+                        has downloaded once), it works fully offline. Try it in
+                        Airplane Mode.
                     </p>
 
                     <h3>Can I use a different language?</h3>
                     <p>
-                        Apple Intelligence and the open-weights engines all
-                        handle a wide range of languages. The app's interface
-                        is currently English-only; we plan to add more
-                        languages.
+                        Nod's AI understands many languages, so you can write in
+                        the one you're most comfortable with. The app's buttons
+                        and menus are in English for now.
                     </p>
 
                     <h3>Voice input doesn't seem to work.</h3>
@@ -185,8 +183,9 @@
                         permissions when prompted. If you skipped those prompts,
                         re-enable them in iOS Settings → Privacy &amp; Security
                         → Microphone (and the same path for Speech Recognition).
-                        Both run entirely on-device using iOS 26's
-                        <code>SpeechAnalyzer</code>.
+                        Your voice is turned into text on your iPhone. Voice
+                        isn't available in every language yet; you can always
+                        type instead.
                     </p>
 
                     <h3>How do I turn on Face ID?</h3>

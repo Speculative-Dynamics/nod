@@ -18,14 +18,14 @@ Just Nod
 
 ## Subtitle (30 char max)
 
-Pick one. Each is under 30 chars. Top recommendation first.
+Pick one. Each fits the 30-char limit. Top recommendation first. Plain words a
+first-time visitor understands; no tech terms.
 
 ```
-Private AI chat. On-device.        (28) ← recommended
-A small AI you can talk to.        (27)
-On-device AI chat. No servers.     (29)
-Talk to an AI. Stays on phone.     (29)
-Your private AI conversation.      (29)
+A private place to talk.           (24)  ← recommended
+Say what's on your mind.           (24)
+Talk it out. It stays private.     (30)
+Private AI chat. On-device.        (27)
 ```
 
 ---
@@ -35,61 +35,59 @@ Your private AI conversation.      (29)
 Editable post-launch without re-submission. Use for "what's new" or campaigns.
 
 ```
-A small AI chat app that runs entirely on your iPhone. Talk to it about anything. No accounts, no servers, no tracking. Your phone, your words, no one else.
+Say what's on your mind. Just Nod listens, replies gently, and keeps everything on your iPhone. No account, no ads, and it works offline.
 ```
-(157 characters)
+(137 characters)
 
 ---
 
 ## Description (4,000 char max)
 
+Plain language for someone who has never heard of on-device AI: what it's
+like to use, what stays private, what you need. No model names, frameworks or
+storage details (those live on GitHub and in the review notes below). The
+in-app helpline card is deliberately not mentioned, to keep the listing clear
+of mental-health framing (see Positioning above).
+
 ```
-A private AI chat app for your iPhone.
+A private place to say what's on your mind.
 
-Just Nod is a small on-device AI you can talk to. Open the app, type or speak, and have a real conversation. Whatever you talk about stays on your phone.
+Just Nod is a calm AI you can talk to about anything: a long day, something you can't stop thinking about, or whatever's on your mind. It listens, replies in a warm, unhurried way, and asks the kind of question that helps you keep going. Everything stays on your iPhone.
 
-Every word stays on your iPhone. There are no servers receiving your conversations, no accounts to create, no analytics, no ads, no third-party SDKs. Nod has no backend. There's nothing to leak, nothing to delete, no API key to revoke.
+— NO SIGN-UP
+No account, no email, no password. Open the app and start typing. Not sure where to begin? Tap a suggestion like "Something's on my mind."
 
-— OPEN AND TYPE
+— STAYS ON YOUR PHONE
+Your conversation is saved on your iPhone and answered by AI that runs on your iPhone. It isn't sent to us or anyone else. No ads, no tracking.
 
-No onboarding, no setup, no sign-in. Open the app and start. The replies are warm and unhurried — Nod is built to be a calm conversation partner, not a tool that rushes to answer.
-
-— RUNS WHEN YOU CAN'T CONNECT
-
-Apple Intelligence runs the moment you install. The full conversation happens on the same chip that renders this text. No network required. On a plane, in a tunnel, on a trail with one bar — Nod still works.
-
-— FOUR ON-DEVICE ENGINES
-
-Apple's own foundation model is the default, so Nod works the second you open it. Prefer open weights? Switch in settings to Qwen 3 Instruct, Qwen 3.5 4B, or Gemma 4 E2B via MLX Swift. The weights download once over Wi-Fi, then run on your phone forever.
+— WORKS OFFLINE
+On a plane, in a tunnel, with the Wi-Fi off. Nod doesn't need the internet to reply.
 
 — REMEMBERS WHAT MATTERS
-
-After each conversation, Nod picks up the details that come up — the people you mention, what you're working on, recurring topics. Browse them in the sidebar. Swipe any one away. Tap "Start fresh" to wipe the whole thing. No profile builds up in a data center somewhere, because there is no data center.
+As you talk, Nod keeps short notes about what's been going on, so you don't have to repeat yourself. You can read every note, forget any of them, or start fresh and clear everything.
 
 — OR JUST TALK
+Tap the mic and say it out loud. Your words appear as text you can check before sending, and your voice is turned into text on your iPhone.
 
-Tap the mic and speak. A warm orange glow hugs the edge of the screen while Nod listens. It commits when you pause. Transcription runs entirely on-device using iOS 26's SpeechAnalyzer — what you say never leaves your phone, not even for speech-to-text.
+— YOUR WAY
+Choose shorter or longer replies, and whether Nod mostly listens, reflects back, or offers a little perspective. Add a line about yourself and Nod keeps it in mind.
 
-— MAKE IT YOURS
+— LOCKED WITH FACE ID
+Turn on Face ID and only you can open it. Not a partner glancing at your phone, not a friend passing it around.
 
-Two quiet pickers and a free-form field shape how Nod talks to you. Shorter or deeper, more direct or more curious. Add a line about yourself and Nod tucks it into every response.
-
-— KEEP IT YOURS
-
-Turn on Require Face ID and the whole app sits behind biometric auth. Nobody else gets in — not a partner glancing at your phone, not a friend passing it around.
+— LIGHT AND DARK
+A warm, simple design that follows your iPhone's appearance, or pick light or dark yourself.
 
 — OPEN SOURCE
+All of Nod's code is public, so anyone can check it works the way we say.
 
-Nod is MIT-licensed. Every line of Swift, every system prompt, every database migration is on GitHub. If "trust us" bothers you, verify us.
+WHAT YOU NEED
+iOS 26 or later. On iPhones with Apple Intelligence, Nod works right away. Other iPhones with at least 6 GB of memory (such as iPhone 13 Pro, iPhone 14 and newer) download Nod's own AI once, about 2–3 GB over Wi-Fi.
 
-REQUIREMENTS
-
-Requires iPhone with Apple Intelligence support — iOS 26.0 or later. Works instantly on Apple's on-device model. If you switch to an open-weights engine in settings, Nod downloads the selected model once (2–3 GB, Wi-Fi by default).
-
-Just Nod is a chat app for everyday conversation, not professional advice. Made by Speculative Dynamics. Open source on GitHub.
+Just Nod is for everyday conversation and doesn't give professional advice. Made by Speculative Dynamics.
 ```
 
-(About 2,500 characters — well under the 4,000 limit. Headline framing is "private AI chat", not "mental health" or "wellness". Mental-health/therapy/treatment language removed entirely.)
+(About 2,000 characters, well under the 4,000 limit. Framing stays "private AI you can talk to", with no mental-health, wellness or therapy language.)
 
 ---
 
@@ -166,17 +164,17 @@ Result: **4+** — broadest possible audience.
 ## App Review Information (notes to Apple's reviewer)
 
 ```
-Just Nod is a private on-device AI chat app. All inference runs locally on the user's iPhone using Apple Intelligence (default) or one of three optional open-weights engines (Qwen 3, Qwen 3.5, Gemma 4) via MLX Swift.
+Just Nod is a private on-device AI chat app. All inference runs locally on the user's iPhone: Apple Intelligence (FoundationModels) by default, or, on iPhones without Apple Intelligence or by choice in advanced settings, an open-weights model (Qwen 3.5 4B or Qwen 3.5 2B) via MLX Swift.
 
 KEY POINTS FOR REVIEW:
 
 1. No accounts. No servers receiving conversations. No analytics, no third-party SDKs.
 
-2. The only outbound network call is the one-time download of model weights from Cloudflare R2 (HTTPS) when a user opts to switch from Apple Intelligence to an open-weights engine.
+2. The only outbound network call is the one-time download of model weights from Cloudflare R2 (HTTPS), on iPhones without Apple Intelligence or when a user picks a downloadable model in advanced settings.
 
 3. No user-generated content is ever shared with other users. There are no social features, no inter-user communication, no public posting. All conversations stay private to the device.
 
-4. This is a general-purpose AI chat app — not a mental health, wellness, therapy, or medical app. No medical claims are made anywhere in the app, listing, or marketing materials.
+4. This is a general-purpose AI chat app — not a mental health, wellness, therapy, or medical app. No medical claims are made anywhere in the app or listing. As a safety measure, if a message clearly signals risk of self-harm, the app shows a local crisis helpline number; it gives no advice or treatment.
 
 5. Source code is fully open: https://github.com/Speculative-Dynamics/nod (MIT license).
 
@@ -192,6 +190,6 @@ KEY POINTS FOR REVIEW:
 - [x] Support page created at `website/support/`
 - [x] Mental-health / wellness language stripped from listing
 - [x] App Group `group.app.usenod.nod` registered in developer portal
-- [ ] All 8 screenshots uploaded at 1290×2796
+- [ ] All 8 screenshots uploaded at 1290×2796 (regenerate with `ios/scripts/listing-images/`)
 - [ ] Listing copy entered in App Store Connect (use sections above)
 - [ ] Re-generate Xcode project after `project.yml` change: `cd ios && xcodegen generate`

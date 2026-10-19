@@ -72,6 +72,10 @@ targets:
         excludes:
           - "Info.plist"
           - "Nod.entitlements"
+          # App Store listing copy and screenshots: marketing material,
+          # not app resources. Keeps them out of the bundle and the
+          # project, so renaming a screenshot can't break the build.
+          - "AppStore/**"
       # Prompts live at the repo root (../prompts/) — single source of truth
       # for LLM prompts across iOS and any future platforms (web, android).
       # Files copied into the iOS app bundle as resources at build time.
