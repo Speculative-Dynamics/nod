@@ -400,6 +400,13 @@ struct ChatView: View {
                         }
                 }
                 .tint(Soft.accent)
+                // Sheets don't reliably inherit the app's colour scheme
+                // (see SidebarView), so apply the Theme setting here too.
+                .preferredColorScheme(
+                    PersonalizationStore.shared.current.appearance.preferredColorScheme(
+                        systemFallback: hostColorScheme
+                    )
+                )
             }
             .sheet(isPresented: $showingSidebar) {
                 SidebarView(

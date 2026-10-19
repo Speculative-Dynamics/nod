@@ -60,7 +60,7 @@ struct SidebarView: View {
                         MemoryView(store: store)
                     } label: {
                         HStack {
-                            Text("What Nod remembers")
+                            Label("What Nod remembers", systemImage: "bookmark")
                             Spacer()
                             Text("\(store.memory.chapters.count)")
                                 .foregroundStyle(.secondary)
@@ -75,7 +75,7 @@ struct SidebarView: View {
                     // first-launch state doesn't show "Day 1".
                     if let dayCount = relationshipDayCount {
                         HStack {
-                            Text("Talking with Nod")
+                            Label("Talking with Nod", systemImage: "calendar")
                             Spacer()
                             Text("\(dayCount == 1 ? "Day 1" : "Day \(dayCount)") · \(store.messages.count) messages")
                                 .foregroundStyle(.secondary)
@@ -85,11 +85,11 @@ struct SidebarView: View {
                 } header: {
                     Text("Your conversation")
                 }
+                .listRowBackground(Soft.surface)
 
                 // How Nod talks to you.
                 Section {
                     Picker(
-                        "Reply length",
                         selection: Binding(
                             get: { personalization.current.responseStyle },
                             set: { personalization.current.responseStyle = $0 }
@@ -98,10 +98,11 @@ struct SidebarView: View {
                         ForEach(ResponseStyle.allCases) { style in
                             Text(style.displayName).tag(style)
                         }
+                    } label: {
+                        Label("Reply length", systemImage: "text.alignleft")
                     }
 
                     Picker(
-                        "Approach",
                         selection: Binding(
                             get: { personalization.current.nodMode },
                             set: { personalization.current.nodMode = $0 }
@@ -110,6 +111,8 @@ struct SidebarView: View {
                         ForEach(NodMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
+                    } label: {
+                        Label("Approach", systemImage: "ear")
                     }
 
                     // Free-form preferences. TextField with axis: .vertical
@@ -170,6 +173,7 @@ struct SidebarView: View {
                 } footer: {
                     Text("Nod reads this each time you send a message. Changes take effect on the next reply.")
                 }
+                .listRowBackground(Soft.surface)
 
                 // Theme picker. Menu style instead of segmented because
                 // segmented caused visible three-band render artifacts
@@ -182,7 +186,6 @@ struct SidebarView: View {
                 // Settings uses for secondary-frequency choices.
                 Section {
                     Picker(
-                        "Theme",
                         selection: Binding(
                             get: { personalization.current.appearance },
                             set: { newValue in
@@ -193,6 +196,8 @@ struct SidebarView: View {
                         ForEach(AppearancePreference.allCases) { pref in
                             Text(pref.displayName).tag(pref)
                         }
+                    } label: {
+                        Label("Theme", systemImage: "circle.lefthalf.filled")
                     }
                     .pickerStyle(.menu)
                 } header: {
@@ -200,6 +205,7 @@ struct SidebarView: View {
                 } footer: {
                     Text("System follows your iOS setting. Light and Dark override it.")
                 }
+                .listRowBackground(Soft.surface)
 
                 Section {
                     Toggle(isOn: Binding(
@@ -208,28 +214,30 @@ struct SidebarView: View {
                     )) {
                         Label("Back up conversation and memory", systemImage: "icloud")
                     }
-                    .tint(Color("NodAccent"))
+                    .tint(Soft.accent)
 
                     Toggle(isOn: $appLock.isEnabled) {
                         Label("Require Face ID", systemImage: "faceid")
                     }
-                    .tint(Color("NodAccent"))
+                    .tint(Soft.accent)
                 } header: {
                     Text("Privacy")
                 } footer: {
                     Text("Nothing is sent to Nod's servers. When this is on, your messages, Nod's memory notes, and everything you've told Nod about yourself are included in your own iCloud backup. Off by default.")
                 }
+                .listRowBackground(Soft.surface)
 
                 Section {
                     if let url = feedbackURL {
                         Link(destination: url) {
-                            Label("Send feedback", systemImage: "envelope")
+                            // Ink text with an accent icon, like every
+                            // other row (a Link would tint both).
+                            Label {
+                                Text("Send feedback").foregroundStyle(Soft.ink)
+                            } icon: {
+                                Image(systemName: "envelope").foregroundStyle(Soft.accent)
+                            }
                         }
-                        // Link defaults to the accent tint. Override to
-                        // primary text color so this row matches "Start
-                        // fresh" and other action rows — the orange icon
-                        // alone is enough visual signal.
-                        .foregroundStyle(.primary)
                     } else {
                         // URLComponents couldn't assemble a valid mailto
                         // (extremely unlikely — shouldn't happen in practice).
@@ -240,6 +248,7 @@ struct SidebarView: View {
                 } footer: {
                     Text("Opens Mail with a prefilled message to hello@usenod.app.")
                 }
+                .listRowBackground(Soft.surface)
 
                 // Advanced: which model runs, and download settings. Off by
                 // default so everyday use never mentions models or GB.
@@ -247,10 +256,11 @@ struct SidebarView: View {
                     Toggle(isOn: $showAdvanced.animation()) {
                         Label("Show advanced settings", systemImage: "slider.horizontal.3")
                     }
-                    .tint(Color("NodAccent"))
+                    .tint(Soft.accent)
                 } footer: {
                     Text("Choose which AI model Nod uses and how it downloads. Most people never need this.")
                 }
+                .listRowBackground(Soft.surface)
 
                 if showAdvanced {
                     Section {
@@ -262,6 +272,7 @@ struct SidebarView: View {
                     } footer: {
                         Text("Every option runs on this iPhone — nothing is sent to a server. Switching keeps your conversation.")
                     }
+                    .listRowBackground(Soft.surface)
 
                     Section {
                         Toggle(isOn: Binding(
@@ -270,12 +281,13 @@ struct SidebarView: View {
                         )) {
                             Label("Download over cellular", systemImage: "antenna.radiowaves.left.and.right")
                         }
-                        .tint(Color("NodAccent"))
+                        .tint(Soft.accent)
                     } header: {
                         Text("Downloads")
                     } footer: {
                         Text("Models are 1.7–3 GB, so Nod waits for Wi-Fi unless you turn this on.")
                     }
+                    .listRowBackground(Soft.surface)
                 }
 
                 // Destructive, so it sits last before About and reads red.
@@ -289,10 +301,11 @@ struct SidebarView: View {
                 } footer: {
                     Text("Clears every message and Nod's memory of your conversation. This can't be undone.")
                 }
+                .listRowBackground(Soft.surface)
 
                 Section {
                     HStack {
-                        Text("Version")
+                        Label("Version", systemImage: "info.circle")
                         Spacer()
                         Text(appVersion)
                             .foregroundStyle(.secondary)
@@ -307,13 +320,22 @@ struct SidebarView: View {
                     // see design notes in the voice feature plan.
                     Text("Nod listens but never speaks — replies arrive as writing, on purpose.")
                 }
+                .listRowBackground(Soft.surface)
             }
             // The Personalisation free-form TextField brings up the
             // keyboard. Interactive-dismiss lets the user swipe down on
             // the List to dismiss it without navigating away. Matches
             // the chat input's dismissal pattern in ChatView.
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Nod")
+            // Soft: warm background, rows on the surface colour (set per
+            // section; it doesn't apply from the List), warm hairlines,
+            // rounded type, accent for icons and controls.
+            .scrollContentBackground(.hidden)
+            .background(Soft.background)
+            .listRowSeparatorTint(Soft.hairline)
+            .fontDesign(.rounded)
+            .tint(Soft.accent)
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -515,7 +537,7 @@ struct SidebarView: View {
                 if isActive {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Color("NodAccent"))
+                        .foregroundStyle(Soft.accent)
                         .frame(width: 28, height: 28)
                 } else if canDelete {
                     // Not a nested Button: List rows with multiple buttons

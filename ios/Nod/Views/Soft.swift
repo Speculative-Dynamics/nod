@@ -26,6 +26,9 @@ enum Soft {
     static let muted = Color("SoftMuted")
     /// Placeholders and typing dots.
     static let faint = Color("SoftFaint")
+    /// Small status badges ("In use now"): fill and text.
+    static let badge = Color("SoftBadge")
+    static let badgeText = Color("SoftBadgeText")
     /// The brand orange (already light/dark in the catalog).
     static let accent = Color("NodAccent")
 

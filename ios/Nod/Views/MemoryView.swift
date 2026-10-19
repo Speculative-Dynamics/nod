@@ -1,12 +1,14 @@
 // MemoryView.swift
-// The "What Nod remembers" screen, reached from the sidebar. A timeline
-// of chapter notes — the short notes Nod writes as older stretches of the
-// conversation age out — newest first. These are exactly what Nod reads
-// back, so what you see is what it knows.
+// The "What Nod remembers" screen, reached from the chat header and
+// from Settings. One card per chapter note — the short notes Nod writes
+// as older stretches of the conversation age out — newest first. These
+// are exactly what Nod reads back, so what you see is what it knows.
+// The newest note is the one Nod reads on every reply, so it's marked
+// "In use now".
 //
-// Swipe a note to forget it: the note is deleted and Nod stops recalling
-// your messages from that stretch. The messages themselves stay in the
-// chat (Start fresh is the way to remove those).
+// Each card's menu forgets the note: it's deleted and Nod stops
+// recalling your messages from that stretch. The messages themselves
+// stay in the chat (Start fresh is the way to remove those).
 //
 // Full Dynamic Type + VoiceOver + Reduce Motion support.
 
@@ -18,106 +20,127 @@ struct MemoryView: View {
     @ObservedObject var store: ConversationStore
     @State private var pendingForget: ConversationMemory.Chapter?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     private var chapters: [ConversationMemory.Chapter] {
         store.memory.chapters.reversed()
     }
 
     var body: some View {
-        contents
-            .navigationTitle("What Nod remembers")
-            // Same words as the row that opens it. Inline matches the sidebar.
-            .navigationBarTitleDisplayMode(.inline)
-            .alert(
-                "Forget this?",
-                isPresented: Binding(
-                    get: { pendingForget != nil },
-                    set: { if !$0 { pendingForget = nil } }
-                ),
-                presenting: pendingForget
-            ) { chapter in
-                Button("Cancel", role: .cancel) { }
-                Button("Forget", role: .destructive) {
-                    store.forgetChapter(chapter)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("What Nod remembers")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Soft.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(chapters.isEmpty
+                         ? "As you talk, Nod keeps short notes about what's been going on. They'll appear here."
+                         : "Nod keeps a short note as your conversation grows, and reads these to remember.")
+                        .font(.subheadline)
+                        .foregroundStyle(Soft.muted)
                 }
-            } message: { _ in
-                Text("Nod won't bring up anything from this stretch again. Your messages stay in the chat.")
-            }
-    }
 
-    @ViewBuilder
-    private var contents: some View {
-        if chapters.isEmpty {
-            emptyState
-        } else {
-            timeline
-        }
-    }
+                if !chapters.isEmpty {
+                    VStack(spacing: 10) {
+                        ForEach(chapters) { chapter in
+                            ChapterCard(
+                                chapter: chapter,
+                                inUse: chapter.id == chapters.first?.id,
+                                onForget: { pendingForget = chapter }
+                            )
+                            .transition(.opacity)
+                        }
+                    }
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: chapters.count)
+                }
 
-    // MARK: - Timeline
-
-    private var timeline: some View {
-        List {
-            Section {
-                Text("As your conversation grows, Nod keeps a short note about each stretch. It uses these, and your own words, to remember. Swipe a note to forget it.")
+                Label("Only on this iPhone", systemImage: "lock.fill")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+                    .foregroundStyle(Soft.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
             }
-
-            Section {
-                ForEach(chapters) { chapter in
-                    ChapterRow(chapter: chapter)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                pendingForget = chapter
-                            } label: {
-                                Label("Forget", systemImage: "trash")
-                            }
-                            // The app tint would otherwise turn it orange.
-                            .tint(.red)
-                        }
-                        .accessibilityAction(named: "Forget") {
-                            pendingForget = chapter
-                        }
-                }
-            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .listStyle(.insetGrouped)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: chapters.count)
-    }
-
-    // MARK: - Empty state
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Nothing yet.", systemImage: "note.text")
-        } description: {
-            Text("As you talk, Nod keeps short notes about what's been going on. They'll appear here.")
+        .background(Soft.background)
+        .fontDesign(.rounded)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Forget this?",
+            isPresented: Binding(
+                get: { pendingForget != nil },
+                set: { if !$0 { pendingForget = nil } }
+            ),
+            presenting: pendingForget
+        ) { chapter in
+            Button("Cancel", role: .cancel) { }
+            Button("Forget", role: .destructive) {
+                store.forgetChapter(chapter)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } message: { _ in
+            Text("Nod won't bring up anything from this stretch again. Your messages stay in the chat.")
         }
     }
 }
 
-// MARK: - Row
+// MARK: - Card
 
-/// One chapter: when it was, then the note.
-private struct ChapterRow: View {
+/// One chapter: when it was, an "In use now" badge on the newest, a
+/// menu to forget it, then the note.
+private struct ChapterCard: View {
     let chapter: ConversationMemory.Chapter
+    let inUse: Bool
+    let onForget: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    private let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(Self.span(from: chapter.firstMessageAt, to: chapter.lastMessageAt))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text(Self.span(from: chapter.firstMessageAt, to: chapter.lastMessageAt))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Soft.muted)
+                if inUse {
+                    Text("In use now")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Soft.badgeText)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Soft.badge, in: Capsule())
+                }
+                Spacer(minLength: 0)
+                Menu {
+                    Button("Forget", systemImage: "trash", role: .destructive, action: onForget)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Soft.muted)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Options for this note")
+                .padding(.trailing, -10)
+            }
+            .padding(.vertical, -8)
+
             Text(chapter.text)
                 .font(.body)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Soft.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 4)
+        .padding(.leading, 18)
+        .padding(.trailing, 14)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Soft.surface, in: shape)
+        .softLift(colorScheme, in: shape)
         .accessibilityElement(children: .combine)
+        .accessibilityAction(named: "Forget", onForget)
     }
 
     /// "Today", "Yesterday", "Mar 3", "Mar 3 – 5", "Mar 3, 2025".
