@@ -49,6 +49,14 @@ enum ListeningTurns {
             let lines = pastMessages.map { "- \($0)" }.joined(separator: "\n")
             parts.append("THINGS THEY TOLD YOU BEFORE, IN THEIR WORDS (newest first). Don't bring these up yourself. If they ask about something here, answer from it plainly:\n\(lines)")
         }
+        // Recall instruction: only when the user's own past words were
+        // recalled for this message, i.e. when they're likely asking
+        // about one. In the listening prompt it made Apple's model ask
+        // more questions on every reply; attached to the always-present
+        // chapter note it did the same in long conversations.
+        if !pastMessages.isEmpty {
+            parts.append("When they want a detail from these back (a name, a place, what happened), give it plainly.")
+        }
         return parts.joined(separator: "\n\n")
     }
 

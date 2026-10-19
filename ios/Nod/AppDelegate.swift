@@ -19,7 +19,23 @@
 
 import UIKit
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate {
+
+    // Cmd+Return sends from a hardware keyboard. Registered here, at the
+    // end of the responder chain, with priority over system behavior: a
+    // focused text view swallows the press before a SwiftUI
+    // keyboardShortcut sees it. ChatView listens for the notification.
+    override var keyCommands: [UIKeyCommand]? {
+        let send = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(sendShortcut))
+        send.wantsPriorityOverSystemBehavior = true
+        send.discoverabilityTitle = "Send"
+        return [send]
+    }
+
+    @objc private func sendShortcut() {
+        NotificationCenter.default.post(name: .nodSendShortcut, object: nil)
+    }
+
 
     func application(
         _ application: UIApplication,
@@ -39,4 +55,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler: completionHandler
         )
     }
+}
+
+extension Notification.Name {
+    /// Cmd+Return pressed (see AppDelegate.keyCommands).
+    static let nodSendShortcut = Notification.Name("nodSendShortcut")
 }

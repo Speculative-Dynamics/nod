@@ -116,7 +116,9 @@ final class LaunchCrashBreaker: ObservableObject {
         // didAutoFallback = false because there's nothing to tell them.
         if crashes >= 1 {
             let currentPref = EnginePreferenceStore.current
-            if currentPref != .apple {
+            // Only fall back when Apple Intelligence can actually run here;
+            // otherwise the "fallback" is an engine this iPhone can't use.
+            if currentPref != .apple, DeviceCapability.canRunAFM {
                 EnginePreferenceStore.current = .apple
                 didAutoFallback = true
                 fallbackReason = .launchCrashLoop
@@ -127,6 +129,12 @@ final class LaunchCrashBreaker: ObservableObject {
     /// Call after ChatView has been on screen long enough to consider the
     /// launch "past the danger zone" — ~15 seconds is enough to clear
     /// iOS's tight launch-time memory budget and any eager-prepare work.
+    /// Debug: make the next markLaunchStarted() see an unfinished
+    /// previous launch, as after a crash (`-nodCrashedLastLaunch YES`).
+    func debugMarkPreviousLaunchUnfinished() {
+        defaults.set(true, forKey: Keys.launchInProgress)
+    }
+
     func markLaunchSettled() {
         defaults.set(false, forKey: Keys.launchInProgress)
         defaults.set(0, forKey: Keys.consecutiveCrashes)
@@ -155,7 +163,9 @@ final class LaunchCrashBreaker: ObservableObject {
         }()
         lastWarningAt = now
 
-        if withinStrikeWindow {
+        // Escalating to Apple Intelligence only helps if this iPhone can
+        // run it; without it, keep releasing weights on each strike.
+        if withinStrikeWindow, DeviceCapability.canRunAFM {
             // Second strike: the lighter-touch release didn't help.
             // Escalate all the way to Apple Intelligence.
             EnginePreferenceStore.current = .apple

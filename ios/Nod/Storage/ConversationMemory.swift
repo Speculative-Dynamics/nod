@@ -58,8 +58,15 @@ struct ConversationMemory: Sendable {
         guard let chapter = chapters.first(where: { $0.id == id }) else { return [] }
         chapters.removeAll { $0.id == id }
         chapterIndex.remove(ids: [id])
+        // Compare in whole milliseconds. The chapter's span comes from the
+        // database, which stores times to the millisecond (rounded), while
+        // indexed messages keep full precision; about half the time the
+        // first message of the stretch looked "earlier" than the span and
+        // stayed recallable after Forget.
+        let first = Self.milliseconds(chapter.firstMessageAt)
+        let last = Self.milliseconds(chapter.lastMessageAt)
         let covered = Set(messageIndex.entries
-            .filter { $0.date >= chapter.firstMessageAt && $0.date <= chapter.lastMessageAt }
+            .filter { (first...last).contains(Self.milliseconds($0.date)) }
             .map(\.id))
         messageIndex.remove(ids: covered)
         return covered
@@ -108,6 +115,12 @@ struct ConversationMemory: Sendable {
     }
 
     // MARK: - Helpers
+
+    /// A date in whole milliseconds, rounded the way the database's
+    /// ISO 8601 timestamps are.
+    private static func milliseconds(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1000).rounded())
+    }
 
     private static func order(_ date: Date) -> Int {
         Int(date.timeIntervalSince1970 * 1000)
