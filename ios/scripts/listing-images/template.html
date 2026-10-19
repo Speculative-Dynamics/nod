@@ -9,12 +9,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@400;500;600&display=swap">
 <style>
   :root {
-    --bg: #0e0c0a;
-    --ink: #f5efe6;
-    --ink-soft: #d8cdbc;
+    --bg: #000000;
+    --ink: #f2f2f7;
+    --ink-soft: #c7c7cc;
     --orange: #d97a3a;
     --orange-soft: #f0a574;
-    --bezel: #1b1714;
+    --bezel: #1c1c1e;
     --font-serif: "Fraunces", "New York", Georgia, serif;
     --font-sans: "Inter", -apple-system, "Helvetica Neue", sans-serif;
   }
@@ -24,8 +24,7 @@
     color: var(--ink);
     font-family: var(--font-sans);
     background:
-      radial-gradient(1100px 900px at 50% 62%, rgba(217,122,58,0.16), rgba(217,122,58,0) 70%),
-      radial-gradient(900px 600px at 50% 0%, rgba(240,165,116,0.06), rgba(240,165,116,0) 70%),
+      radial-gradient(1100px 900px at 50% 62%, rgba(255,255,255,0.07), rgba(255,255,255,0) 70%),
       var(--bg);
   }
   .slide { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; }
@@ -50,7 +49,7 @@
     position: absolute; left: 50%; top: 640px; transform: translateX(-50%);
     width: 900px; padding: 22px; border-radius: 132px;
     background: var(--bezel);
-    box-shadow: 0 0 0 3px rgba(245,239,230,0.07), 0 60px 160px rgba(0,0,0,0.6), 0 0 180px rgba(217,122,58,0.14);
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.10), 0 60px 160px rgba(0,0,0,0.6);
   }
   .phone img { display: block; width: 100%; border-radius: 112px; }
 
@@ -66,8 +65,8 @@
     position: absolute; left: 60px; top: 1330px; z-index: 3;
     display: flex; align-items: center; gap: 28px;
     padding: 30px 44px 30px 36px; border-radius: 40px;
-    background: rgba(30,25,19,0.92);
-    border: 2px solid rgba(245,239,230,0.12);
+    background: rgba(28,28,30,0.95);
+    border: 2px solid rgba(255,255,255,0.12);
     box-shadow: 0 30px 80px rgba(0,0,0,0.5);
   }
   .pill svg { width: 56px; height: 56px; color: var(--orange); flex: none; }
@@ -78,7 +77,7 @@
   .stats { margin-top: 170px; display: grid; grid-template-columns: repeat(2, 470px); gap: 40px; }
   .stat {
     height: 430px; border-radius: 56px;
-    background: rgba(30,25,19,0.75); border: 2px solid rgba(245,239,230,0.08);
+    background: rgba(28,28,30,0.85); border: 2px solid rgba(255,255,255,0.08);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
   }
   .stat b {

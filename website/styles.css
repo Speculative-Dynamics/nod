@@ -12,22 +12,22 @@
     --nod-orange-glow: rgba(217, 122, 58, 0.18);
 
     /* Dark (used only by the hero) */
-    --bg: #0e0c0a; /* warm near-black */
-    --bg-raised: #16120e;
-    --bg-elev: #1e1913;
-    --ink: #f5efe6; /* warm off-white */
-    --ink-soft: #d8cdbc;
-    --ink-mute: #8f8476;
-    --ink-dim: #5a5248;
-    --hairline: rgba(245, 239, 230, 0.08);
-    --hairline-strong: rgba(245, 239, 230, 0.14);
+    --bg: #0a0a0b; /* warm near-black */
+    --bg-raised: #141416;
+    --bg-elev: #1c1c1e;
+    --ink: #f2f2f7; /* warm off-white */
+    --ink-soft: #d1d1d6;
+    --ink-mute: #8e8e93;
+    --ink-dim: #5c5c61;
+    --hairline: rgba(242, 242, 247, 0.08);
+    --hairline-strong: rgba(242, 242, 247, 0.14);
 
     /* Paper (used by every section below the hero) */
     --paper: #f2e9d7; /* warm cream */
     --paper-deep: #e8ddc6; /* card surface / raised */
     --ink-warm: #2a2620; /* warm near-black for body */
-    --ink-warm-soft: #5a5248; /* dim warm text */
-    --ink-warm-mute: #7a7064; /* small meta text */
+    --ink-warm-soft: #5c5c61; /* dim warm text */
+    --ink-warm-mute: #7c7c82; /* small meta text */
     --rule-warm: rgba(255, 255, 255, 0.08);
     --rule-warm-strong: rgba(255, 255, 255, 0.14);
 
@@ -269,16 +269,16 @@ button {
     background:
         linear-gradient(
             to left,
-            rgba(14, 12, 10, 0.78) 0%,
-            rgba(14, 12, 10, 0.55) 22%,
-            rgba(14, 12, 10, 0.18) 45%,
-            rgba(14, 12, 10, 0) 62%
+            rgba(10, 10, 11, 0.78) 0%,
+            rgba(10, 10, 11, 0.55) 22%,
+            rgba(10, 10, 11, 0.18) 45%,
+            rgba(10, 10, 11, 0) 62%
         ),
         linear-gradient(
             to top,
-            rgba(14, 12, 10, 0.55) 0%,
-            rgba(14, 12, 10, 0.2) 30%,
-            rgba(14, 12, 10, 0) 55%
+            rgba(10, 10, 11, 0.55) 0%,
+            rgba(10, 10, 11, 0.2) 30%,
+            rgba(10, 10, 11, 0) 55%
         );
 }
 
@@ -301,7 +301,7 @@ button {
     letter-spacing: -0.02em;
     margin: 0 0 2rem;
     color: var(--ink);
-    text-shadow: 0 2px 40px rgba(14, 12, 10, 0.7);
+    text-shadow: 0 2px 40px rgba(10, 10, 11, 0.7);
 }
 .hero__title em {
     font-style: italic;
@@ -316,7 +316,7 @@ button {
     margin: 0 0 2.5rem 0;
     max-width: 38ch;
     margin-left: auto;
-    text-shadow: 0 2px 24px rgba(14, 12, 10, 0.75);
+    text-shadow: 0 2px 24px rgba(10, 10, 11, 0.75);
 }
 
 .hero__cta {
@@ -480,7 +480,7 @@ button {
     height: 55%;
     background: radial-gradient(
         ellipse 55% 100% at 50% 0%,
-        rgba(217, 122, 58, 0.16),
+        rgba(255, 255, 255, 0.05),
         transparent 70%
     );
     pointer-events: none;
