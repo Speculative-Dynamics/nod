@@ -23,7 +23,7 @@ struct NoticeCard<Icon: View>: View {
 
         var background: Color {
             switch self {
-            case .info: return Color(.secondarySystemBackground)
+            case .info: return Soft.surface
             case .error: return Color.red
             }
         }
@@ -46,9 +46,17 @@ struct NoticeCard<Icon: View>: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(backgroundFill)
         )
+        .overlay {
+            // Info notices sit on the warm background as a surface, so
+            // they get the same hairline as Soft cards.
+            if tone == .info {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Soft.hairline, lineWidth: 1)
+            }
+        }
         .accessibilityElement(children: .contain)
     }
 
@@ -93,7 +101,7 @@ struct NoticeCard<Icon: View>: View {
                 if let message {
                     Text(message)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Soft.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if actionTitle != nil {
@@ -115,7 +123,7 @@ struct NoticeCard<Icon: View>: View {
     private var titleText: some View {
         Text(title)
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(Soft.ink)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -167,7 +175,7 @@ extension NoticeCard where Icon == AnyView {
         self.icon = {
             switch tone {
             case .info:
-                AnyView(Image(systemName: "info.circle.fill").foregroundStyle(.secondary))
+                AnyView(Image(systemName: "info.circle.fill").foregroundStyle(Soft.muted))
             case .error:
                 AnyView(Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red))
             }

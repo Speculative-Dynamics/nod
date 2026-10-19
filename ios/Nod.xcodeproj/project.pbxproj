@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07718705626AAB0FEE8CBAFC /* Soft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C468D9D14350B0A2FDA4A3 /* Soft.swift */; };
 		0CA4A1858373C7DC8EE573C4 /* DownloadTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71720E33D89D0A92B33AD8AB /* DownloadTuning.swift */; };
 		0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B89F2E8BF769A02D679773 /* PersonalizationStore.swift */; };
 		0F10F871707568E2C80C0E18 /* 04-memory.png in Resources */ = {isa = PBXBuildFile; fileRef = 5EA9689226AA2BEBF59FFE17 /* 04-memory.png */; };
@@ -79,6 +80,7 @@
 		1F19EEB7DE4D5CB342ED9976 /* CrisisSupportCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrisisSupportCard.swift; sourceTree = "<group>"; };
 		222263F4E36038A02EDE3442 /* DictationRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecognizer.swift; sourceTree = "<group>"; };
 		2281B1004AD6016FE4C8E3E1 /* FoundationModelsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsClient.swift; sourceTree = "<group>"; };
+		27C468D9D14350B0A2FDA4A3 /* Soft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Soft.swift; sourceTree = "<group>"; };
 		2A403C8B5DDD2D7732FE7942 /* AppLockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockManager.swift; sourceTree = "<group>"; };
 		2BBD0B7D3EF4359561F11C71 /* MLXGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXGeneration.swift; sourceTree = "<group>"; };
 		2D6C64A19ABB068E1DA98A8A /* AFMListening.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMListening.swift; sourceTree = "<group>"; };
@@ -155,6 +157,7 @@
 				9A447DA180FB51E565544074 /* NodMascot.swift */,
 				E65C76F0B38002E56E2575CE /* NoticeCard.swift */,
 				0517337BBD8316AD61402BEF /* SidebarView.swift */,
+				27C468D9D14350B0A2FDA4A3 /* Soft.swift */,
 				C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */,
 			);
 			path = Views;
@@ -426,6 +429,7 @@
 				0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */,
 				41A44C64F00833E43E373F89 /* ReplyGuard.swift in Sources */,
 				AF9E706F9859892FA91B6553 /* SidebarView.swift in Sources */,
+				07718705626AAB0FEE8CBAFC /* Soft.swift in Sources */,
 				CD1DCEE44A282AA7684E5821 /* SpeedWindow.swift in Sources */,
 				24D408F3CA747F829DE44292 /* SplashView.swift in Sources */,
 			);

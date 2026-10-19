@@ -46,11 +46,10 @@ struct ChatView: View {
 
     /// Mic and send buttons grow with Dynamic Type, capped so the text
     /// field keeps room at accessibility sizes.
-    @ScaledMetric(relativeTo: .body) private var scaledInputButton: CGFloat = 32
-    private var inputButtonSize: CGFloat { min(scaledInputButton, 44) }
+    @ScaledMetric(relativeTo: .body) private var scaledInputButton: CGFloat = 36
+    private var inputButtonSize: CGFloat { min(scaledInputButton, 48) }
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var inputText: String = ""
-    @State private var nodTrigger: Int = 0
     @State private var isInferring: Bool = false
     /// Handle to the in-flight inference task. Held so the stop button
     /// can cancel mid-stream. Cancellation propagates through the stream
@@ -69,6 +68,7 @@ struct ChatView: View {
     /// when stream completes or user taps stop.
     @State private var flushTask: Task<Void, Never>? = nil
     @State private var showingSidebar: Bool = false
+    @State private var showingMemory: Bool = false
     /// Controls the "Pause download?" alert triggered by Cancel on the
     /// downloading card. Splitting it into its own state avoids races
     /// where a fast-fingered user could double-tap.
@@ -285,7 +285,8 @@ struct ChatView: View {
                     engineHolder.setPreference(pref)
                 }
             )
-            .background(Color(.systemBackground))
+            .background(Soft.background)
+            .fontDesign(.rounded)
             // Status bar stays visible (default). Input accessory
             // would also stay if the onboarding had a TextField, but
             // it doesn't — so no keyboard surfaces from this view.
@@ -297,6 +298,8 @@ struct ChatView: View {
     private var normalChat: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                chatHeader
+
                 // One-shot banner when the breaker flipped us to Apple
                 // Intelligence — either because iOS issued a memory
                 // warning during a chat, or because the previous launch
@@ -334,7 +337,10 @@ struct ChatView: View {
                 // handle the normal chat states: empty → EmptyStateView,
                 // populated → messageList.
                 if store.messages.isEmpty {
-                    EmptyStateView()
+                    EmptyStateView { starter in
+                        inputText = starter
+                        inputFocused = true
+                    }
                 } else {
                     messageList
                         // Tail gap OUTSIDE the scroll view. See the
@@ -347,15 +353,6 @@ struct ChatView: View {
                         // message and whatever's below (NodAnimation,
                         // MLXReadinessBar, or inputBar).
                         .padding(.bottom, 16)
-                }
-
-                if isInferring {
-                    // While Nod is thinking, the eyes do a left-right-blink
-                    // loop so the user feels an active presence rather than
-                    // staring at static eyes.
-                    NodAnimation(trigger: nodTrigger, isThinking: true)
-                        .padding(.bottom, 8)
-                        .transition(.opacity)
                 }
 
                 // MLX engines (Qwen 3, Qwen 3.5, Gemma 4) all have a
@@ -388,33 +385,28 @@ struct ChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    // The mascot opens the sidebar. The tricky part is
-                    // stripping iOS 26's Liquid Glass treatment. That
-                    // treatment is applied at the TOOLBAR ITEM layer —
-                    // NOT the inner Button — which is why
-                    // `.buttonStyle(.plain)` and bare-view/onTapGesture
-                    // approaches both still showed the capsule chrome.
-                    //
-                    // Two things together fix it:
-                    //   1. `.sharedBackgroundVisibility(.hidden)` on the
-                    //      ToolbarItem strips the Liquid Glass capsule.
-                    //      (iOS 26+ API.)
-                    //   2. A zero-state ButtonStyle that ignores
-                    //      configuration.isPressed kills the press-tint
-                    //      flash — the orange "yellow" on tap.
-                    Button {
-                        showingSidebar = true
-                    } label: {
-                        MiniNodFace()
-                    }
-                    .buttonStyle(MascotButtonStyle())
-                    .accessibilityLabel("Open menu")
+            .background(Soft.background)
+            .fontDesign(.rounded)
+            // The header is our own view (chatHeader), so the system bar
+            // and its Liquid Glass chrome stay out of the way.
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingMemory) {
+                NavigationStack {
+                    MemoryView(store: store)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") { showingMemory = false }
+                            }
+                        }
                 }
-                .sharedBackgroundVisibility(.hidden)
+                .tint(Soft.accent)
+                // Sheets don't reliably inherit the app's colour scheme
+                // (see SidebarView), so apply the Theme setting here too.
+                .preferredColorScheme(
+                    PersonalizationStore.shared.current.appearance.preferredColorScheme(
+                        systemFallback: hostColorScheme
+                    )
+                )
             }
             .sheet(isPresented: $showingSidebar) {
                 SidebarView(
@@ -936,7 +928,9 @@ struct ChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
+        // One rounded surface holds mic, field and send, bottom-aligned
+        // so the buttons stay put as the field grows to five lines.
+        HStack(alignment: .bottom, spacing: 4) {
             // Dedicated mic button, LEFT of the text field. Always
             // visible when not streaming (hidden during inference so
             // you can't talk over Nod thinking). Having mic as its
@@ -945,6 +939,7 @@ struct ChatView: View {
             // about where their "send" went.
             if !isInferring && !dictationRecognizer.isUnavailableForSession {
                 micButton
+                    .padding(.bottom, max(0, (44 - inputButtonSize) / 2))
             }
 
             // Text field with a post-commit underline pulse that
@@ -958,10 +953,9 @@ struct ChatView: View {
                       text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .foregroundStyle(Soft.ink)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 11)
                 .overlay(alignment: .bottom) {
                     if let committedAt {
                         PostCommitPulse(trigger: committedAt)
@@ -1002,7 +996,13 @@ struct ChatView: View {
             .disabled(isSendButtonDisabled(for: role))
             .accessibilityLabel(role.a11yLabel)
             .accessibilityHint(role.a11yHint)
+            .padding(.bottom, max(0, (44 - inputButtonSize) / 2))
+            .padding(.trailing, 2)
         }
+        .padding(4)
+        .padding(.leading, isInferring || dictationRecognizer.isUnavailableForSession ? 10 : 0)
+        .background(Soft.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .softLift(hostColorScheme, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
     /// True when we're actively capturing voice. Used to morph the
@@ -1037,9 +1037,7 @@ struct ChatView: View {
                 .foregroundStyle(isRecording ? .black : Color("NodAccent"))
                 .frame(width: inputButtonSize, height: inputButtonSize)
                 .background(
-                    Circle().fill(
-                        isRecording ? Color("NodAccent") : Color(.secondarySystemBackground)
-                    )
+                    Circle().fill(isRecording ? Soft.accent : Color.clear)
                 )
                 .contentTransition(.symbolEffect(.replace.downUp))
                 .symbolEffect(
@@ -1159,9 +1157,9 @@ struct ChatView: View {
     private func sendButtonFill(for role: SendButtonRole) -> Color {
         switch role {
         case .stop:
-            return Color(.secondarySystemBackground)
+            return Soft.chip
         case .send:
-            return sendEnabled ? Color("NodAccent") : Color(.tertiarySystemFill)
+            return sendEnabled ? Soft.accent : Soft.chip
         }
     }
 
@@ -1171,9 +1169,9 @@ struct ChatView: View {
             // Black on the gray stop circle for high contrast in both
             // light and dark modes. `.primary` would invert with theme
             // and lose contrast against the neutral gray fill.
-            return .primary
+            return Soft.ink
         case .send:
-            return sendEnabled ? .black : .secondary
+            return sendEnabled ? .black : Soft.faint
         }
     }
 
@@ -1196,6 +1194,73 @@ struct ChatView: View {
         return engineHolder.isModelReady
     }
 
+
+    // MARK: - Header
+
+    /// Face, name and a status line on the left; memory and settings on
+    /// the right. "Private" while idle says where the conversation
+    /// lives; "typing…" while Nod writes replaces it.
+    private var chatHeader: some View {
+        HStack(spacing: 4) {
+            HStack(spacing: 10) {
+                MiniNodFace(size: 30)
+                    .accessibilityHidden(true)
+                Text("Nod")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Soft.ink)
+                if isInferring {
+                    Text("typing…")
+                        .font(.footnote)
+                        .foregroundStyle(Soft.muted)
+                        .transition(.opacity)
+                } else {
+                    // Just the lock at accessibility sizes, so the pill
+                    // can't crowd the buttons on a small phone.
+                    Label("Private", systemImage: "lock.fill")
+                        .labelStyle(typeSize.isAccessibilitySize ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                        .font(.caption.weight(.medium))
+                        .imageScale(.small)
+                        .foregroundStyle(Soft.muted)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Soft.chip))
+                        .accessibilityLabel("Private. Everything stays on this iPhone.")
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isInferring)
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 8)
+
+            Button {
+                showingMemory = true
+            } label: {
+                Image(systemName: "bookmark")
+                    .font(.body.weight(.medium))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("What Nod remembers")
+
+            Button {
+                showingSidebar = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.body.weight(.medium))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Settings")
+        }
+        .foregroundStyle(Soft.ink)
+        .padding(.leading, 20)
+        .padding(.trailing, 8)
+        .padding(.vertical, 4)
+        .overlay(alignment: .bottom) {
+            if !store.messages.isEmpty {
+                Soft.hairline.frame(height: 1)
+            }
+        }
+    }
 
     // MARK: - Fallback banner
     //
@@ -1242,7 +1307,6 @@ struct ChatView: View {
     }
 
     private func triggerNod() {
-        nodTrigger &+= 1
         // Light tap on send. The user initiated this; keep the feedback
         // quiet and confirmatory rather than demanding attention.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1660,8 +1724,8 @@ private struct BreakpointView: View {
 
     var body: some View {
         Text(label)
-            .font(isDate ? .caption.weight(.semibold) : .caption2)
-            .foregroundStyle(.secondary)
+            .font(isDate ? .footnote.weight(.semibold) : .caption.weight(.medium))
+            .foregroundStyle(Soft.muted)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, isDate ? 16 : 12)
             .padding(.bottom, isDate ? 8 : 4)
@@ -1685,12 +1749,13 @@ struct MessageBubble: View {
     var onRegenerate: (() -> Void)? = nil
 
     @State private var nodTriggerForThisBubble: Int = 0
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack {
             if message.role == .user {
                 Spacer(minLength: 40)
-                bubble(color: Color(.tertiarySystemFill))
+                bubble(color: Soft.userBubble, shape: Soft.userBubbleShape())
             } else if message.role == .assistant && message.isError {
                 errorRow
             } else if message.role == .assistant {
@@ -1709,17 +1774,25 @@ struct MessageBubble: View {
                 // `.padding(.bottom, 20)` reserves vertical space under
                 // the bubble when cancelled, so the overlay fits
                 // without overlapping the next row.
-                bubble(color: Color(.secondarySystemBackground))
-                    .padding(.bottom, message.wasCancelled && !message.text.isEmpty ? 20 : 0)
-                    .overlay(alignment: .bottomLeading) {
-                        if message.wasCancelled && !message.text.isEmpty {
-                            Text("stopped")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, 6)
-                                .accessibilityLabel("Reply was stopped")
-                        }
+                // Nod's small face sits beside each reply, bottom-aligned
+                // like a messenger avatar. Static (not a blinker): a
+                // screen of blinking faces would be restless.
+                HStack(alignment: .bottom, spacing: 8) {
+                    NodMascot(size: 26)
+                        .accessibilityHidden(true)
+                    bubble(color: Soft.surface, shape: Soft.nodBubbleShape())
+                        .softLift(colorScheme, in: Soft.nodBubbleShape())
+                }
+                .padding(.bottom, message.wasCancelled && !message.text.isEmpty ? 20 : 0)
+                .overlay(alignment: .bottomLeading) {
+                    if message.wasCancelled && !message.text.isEmpty {
+                        Text("stopped")
+                            .font(.caption)
+                            .foregroundStyle(Soft.muted)
+                            .padding(.leading, 40)
+                            .accessibilityLabel("Reply was stopped")
                     }
+                }
                 Spacer(minLength: 40)
             } else {
                 // .nod — a centered inline blink. Fires once on appear so
@@ -1752,29 +1825,29 @@ struct MessageBubble: View {
     }
 
     @ViewBuilder
-    private func bubble(color: Color) -> some View {
+    private func bubble<S: Shape>(color: Color, shape: S) -> some View {
         if message.text.isEmpty && message.role == .assistant {
             // In-progress: typing-dots placeholder instead of empty bubble.
-            HStack(spacing: 4) {
+            // The only thinking indicator; the header also says "typing…".
+            HStack(spacing: 5) {
                 ForEach(0..<3) { _ in
                     Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 6, height: 6)
+                        .fill(Soft.faint)
+                        .frame(width: 7, height: 7)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(color)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(color, in: shape)
             .accessibilityLabel("Nod is thinking")
         } else {
             Text(message.text)
                 .font(.body)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Soft.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(color, in: shape)
+                .contentShape(.contextMenuPreview, shape)
                 .accessibilityLabel(message.role == .user ? "You said: \(message.text)" : "Nod said: \(message.text)")
                 // Long-press to copy or share. iOS renders this as a
                 // standard context-menu preview with the bubble lifted —
@@ -1807,16 +1880,6 @@ struct MessageBubble: View {
                     }
                 }
         }
-    }
-}
-
-// A ButtonStyle that renders its label unchanged on every state — no
-// opacity dim, no scale, no tint shift when pressed. Used for the toolbar
-// mascot so that tapping it doesn't flash the orange NodAccent toward
-// yellow. Intentionally ignores `configuration.isPressed`.
-private struct MascotButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
     }
 }
 
@@ -1931,8 +1994,11 @@ private struct MLXReadinessBar: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Soft.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Soft.hairline, lineWidth: 1)
+            }
     }
 
     // MARK: - State variants
@@ -2199,8 +2265,10 @@ private struct AFMUnavailableOnboarding: View {
     var body: some View {
         // Explanation scrolls; the actions stay pinned at the bottom,
         // where thumbs are and where large text can't push them away.
+        // Soft: left-aligned like the chat's empty state, warm colours,
+        // a pill-shaped main action.
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 heroMascot
                 explanation
                 // At accessibility sizes only the main button is pinned;
@@ -2208,7 +2276,7 @@ private struct AFMUnavailableOnboarding: View {
                 if typeSize.isAccessibilitySize { secondaryActions }
             }
             .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -2220,21 +2288,21 @@ private struct AFMUnavailableOnboarding: View {
                 .padding(.top, 12)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
-                .background(Color(.systemBackground))
+                .background(Soft.background)
         }
         .accessibilityLabel(accessibilityIntro)
     }
 
     // MARK: Hero
 
-    /// 88pt mascot — the hero size. Larger than the 32pt nav-bar
-    /// mascot; codified as the "hero moment" token. NodMascotBlinker
-    /// so the face feels alive while users read onboarding copy —
-    /// a frozen 88pt face reads cold on a screen users sit with.
+    /// 64pt blinking face above the headline, so the face feels alive
+    /// while people read; a frozen face reads cold on a screen they
+    /// sit with.
     private var heroMascot: some View {
-        NodMascotBlinker(size: 88)
-            .padding(.top, typeSize.isAccessibilitySize ? 24 : 64)
+        NodMascotBlinker(size: 64)
+            .padding(.top, typeSize.isAccessibilitySize ? 16 : 56)
             .padding(.bottom, 28)
+            .accessibilityHidden(true)
             .opacity(afmStatus == .notSupported && !canRunMLX ? 0.85 : 1.0)
     }
 
@@ -2268,10 +2336,8 @@ private struct AFMUnavailableOnboarding: View {
             requirementsCard
             Text("We'd rather be honest than give you a bad experience. The whole point is that your conversations stay on your device.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .foregroundStyle(Soft.muted)
                 .padding(.top, 18)
-                .padding(.horizontal, 8)
         }
     }
 
@@ -2313,18 +2379,18 @@ private struct AFMUnavailableOnboarding: View {
 
     private func welcomeHeadline(_ text: String) -> some View {
         Text(text)
-            .font(.title3.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 14)
+            .font(.largeTitle.weight(.bold))
+            .foregroundStyle(Soft.ink)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.bottom, 12)
     }
 
     private func bodyCopy(_ text: String) -> some View {
         Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 28)
-            .padding(.horizontal, 4)
+            .font(.body)
+            .foregroundStyle(Soft.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.bottom, 24)
     }
 
     /// The main call to action: download the best model this phone fits.
@@ -2347,8 +2413,8 @@ private struct AFMUnavailableOnboarding: View {
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color("NodAccent"))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 20)
+            .background(Soft.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Download Nod's model, \(size)")
@@ -2362,8 +2428,10 @@ private struct AFMUnavailableOnboarding: View {
             onPickModel(pref)
         } label: {
             Text("\(label) (\(size))")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color("NodAccent"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Soft.accent)
+                .multilineTextAlignment(.center)
+                .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(label), \(size)")
@@ -2371,31 +2439,32 @@ private struct AFMUnavailableOnboarding: View {
 
     private var requirementsCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("WHAT YOU'LL NEED")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.6)
+            Text("What you'll need")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Soft.muted)
             Text("An iPhone with Apple Intelligence, or any iPhone with at least 6 GB of memory.")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
+                .font(.body)
+                .foregroundStyle(Soft.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Soft.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Soft.hairline, lineWidth: 1)
+        }
         .padding(.top, 4)
     }
 
     /// Footer shown on both MLX-capable branches (MLX-only and AFM-off).
     /// Not on "neither" — that branch has its own reassurance copy.
     private var onDeviceFooter: some View {
-        Text("Everything stays on this iPhone. Nothing is sent to a server.")
+        Label("Everything stays on this iPhone.", systemImage: "lock.fill")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Soft.muted)
             .multilineTextAlignment(.center)
-            .padding(.top, 18)
-            .padding(.horizontal, 8)
+            .padding(.top, 14)
     }
 
     // MARK: Helpers

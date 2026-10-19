@@ -27,14 +27,11 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             // Background reveals as the orange shrinks below the screen
-            // edges. Use semantic `.systemBackground` so it adapts to
-            // light/dark theme automatically — black in dark mode
-            // matches what ChatView will show, white in light mode
-            // matches the same. Without this, the splash was
-            // hardcoded black which clashed with the light-themed
-            // chat during the handoff. ignoresSafeArea so we cover
-            // notch/home-indicator areas.
-            Color(.systemBackground)
+            // edges. Soft's warm background (light or dark from the
+            // asset catalog) so the reveal lands on exactly what the
+            // chat shows next — no white or black flash at handoff.
+            // ignoresSafeArea so we cover notch/home-indicator areas.
+            Soft.background
                 .ignoresSafeArea()
 
             // The orange body. Starts oversized to fill the screen,

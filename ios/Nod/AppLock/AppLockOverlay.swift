@@ -1,6 +1,6 @@
 // AppLockOverlay.swift
-// The locked screen. A full-bleed dark surface with a large Nod face and
-// a single Unlock button. Mounted above ChatView in NodApp; the chat
+// The locked screen. Soft's warm background (light or dark), a Nod face
+// and a single Unlock button. Mounted above ChatView in NodApp; the chat
 // stays mounted behind so unlock reveals instantly.
 //
 // Design choices:
@@ -24,24 +24,25 @@ struct AppLockOverlay: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground)
+            Soft.background
                 .ignoresSafeArea()
 
             VStack(spacing: 28) {
                 // Large Nod face. Blinks at the idle cadence so the
                 // character still reads as "present" while you're
                 // locked out — see the design note at top of file.
-                NodMascotBlinker(size: 96)
+                NodMascotBlinker(size: 80)
                     .accessibilityHidden(true)
 
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     Text("Nod is locked.")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(Soft.ink)
+                        .accessibilityAddTraits(.isHeader)
 
                     Text("Unlock with Face ID to continue your conversation.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.body)
+                        .foregroundStyle(Soft.muted)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                 }
@@ -55,17 +56,24 @@ struct AppLockOverlay: View {
                         Text("Unlock")
                             .font(.headline)
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 12)
-                    .background(Color("NodAccent"))
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(Soft.accent, in: Capsule())
                     .foregroundStyle(.black)
-                    .clipShape(Capsule())
                 }
                 .accessibilityLabel("Unlock Nod")
                 .padding(.top, 8)
                 .disabled(lock.isAuthenticating)
             }
+            .padding(.horizontal, 24)
         }
+        .overlay(alignment: .bottom) {
+            Label("Everything stays on this iPhone.", systemImage: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(Soft.muted)
+                .padding(.bottom, 24)
+        }
+        .fontDesign(.rounded)
         .onAppear {
             // Auto-prompt Face ID on mount. If the user already canceled
             // once and came back, they'll tap Unlock manually.

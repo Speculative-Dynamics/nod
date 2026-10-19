@@ -56,7 +56,7 @@ final class AppLockManager: ObservableObject {
     init() {
         let enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         self.isEnabled = enabled
-        self.isLocked = enabled
+        self.isLocked = enabled || DebugUIState.forceLocked
     }
 
     // MARK: - Lifecycle hooks (called from NodApp scenePhase observer)
@@ -81,6 +81,7 @@ final class AppLockManager: ObservableObject {
     /// On failure, stay locked — the user can tap the unlock button again.
     /// Safe to call repeatedly; concurrent calls no-op via `isAuthenticating`.
     func authenticate() async {
+        if DebugUIState.forceLocked { return }
         guard isEnabled else { isLocked = false; return }
         guard !isAuthenticating else { return }
         guard isLocked else { return }

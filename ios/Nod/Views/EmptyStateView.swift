@@ -1,87 +1,94 @@
 // EmptyStateView.swift
-// Shown when the conversation has zero messages (first launch, after clear).
+// What a new or freshly cleared conversation shows: a time-of-day
+// greeting and a few starters for the blank-page moment. Tapping a
+// starter fills the message field (it doesn't send), so the person can
+// change it or keep typing. Privacy is said once, in the header's
+// "Private" pill, so it isn't repeated here.
 //
-// Visual: 80pt Nod face (NodMascotBlinker) slowly blinking. Centered
-// vertically above the input field. Headline is time-of-day aware
-// ("Good morning", "I'm listening.", "How was today?", etc.). Body is
-// one line of gentle guidance, plus a quiet privacy line.
-//
-// The input field IS the CTA. No buttons, no "Get Started."
+// Full Dynamic Type + VoiceOver support.
 
 import SwiftUI
 
 struct EmptyStateView: View {
-    /// Recomputed each time the view appears. Not reactive — the empty
-    /// state only exists before the first message is sent, so a user
-    /// crossing a time boundary while staring at it is a non-issue.
+    /// Called with the starter's text when one is tapped.
+    var onStarter: (String) -> Void = { _ in }
+
     @State private var greeting: Greeting = Greeting.forNow()
+    @Environment(\.colorScheme) private var colorScheme
+
+    private static let starters = [
+        "I had a rough day",
+        "Something's on my mind",
+        "I just need to vent",
+    ]
 
     var body: some View {
-        VStack(spacing: 24) {
-            // Large Nod face (80pt). NodMascotBlinker owns the blink
-            // cadence and jitter — same implementation as the nav-bar
-            // mascot, so two blinkers on screen stay naturally
-            // desynced.
-            NodMascotBlinker(size: 80)
-                .accessibilityHidden(true)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(greeting.headline)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Soft.ink)
+                    Text(greeting.subline)
+                        .font(.title3)
+                        .foregroundStyle(Soft.muted)
+                }
+                .accessibilityElement(children: .combine)
 
-            VStack(spacing: 8) {
-                Text(greeting.headline)
-                    .font(.title2.weight(.medium))
-                    .foregroundStyle(.primary)
-
-                Text(greeting.subline)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Self.starters, id: \.self) { starter in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            onStarter(starter)
+                        } label: {
+                            Text(starter)
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(Soft.ink)
+                                .multilineTextAlignment(.leading)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 12)
+                                // Rounded rectangle, not a capsule, so a
+                                // starter that wraps at large text keeps
+                                // a calm shape.
+                                .background(Soft.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                .softLift(colorScheme, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Puts this in the message field")
+                    }
+                }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(greeting.headline). \(greeting.subline)")
-
-            // Why Nod is different, said once and quietly.
-            // Secondary, not tertiary: it's the app's main promise and
-            // tertiary grey fails contrast.
-            Label {
-                Text("Everything you say stays on this iPhone.")
-                    .foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(Color("NodAccent"))
-            }
-            .font(.footnote)
-            .padding(.top, 8)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollBounceBehavior(.basedOnSize)
         .onAppear { greeting = Greeting.forNow() }
     }
 }
 
-/// Time-of-day greeting variants. Copy stays restrained — Nod is a
-/// companion, not a chirpy concierge. The subline is the same across
-/// variants so the CTA stays consistent.
+/// Time-of-day greeting. Copy stays restrained: Nod is a companion,
+/// not a chirpy concierge.
 private struct Greeting {
     let headline: String
     let subline: String
 
     static func forNow(_ date: Date = Date()) -> Greeting {
-        let hour = Calendar.current.component(.hour, from: date)
-        let subline = "Type what's on your mind."
-        switch hour {
+        switch Calendar.current.component(.hour, from: date) {
         case 5..<11:
-            return Greeting(headline: "Good morning.", subline: subline)
+            return Greeting(headline: "Good morning.", subline: "How are you, really?")
         case 11..<17:
-            return Greeting(headline: "I'm listening.", subline: subline)
+            return Greeting(headline: "I'm listening.", subline: "What's going on?")
         case 17..<22:
-            return Greeting(headline: "How was today?", subline: subline)
+            return Greeting(headline: "How was today?", subline: "Tell me about it.")
         default:
-            // 22:00–04:59 — late night / early hours. Keep it gentle.
-            return Greeting(headline: "Late night. I'm here.", subline: subline)
+            return Greeting(headline: "Late night. I'm here.", subline: "What's keeping you up?")
         }
     }
 }
 
 #Preview {
     EmptyStateView()
-        .preferredColorScheme(.dark)
+        .background(Soft.background)
+        .fontDesign(.rounded)
 }

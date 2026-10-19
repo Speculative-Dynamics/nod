@@ -59,12 +59,13 @@ struct CrisisSupportCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("If you're thinking about ending your life or hurting yourself, please talk to someone now.")
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Soft.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let resource {
                 Text("\(resource.name) is free and confidential, any time.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Soft.muted)
                 HStack(spacing: 8) {
                     if let number = resource.call, let url = URL(string: "tel:\(number)") {
                         Button("Call \(number)") { openURL(url) }
@@ -89,9 +90,15 @@ struct CrisisSupportCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Soft.surface)
         )
+        // An accent outline marks this as help from the app, distinct
+        // from Nod's own (borderless) replies.
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Soft.accent, lineWidth: 1.5)
+        }
         .accessibilityElement(children: .contain)
     }
 }
