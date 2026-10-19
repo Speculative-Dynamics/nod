@@ -305,7 +305,9 @@ struct ChatView: View {
                 if engineHolder.preference == .apple,
                    !DeviceCapability.canRunAFM,
                    !store.messages.isEmpty {
-                    AFMUnavailableBanner()
+                    AFMUnavailableBanner(onDownload: EnginePreference.bestDownloadable.map { best in
+                        { engineHolder.setPreference(best) }
+                    })
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1411,14 +1413,14 @@ struct ChatView: View {
         case .apple:
             switch DeviceCapability.afmStatus {
             case .notSupported:
-                return "Your iPhone doesn't support Apple Intelligence. Tap the menu to pick an on-device model instead."
+                return "This iPhone doesn't have Apple Intelligence. Open the menu and turn on Advanced to download Nod's own model."
             case .disabledInSettings:
-                return "Apple Intelligence is turned off. Flip it on in Settings → Apple Intelligence, or switch to an on-device model from the menu."
+                return "Apple Intelligence is turned off. Turn it on in Settings → Apple Intelligence & Siri, then try again."
             case .available:
                 return "Apple Intelligence is warming up. Try sending again in a moment."
             }
         case .qwen35, .qwen35_2b:
-            return "\(EnginePreferenceStore.current.displayName) isn't ready yet. The model still needs to finish downloading."
+            return "Nod is still getting ready. It can reply once the download finishes."
         }
     }
 
@@ -1862,7 +1864,7 @@ private struct MLXReadinessBar: View {
             card {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Loading \(modelDisplayName) into memory…")
+                    Text("Waking Nod up…")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -1904,7 +1906,7 @@ private struct MLXReadinessBar: View {
     private func downloadingCard(metrics: DownloadMetrics) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Downloading \(modelDisplayName)…")
+                Text("Getting Nod ready…")
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 Text("\(Int(metrics.fraction * 100))%")
@@ -1995,7 +1997,7 @@ private struct MLXReadinessBar: View {
     @ViewBuilder
     private func pausedCard(metrics: DownloadMetrics) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(modelDisplayName) download paused")
+            Text("Download paused")
                 .font(.subheadline.weight(.medium))
 
             ProgressView(value: metrics.fraction)
@@ -2053,9 +2055,9 @@ private struct MLXReadinessBar: View {
             return "Can't reach the download server"
         }
         if msg.contains("downloadFailedDiskFull") {
-            return "Not enough space for \(modelDisplayName)"
+            return "Not enough space on this iPhone"
         }
-        return "\(modelDisplayName) failed to load"
+        return "Nod couldn't start"
     }
 
     private func failureBody(msg: String) -> String {
@@ -2066,7 +2068,7 @@ private struct MLXReadinessBar: View {
         if msg.contains("downloadFailedDiskFull") {
             return "Free up ~\(sizeGB) GB on your device, then try again."
         }
-        return "Something went wrong. Try again, or switch back to Apple Intelligence in the menu."
+        return "Something went wrong getting Nod ready. Try again."
     }
 
     // MARK: - Formatters
@@ -2205,9 +2207,12 @@ private struct AFMUnavailableOnboarding: View {
 
     @ViewBuilder
     private var afmDisabledBranch: some View {
-        welcomeHeadline("Let's get you set up.")
-        bodyCopy("Apple Intelligence is off on this iPhone. You can turn it on in Settings → Apple Intelligence & Siri, or pick an on-device model below.")
-        modelPickerStack
+        welcomeHeadline("One quick step.")
+        bodyCopy("Nod uses Apple Intelligence, which is turned off on this iPhone. Turn it on in Settings → Apple Intelligence & Siri, then come back. No download needed.")
+        if let best = EnginePreference.bestDownloadable {
+            orDivider
+            secondaryDownloadLink(best, label: "Or download Nod's own model instead")
+        }
         onDeviceFooter
     }
 
@@ -2215,9 +2220,16 @@ private struct AFMUnavailableOnboarding: View {
 
     @ViewBuilder
     private var mlxOnlyBranch: some View {
-        welcomeHeadline("Let's get you set up.")
-        bodyCopy("Nod runs the AI on your device. Your iPhone can't use Apple's built-in one, so pick one of these instead.")
-        modelPickerStack
+        welcomeHeadline("One-time download.")
+        bodyCopy("This iPhone doesn't have Apple Intelligence, so Nod brings its own AI that runs right here on your phone. It downloads once, then works offline.")
+        if let best = EnginePreference.bestDownloadable {
+            downloadButton(best)
+            // A smaller option, only when the phone fits both.
+            if best == .qwen35, EnginePreference.qwen35_2b.isAvailable {
+                secondaryDownloadLink(.qwen35_2b, label: "Smaller download instead")
+                    .padding(.top, 14)
+            }
+        }
         onDeviceFooter
     }
 
@@ -2254,21 +2266,44 @@ private struct AFMUnavailableOnboarding: View {
             .padding(.horizontal, 4)
     }
 
-    /// The best model this phone fits as the recommendation; on phones
-    /// that fit both, the light model as the alternative.
-    @ViewBuilder
-    private var modelPickerStack: some View {
-        let fitting = [EnginePreference.qwen35, .qwen35_2b].filter { $0.isAvailable }
-        if let first = fitting.first {
-            modelCard(pref: first, style: .primary, roleOverride: "Recommended")
-        }
-        if fitting.count > 1 {
-            orDivider
-            ForEach(fitting.dropFirst(), id: \.self) { pref in
-                modelCard(pref: pref, style: .secondary, roleOverride: nil)
-                    .padding(.top, 8)
+    /// The main call to action: download the best model this phone fits.
+    private func downloadButton(_ pref: EnginePreference) -> some View {
+        let size = pref.mlxSpec.map { Self.formatSize($0.totalBytes) } ?? ""
+        return Button {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            onPickModel(pref)
+        } label: {
+            VStack(spacing: 2) {
+                Text("Download")
+                    .font(.headline)
+                Text("\(size) · a few minutes on Wi-Fi")
+                    .font(.caption)
+                    .foregroundStyle(Color.black.opacity(0.65))
+                    .monospacedDigit()
             }
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color("NodAccent"))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Download Nod's model, \(size)")
+    }
+
+    /// A quieter alternative download.
+    private func secondaryDownloadLink(_ pref: EnginePreference, label: String) -> some View {
+        let size = pref.mlxSpec.map { Self.formatSize($0.totalBytes) } ?? ""
+        return Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            onPickModel(pref)
+        } label: {
+            Text("\(label) (\(size))")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color("NodAccent"))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(label), \(size)")
     }
 
     private var orDivider: some View {
@@ -2280,62 +2315,13 @@ private struct AFMUnavailableOnboarding: View {
             .padding(.vertical, 14)
     }
 
-    private enum ModelCardStyle { case primary, secondary }
-
-    /// One tappable model option. Primary = NodAccent-filled (the
-    /// recommended path); secondary = secondarySystemBackground fill.
-    /// Whole card is the tap target. No chevron button — arrow is a
-    /// visual hint, not a separate interactive element.
-    @ViewBuilder
-    private func modelCard(pref: EnginePreference, style: ModelCardStyle, roleOverride: String?) -> some View {
-        let spec = pref.mlxSpec
-        let role = roleOverride ?? (spec?.roleLabel ?? "")
-        let sizeLabel = spec.map { Self.formatSize($0.totalBytes) } ?? ""
-        let meta = role.isEmpty ? sizeLabel : "\(role) · \(sizeLabel)"
-        let title = pref.displayName
-
-        Button {
-            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-            onPickModel(pref)
-        } label: {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(style == .primary ? .semibold : .medium))
-                        .foregroundStyle(style == .primary ? .black : .primary)
-                    Text(meta)
-                        .font(.caption)
-                        .foregroundStyle(style == .primary
-                            ? Color.black.opacity(0.65)
-                            : Color.secondary)
-                        .monospacedDigit()
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(style == .primary
-                        ? Color.black
-                        : Color.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, style == .primary ? 15 : 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(style == .primary
-                ? Color("NodAccent")
-                : Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title), \(meta), double-tap to download")
-    }
-
     private var requirementsCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("WHAT YOU'LL NEED")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .tracking(0.6)
-            Text("iPhone 15 Pro or newer, or any iPhone with at least 6 GB of memory.")
+            Text("An iPhone with Apple Intelligence, or any iPhone with at least 6 GB of memory.")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
         }
@@ -2350,7 +2336,7 @@ private struct AFMUnavailableOnboarding: View {
     /// Footer shown on both MLX-capable branches (MLX-only and AFM-off).
     /// Not on "neither" — that branch has its own reassurance copy.
     private var onDeviceFooter: some View {
-        Text("All on-device. Nothing sent to a server. Wi-Fi recommended for the download.")
+        Text("Everything stays on this iPhone. Nothing is sent to a server.")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
@@ -2378,14 +2364,14 @@ private struct AFMUnavailableOnboarding: View {
     private var accessibilityIntro: String {
         switch afmStatus {
         case .available:
-            return "Pick a model to start Nod."
+            return "Download Nod's model to start."
         case .disabledInSettings:
-            return "Apple Intelligence is off. Turn it on in Settings, or pick an on-device model."
+            return "Apple Intelligence is off. Turn it on in Settings, or download Nod's own model."
         case .notSupported:
             if canRunMLX {
-                return "Apple Intelligence isn't supported on this iPhone. Pick an on-device model."
+                return "This iPhone doesn't have Apple Intelligence. Download Nod's own model to start."
             } else {
-                return "Nod needs a newer iPhone. Requires iPhone 15 Pro or newer, or 6 GB of memory."
+                return "Nod needs an iPhone with Apple Intelligence or at least 6 GB of memory."
             }
         }
     }
@@ -2405,6 +2391,9 @@ private struct AFMUnavailableOnboarding: View {
 // one way: NOT dismissible by X — the only way to clear this banner
 // is to switch engines (which resolves the underlying condition).
 private struct AFMUnavailableBanner: View {
+    /// Downloads the best model this phone fits. Nil if none fits.
+    let onDownload: (() -> Void)?
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle")
@@ -2415,10 +2404,18 @@ private struct AFMUnavailableBanner: View {
                 Text("Apple Intelligence isn't available on this iPhone.")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text("Your conversation is safe. Tap the menu to pick an on-device model and keep chatting.")
+                Text(onDownload == nil
+                     ? "Your conversation is safe, but this iPhone can't run Nod's AI."
+                     : "Your conversation is safe. Download Nod's own model to keep talking.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let onDownload {
+                    Button("Download", action: onDownload)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color("NodAccent"))
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -2426,8 +2423,7 @@ private struct AFMUnavailableBanner: View {
         .padding(.vertical, 10)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Apple Intelligence isn't available on this iPhone. Your conversation is safe. Tap the menu to pick an on-device model and keep chatting.")
+        .accessibilityElement(children: .contain)
     }
 }
 

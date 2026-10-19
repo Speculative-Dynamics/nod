@@ -23,6 +23,12 @@ per TestFlight upload.
 - **Refusals** show a gentler message, and are recognized on iOS 27's new error types. A refused chapter note no longer stalls memory forever.
 - **Crisis support card.** A message that clearly signals crisis shows a fixed card with a local helpline (US, CA, UK, IE, AU, NZ, IN) and a link to findahelpline.com, independent of what the model says.
 
+### Simple by default
+- **Settings no longer mention models.** Simple mode shows your conversation and memory, how Nod talks, appearance and privacy. A "Show advanced settings" switch reveals the model picker and download options. People already using a downloaded model on a phone with Apple Intelligence see Advanced on, so their choice doesn't vanish.
+- **One-screen setup for iPhones without Apple Intelligence.** "One-time download", one button, and the best model for the phone is picked automatically; a smaller download is offered when the phone fits both. If Apple Intelligence is just turned off, the screen says how to turn it on, with the download as a fallback.
+- **Plain-language messages.** Downloads read "Getting Nod ready…", "Waking Nod up…" and "Download paused"; errors say what to do without naming models. The "Apple Intelligence isn't available" banner now has a Download button.
+- **A quiet privacy line on the first screen:** "Everything you say stays on this iPhone."
+
 ### Models
 - **New lineup, chosen by evals:** Apple Intelligence (default), **Qwen 3.5 4B** for 8 GB iPhones (best results: 3/63 flagged replies, 4/4 recall), and **Qwen 3.5 2B** for 6 GB iPhones (4/4 recall at about 2 GB of memory).
 - **Retired Gemma 4 E2B and Qwen 3 4B.** Gemma missed recall questions even with the answer in context; Qwen 3 produced garbled, repetitive text in long chats. Users on them move to the best model their phone fits, and the old files are deleted.

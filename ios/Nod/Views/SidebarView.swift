@@ -46,39 +46,15 @@ struct SidebarView: View {
     /// user double-taps different rows before the alert opens.
     @State private var deleteTarget: EnginePreference?
 
+    /// Simple mode by default: models and downloads are tucked behind
+    /// this switch. See `SettingsMode`.
+    @AppStorage(SettingsMode.showAdvancedKey) private var showAdvanced = SettingsMode.defaultShowAdvanced
+
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack {
-                        Text("Messages")
-                        Spacer()
-                        Text("\(store.messages.count)")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    // "Day N" stat — shows how long the relationship has
-                    // been going. Computed from the first message's
-                    // createdAt. Hidden until there's at least one message
-                    // so first-launch empty state doesn't show "Day 1."
-                    if let dayCount = relationshipDayCount {
-                        HStack {
-                            Text("Relationship")
-                            Spacer()
-                            Text(dayCount == 1 ? "Day 1" : "Day \(dayCount)")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
-                } header: {
-                    Text("Your conversation")
-                }
-
-                // Memory section. Own section because "what Nod remembers"
-                // is a top-level product concept, not a sub-feature of
-                // the conversation. Placed between "Your conversation"
-                // (what's in here) and "Personalisation" (how Nod speaks
-                // to you) so the flow reads: content → memory → voice.
+                // Your conversation: what Nod remembers, and how long
+                // you've been talking.
                 Section {
                     NavigationLink {
                         MemoryView(store: store)
@@ -95,15 +71,22 @@ struct SidebarView: View {
                     .accessibilityLabel(
                         "What Nod remembers. \(store.memory.chapters.count) \(store.memory.chapters.count == 1 ? "note" : "notes")"
                     )
+                    // Hidden until there's at least one message so the
+                    // first-launch state doesn't show "Day 1".
+                    if let dayCount = relationshipDayCount {
+                        HStack {
+                            Text("Talking with Nod")
+                            Spacer()
+                            Text("\(dayCount == 1 ? "Day 1" : "Day \(dayCount)") · \(store.messages.count) messages")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
                 } header: {
-                    Text("Memory")
+                    Text("Your conversation")
                 }
 
-                // Personalisation section. Right after Memory because
-                // both are about customising Nod for this specific user.
-                // Memory is the passive side (what Nod picks up),
-                // Personalisation is the active side (what the user tells
-                // Nod to do).
+                // How Nod talks to you.
                 Section {
                     Picker(
                         "Response style",
@@ -183,7 +166,7 @@ struct SidebarView: View {
                         }
                     }
                 } header: {
-                    Text("Personalisation")
+                    Text("How Nod talks")
                 } footer: {
                     Text("Nod reads this each time you send a message. Changes take effect on the next reply.")
                 }
@@ -216,33 +199,6 @@ struct SidebarView: View {
                     Text("Appearance")
                 } footer: {
                     Text("System follows your iOS setting. Light and Dark override it.")
-                }
-
-                Section {
-                    ForEach(EnginePreference.allCases, id: \.self) { pref in
-                        engineRow(pref)
-                    }
-                } header: {
-                    Text("Listening model")
-                } footer: {
-                    Text("Nod runs the AI on your device — nothing is sent to a server. Switching keeps your conversation intact.")
-                }
-
-                // Downloads section: only relevant for MLX engines (AFM
-                // doesn't download). Shown always — conditional reveal
-                // makes the setting feel hidden.
-                Section {
-                    Toggle(isOn: Binding(
-                        get: { engineHolder.cellularAllowed },
-                        set: { engineHolder.cellularAllowed = $0 }
-                    )) {
-                        Label("Download over cellular", systemImage: "antenna.radiowaves.left.and.right")
-                    }
-                    .tint(Color("NodAccent"))
-                } header: {
-                    Text("Downloads")
-                } footer: {
-                    Text("Nod needs Wi-Fi to download an on-device model (2-3 GB). Turn this on to allow cellular data.")
                 }
 
                 Section {
@@ -297,6 +253,43 @@ struct SidebarView: View {
                     }
                 } footer: {
                     Text("Opens Mail with a prefilled message to hello@usenod.app.")
+                }
+
+                // Advanced: which model runs, and download settings. Off by
+                // default so everyday use never mentions models or GB.
+                Section {
+                    Toggle(isOn: $showAdvanced.animation()) {
+                        Label("Show advanced settings", systemImage: "slider.horizontal.3")
+                    }
+                    .tint(Color("NodAccent"))
+                } footer: {
+                    Text("Choose which AI model Nod uses and how it downloads. Most people never need this.")
+                }
+
+                if showAdvanced {
+                    Section {
+                        ForEach(EnginePreference.allCases, id: \.self) { pref in
+                            engineRow(pref)
+                        }
+                    } header: {
+                        Text("Model")
+                    } footer: {
+                        Text("Every option runs on this iPhone — nothing is sent to a server. Switching keeps your conversation.")
+                    }
+
+                    Section {
+                        Toggle(isOn: Binding(
+                            get: { engineHolder.cellularAllowed },
+                            set: { engineHolder.cellularAllowed = $0 }
+                        )) {
+                            Label("Download over cellular", systemImage: "antenna.radiowaves.left.and.right")
+                        }
+                        .tint(Color("NodAccent"))
+                    } header: {
+                        Text("Downloads")
+                    } footer: {
+                        Text("Models are 1.7–3 GB, so Nod waits for Wi-Fi unless you turn this on.")
+                    }
                 }
 
                 Section {
@@ -590,4 +583,18 @@ struct SidebarView: View {
     SidebarView(store: store, engineHolder: holder, hostColorScheme: .dark, onWillClear: {}, onCleared: {})
         .environmentObject(AppLockManager())
         .preferredColorScheme(.dark)
+}
+
+/// Simple vs advanced settings. Simple is the default: no model names,
+/// sizes or download settings. Advanced reveals the model picker and
+/// download options.
+enum SettingsMode {
+    static let showAdvancedKey = "settings.showAdvanced"
+
+    /// Used until the user flips the switch. People who already chose a
+    /// downloaded model on a phone that also has Apple Intelligence see
+    /// Advanced on, so the choice they made doesn't seem to vanish.
+    static var defaultShowAdvanced: Bool {
+        EnginePreferenceStore.current != .apple && DeviceCapability.canRunAFM
+    }
 }
