@@ -1204,30 +1204,11 @@ struct ChatView: View {
     // event, never on a clean launch. Tone: explain what happened,
     // reassure it's reversible, point them at the menu.
     private var fallbackBanner: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(crashBreaker.bannerText)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Button {
-                crashBreaker.dismissBanner()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(6)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        NoticeCard(
+            tone: .info,
+            title: crashBreaker.bannerText,
+            onDismiss: { crashBreaker.dismissBanner() }
+        )
     }
 
     // The readiness-bar UI lives in the `MLXReadinessBar` struct at the
@@ -1704,7 +1685,6 @@ struct MessageBubble: View {
     var onRegenerate: (() -> Void)? = nil
 
     @State private var nodTriggerForThisBubble: Int = 0
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack {
@@ -1713,7 +1693,6 @@ struct MessageBubble: View {
                 bubble(color: Color(.tertiarySystemFill))
             } else if message.role == .assistant && message.isError {
                 errorRow
-                Spacer(minLength: 40)
             } else if message.role == .assistant {
                 // Bubble goes directly into the HStack — NOT wrapped in
                 // a VStack. An earlier version wrapped it in a
@@ -1758,37 +1737,17 @@ struct MessageBubble: View {
         }
     }
 
-    /// A failed reply. Styled as a notice from the app, not as Nod
-    /// speaking, with Try again on the latest one (the only reply that
-    /// can be regenerated).
+    /// A failed reply, shown as a notice from the app rather than as
+    /// Nod speaking, with Try again on the latest one (the only reply
+    /// that can be regenerated).
     private var errorRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.red)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(message.text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if isLast, let onRegenerate {
-                    Button("Try again", action: onRegenerate)
-                        .font(.subheadline.weight(.semibold))
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .tint(Color("NodAccent"))
-                        .foregroundStyle(.black)
-                }
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                // Stronger in dark mode, where 8% red disappears on black.
-                .fill(Color.red.opacity(colorScheme == .dark ? 0.18 : 0.08))
+        let canRetry = isLast && onRegenerate != nil
+        return NoticeCard(
+            tone: .error,
+            title: message.text,
+            actionTitle: canRetry ? "Try again" : nil,
+            action: canRetry ? onRegenerate : nil
         )
-        .accessibilityElement(children: .contain)
         .accessibilityLabel("Nod couldn't reply: \(message.text)")
     }
 
@@ -1954,19 +1913,13 @@ private struct MLXReadinessBar: View {
             }
 
         case .failed(let msg):
-            card {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(failureTitle(msg: msg))
-                        .font(.subheadline.weight(.medium))
-                    Text(failureBody(msg: msg))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Try again", action: onRetry)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Color("NodAccent"))
-                        .padding(.top, 2)
-                }
-            }
+            NoticeCard(
+                tone: .error,
+                title: failureTitle(msg: msg),
+                message: failureBody(msg: msg),
+                actionTitle: "Try again",
+                action: onRetry
+            )
         }
     }
 
@@ -2136,7 +2089,7 @@ private struct MLXReadinessBar: View {
 
     private func failureTitle(msg: String) -> String {
         if msg.contains("downloadFailedNoNetwork") {
-            return "Can't reach the download server"
+            return "Couldn't download"
         }
         if msg.contains("downloadFailedDiskFull") {
             return "Not enough space on this iPhone"
@@ -2147,12 +2100,12 @@ private struct MLXReadinessBar: View {
     private func failureBody(msg: String) -> String {
         let sizeGB = String(format: "%.1f", Double(totalBytes) / 1_000_000_000)
         if msg.contains("downloadFailedNoNetwork") {
-            return "Connect to Wi-Fi and try again. The download is ~\(sizeGB) GB."
+            return "Check your connection. The download is about \(sizeGB) GB."
         }
         if msg.contains("downloadFailedDiskFull") {
-            return "Free up ~\(sizeGB) GB on your device, then try again."
+            return "Free up about \(sizeGB) GB on this iPhone."
         }
-        return "Something went wrong getting Nod ready. Try again."
+        return "Something went wrong getting Nod ready. If it keeps happening, restart Nod or pick another model in Settings."
     }
 
     // MARK: - Formatters
@@ -2496,35 +2449,15 @@ private struct AFMUnavailableBanner: View {
     let onDownload: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Apple Intelligence isn't available on this iPhone.")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(onDownload == nil
-                     ? "Your conversation is safe, but this iPhone can't run Nod's AI."
-                     : "Your conversation is safe. Download Nod's own model to keep talking.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let onDownload {
-                    Button("Download", action: onDownload)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color("NodAccent"))
-                        .padding(.top, 2)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityElement(children: .contain)
+        NoticeCard(
+            tone: .info,
+            title: "Apple Intelligence isn't available on this iPhone.",
+            message: onDownload == nil
+                ? "Your conversation is safe, but this iPhone can't run Nod's AI."
+                : "Your conversation is safe. Download Nod's own model to keep talking.",
+            actionTitle: onDownload == nil ? nil : "Download",
+            action: onDownload
+        )
     }
 }
 

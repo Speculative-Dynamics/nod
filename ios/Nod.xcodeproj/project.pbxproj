@@ -17,6 +17,7 @@
 		1BFB0FC40BD0B06FBCF4A95F /* 07-private.png in Resources */ = {isa = PBXBuildFile; fileRef = 4A415C63323F3D191AD777BF /* 07-private.png */; };
 		1CE880C6E1F4502E9F6DAD52 /* 08-proof.png in Resources */ = {isa = PBXBuildFile; fileRef = 50FE630245A938BF1AD45FE1 /* 08-proof.png */; };
 		1FBC0CECC5A173C3B38AFE79 /* DictationRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222263F4E36038A02EDE3442 /* DictationRecognizer.swift */; };
+		21B41FA2296717C9126C05B5 /* NoticeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65C76F0B38002E56E2575CE /* NoticeCard.swift */; };
 		2402546061ADBA7D14B734A8 /* LaunchCrashBreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760F42DE20FF786A995C7621 /* LaunchCrashBreaker.swift */; };
 		241853CE60F3B0FBE13B2C1D /* 05-voice.png in Resources */ = {isa = PBXBuildFile; fileRef = E65E0E802373623C0B7E43AA /* 05-voice.png */; };
 		2484EA93E6A4F4DC7305E7BE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = FD58A9CC136146214D82403C /* GRDB */; };
@@ -121,6 +122,7 @@
 		DA52E735F7C406D2FF33B7CE /* ReplyGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyGuard.swift; sourceTree = "<group>"; };
 		DE154F10E7B433747E3E6104 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		E4C6540C9C1E33F6B053CCD4 /* MLXR2BackgroundSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXR2BackgroundSession.swift; sourceTree = "<group>"; };
+		E65C76F0B38002E56E2575CE /* NoticeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeCard.swift; sourceTree = "<group>"; };
 		E65E0E802373623C0B7E43AA /* 05-voice.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "05-voice.png"; sourceTree = "<group>"; };
 		ED36CC1C656ED723BB5222FE /* EngineHolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineHolder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -151,6 +153,7 @@
 				B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */,
 				83E9E17AF4055789FC092B5E /* NodAnimation.swift */,
 				9A447DA180FB51E565544074 /* NodMascot.swift */,
+				E65C76F0B38002E56E2575CE /* NoticeCard.swift */,
 				0517337BBD8316AD61402BEF /* SidebarView.swift */,
 				C3F8BEB5AAF0BA2824DE66A5 /* SplashView.swift */,
 			);
@@ -418,6 +421,7 @@
 				89331638D0D309292F560723 /* NodAnimation.swift in Sources */,
 				26FB0074AE17C845461190DB /* NodApp.swift in Sources */,
 				C6FD442B131513E3ADAB614C /* NodMascot.swift in Sources */,
+				21B41FA2296717C9126C05B5 /* NoticeCard.swift in Sources */,
 				1A14FDE04F7979C32033CA96 /* PastMessageRecall.swift in Sources */,
 				0CC71701F46352365F79EEA8 /* PersonalizationStore.swift in Sources */,
 				41A44C64F00833E43E373F89 /* ReplyGuard.swift in Sources */,
