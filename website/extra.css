@@ -180,11 +180,10 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     z-index: -1;
     pointer-events: none;
     background:
-        radial-gradient(ellipse 90% 60% at 50% 20%, rgba(255, 120, 50, 0.08), transparent 65%),
-        radial-gradient(ellipse 70% 80% at 80% 85%, rgba(255, 90, 30, 0.06), transparent 70%),
         url("/assets/hero/desktop.png") center center / cover no-repeat;
-    opacity: 0.18;
-    filter: blur(80px) saturate(1.4) brightness(0.55);
+    /* Desaturated: a colour wash of the sunset read as brown on black. */
+    opacity: 0.14;
+    filter: blur(80px) saturate(0) brightness(0.55);
     /* filter is expensive — keep it in its own layer */
     transform: translateZ(0);
     will-change: opacity;
@@ -192,8 +191,6 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 @media (max-aspect-ratio: 1/1) {
     .site-atmosphere {
         background:
-            radial-gradient(ellipse 90% 60% at 50% 20%, rgba(255, 120, 50, 0.08), transparent 65%),
-            radial-gradient(ellipse 70% 80% at 80% 85%, rgba(255, 90, 30, 0.06), transparent 70%),
             url("/assets/hero/mobile.png") center center / cover no-repeat;
     }
 }
@@ -682,7 +679,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     line-height: 0.96;
     letter-spacing: -0.02em;
     margin: 0 0 1.75rem;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     /* Balance lines evenly — avoids orphans like "you," getting
        stranded on its own line when the previous line was too long
        for the copy to fit cleanly. */
@@ -697,11 +694,11 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 .cinema__body {
     font-size: 1.0625rem;
     line-height: 1.65;
-    color: var(--ink-soft, #cfc7bb);
+    color: var(--ink-soft, #d1d1d6);
     max-width: 46ch;
 }
 .cinema__body p + p { margin-top: 1rem; }
-.cinema__body strong { color: var(--ink, #f5f0e8); font-weight: 500; }
+.cinema__body strong { color: var(--ink, #f2f2f7); font-weight: 500; }
 .cinema__body em {
     font-style: italic;
     font-variation-settings: "opsz" 144;
@@ -710,7 +707,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 .cinema__body code {
     font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
     font-size: 0.94em;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     background: rgba(255, 255, 255, 0.06);
     padding: 0.1em 0.4em;
     border-radius: 4px;
@@ -724,7 +721,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-style: italic;
     font-size: 1.15rem;
     line-height: 1.5;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
 }
 .cinema__pull cite {
     display: block;
@@ -734,7 +731,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-size: 0.7rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
 }
 
 
@@ -749,7 +746,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     min-width: 240px;
     max-width: 340px;
     padding: 0.9rem 1rem 0.9rem 0.9rem;
-    background: rgba(28, 22, 18, 0.88);
+    background: rgba(28, 28, 30, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -779,12 +776,12 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-size: 0.62rem;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     margin-bottom: 0.15rem;
 }
 .cinema__chip-value {
     font-size: 0.82rem;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     font-weight: 500;
 }
 
@@ -797,7 +794,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     padding: 1.1rem 1.3rem;
     /* Opaque-ish bg so chapter cross-fades don't let the phone's text
        bleed through this prop. */
-    background: rgba(18, 13, 9, 0.96);
+    background: rgba(18, 18, 20, 0.96);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -816,7 +813,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 .cinema__memory-body {
     font-size: 0.92rem;
     line-height: 1.5;
-    color: var(--ink-soft, #cfc7bb);
+    color: var(--ink-soft, #d1d1d6);
     font-style: italic;
 }
 
@@ -831,7 +828,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     align-items: center;
     justify-content: space-between;
     padding: 0 1rem;
-    background: rgba(28, 22, 18, 0.85);
+    background: rgba(28, 28, 30, 0.85);
     backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 999px;
@@ -947,7 +944,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     align-items: center;
     gap: 0.9rem;
     padding: 0.85rem 1.15rem;
-    background: rgba(28, 22, 18, 0.88);
+    background: rgba(28, 28, 30, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -967,12 +964,12 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-size: 0.62rem;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     margin-bottom: 0.15rem;
 }
 .cinema__offline-value {
     font-size: 0.82rem;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -1036,7 +1033,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     align-items: center;
     gap: 0.9rem;
     padding: 0.85rem 1.15rem 0.85rem 0.95rem;
-    background: rgba(28, 22, 18, 0.88);
+    background: rgba(28, 28, 30, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -1078,12 +1075,12 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-size: 0.62rem;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     margin-bottom: 0.15rem;
 }
 .cinema__faceid-value {
     font-size: 0.82rem;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -1117,8 +1114,8 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     max-width: 900px;
     max-height: 900px;
     background: radial-gradient(circle,
-        rgba(255, 120, 50, 0.18) 0%,
-        rgba(255, 90, 30, 0.06) 40%,
+        rgba(255, 255, 255, 0.06) 0%,
+        rgba(255, 255, 255, 0.02) 40%,
         transparent 70%);
     filter: blur(60px);
     z-index: -1;
@@ -1140,7 +1137,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     line-height: 0.96;
     letter-spacing: -0.02em;
     margin: 0 0 2rem;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
 }
 .proof__headline em {
     font-style: italic;
@@ -1150,7 +1147,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 .proof__lede {
     font-size: 1.125rem;
     line-height: 1.6;
-    color: var(--ink-soft, #cfc7bb);
+    color: var(--ink-soft, #d1d1d6);
     max-width: 52ch;
     margin: 0 auto 4rem;
 }
@@ -1176,7 +1173,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-weight: 300;
     font-size: clamp(4rem, 9vw, 7rem);
     line-height: 1;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     letter-spacing: -0.04em;
 }
 .proof__stat:nth-child(-n+3) .proof__stat-num {
@@ -1189,7 +1186,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-size: 0.68rem;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     margin-top: 0.75rem;
 }
 
@@ -1228,7 +1225,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     margin-right: auto;
     font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
     font-size: 0.72rem;
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     letter-spacing: 0.1em;
 }
 .proof__spec-list {
@@ -1255,17 +1252,17 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-family: "Inter", -apple-system, sans-serif;
     font-size: 0.95rem;
     line-height: 1.45;
-    color: var(--ink-soft, #cfc7bb);
+    color: var(--ink-soft, #d1d1d6);
 }
 .proof__spec-row dd strong {
     display: block;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     font-weight: 500;
     font-size: 1rem;
     margin-bottom: 0.15rem;
 }
 .proof__spec-row dd span {
-    color: var(--ink-mute, #8a8378);
+    color: var(--ink-mute, #8e8e93);
     font-size: 0.88rem;
 }
 
@@ -1280,7 +1277,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     font-weight: 300;
     font-size: clamp(1.5rem, 2.8vw, 2.25rem);
     line-height: 1.35;
-    color: var(--ink, #f5f0e8);
+    color: var(--ink, #f2f2f7);
     text-align: center;
     letter-spacing: -0.01em;
 }
