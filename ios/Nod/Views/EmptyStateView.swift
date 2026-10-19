@@ -40,10 +40,17 @@ struct EmptyStateView: View {
             .accessibilityLabel("\(greeting.headline). \(greeting.subline)")
 
             // Why Nod is different, said once and quietly.
-            Label("Everything you say stays on this iPhone.", systemImage: "lock.fill")
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 8)
+            // Secondary, not tertiary: it's the app's main promise and
+            // tertiary grey fails contrast.
+            Label {
+                Text("Everything you say stays on this iPhone.")
+                    .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(Color("NodAccent"))
+            }
+            .font(.footnote)
+            .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { greeting = Greeting.forNow() }
