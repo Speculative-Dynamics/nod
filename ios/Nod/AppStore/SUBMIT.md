@@ -95,12 +95,15 @@ Drag all 8 PNGs from `ios/Nod/AppStore/screenshots/` into the upload area, in th
 
 1. `01-listening.png`
 2. `02-offline.png`
-3. `03-engines.png`
-4. `04-memory.png`
-5. `05-voice.png`
-6. `06-personal.png`
+3. `03-memory.png`
+4. `04-voice.png`
+5. `05-your-way.png`
+6. `06-light-dark.png`
 7. `07-private.png`
-8. `08-proof.png`
+8. `08-privacy.png`
+
+To regenerate them (new UI, new copy), see
+[`ios/scripts/listing-images/`](../../scripts/listing-images/).
 
 App Store Connect auto-uses 6.7" screenshots for all newer iPhone sizes. You don't need to upload separate 6.5" or 5.5" sets unless you want to.
 

@@ -190,6 +190,6 @@ KEY POINTS FOR REVIEW:
 - [x] Support page created at `website/support/`
 - [x] Mental-health / wellness language stripped from listing
 - [x] App Group `group.app.usenod.nod` registered in developer portal
-- [ ] All 8 screenshots uploaded at 1290×2796
+- [ ] All 8 screenshots uploaded at 1290×2796 (regenerate with `ios/scripts/listing-images/`)
 - [ ] Listing copy entered in App Store Connect (use sections above)
 - [ ] Re-generate Xcode project after `project.yml` change: `cd ios && xcodegen generate`

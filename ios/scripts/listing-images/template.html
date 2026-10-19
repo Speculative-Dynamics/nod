@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nod App Store image</title>
+<!-- Same type and palette as usenod.app, so the listing and the site
+     read as one brand. One slide per #hash (1–8); render.swift loads
+     each and snapshots it at exactly 1290×2796. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0e0c0a;
+    --ink: #f5efe6;
+    --ink-soft: #d8cdbc;
+    --orange: #d97a3a;
+    --orange-soft: #f0a574;
+    --bezel: #1b1714;
+    --font-serif: "Fraunces", "New York", Georgia, serif;
+    --font-sans: "Inter", -apple-system, "Helvetica Neue", sans-serif;
+  }
+  html, body { margin: 0; width: 1290px; height: 2796px; overflow: hidden; background: var(--bg); }
+  body {
+    position: relative;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    background:
+      radial-gradient(1100px 900px at 50% 62%, rgba(217,122,58,0.16), rgba(217,122,58,0) 70%),
+      radial-gradient(900px 600px at 50% 0%, rgba(240,165,116,0.06), rgba(240,165,116,0) 70%),
+      var(--bg);
+  }
+  .slide { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; }
+  .slide.on { display: flex; }
+
+  .eyebrow {
+    margin-top: 190px;
+    font-size: 34px; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--orange);
+  }
+  h1 {
+    margin: 36px 0 0;
+    font-family: var(--font-serif); font-weight: 340;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 132px; line-height: 1.02; letter-spacing: -0.02em;
+    text-align: center;
+  }
+  h1 em { font-style: italic; color: var(--orange); font-weight: 340; }
+
+  /* Phone: a simple bezel around the real Simulator screenshot. */
+  .phone {
+    position: absolute; left: 50%; top: 640px; transform: translateX(-50%);
+    width: 900px; padding: 22px; border-radius: 132px;
+    background: var(--bezel);
+    box-shadow: 0 0 0 3px rgba(245,239,230,0.07), 0 60px 160px rgba(0,0,0,0.6), 0 0 180px rgba(217,122,58,0.14);
+  }
+  .phone img { display: block; width: 100%; border-radius: 112px; }
+
+  /* Two phones (light + dark) for the appearance slide. */
+  .pair { position: absolute; left: 0; right: 0; top: 640px; height: 2156px; }
+  .pair .phone { width: 760px; padding: 20px; border-radius: 112px; }
+  .pair .phone img { border-radius: 94px; }
+  .pair .phone.light { left: 32%; top: 190px; transform: translateX(-50%) rotate(-5deg); z-index: 1; }
+  .pair .phone.dark { left: 68%; top: 30px; transform: translateX(-50%) rotate(5deg); z-index: 2; }
+
+  /* Floating pill, as on the website's offline chapter. */
+  .pill {
+    position: absolute; left: 60px; top: 1330px; z-index: 3;
+    display: flex; align-items: center; gap: 28px;
+    padding: 30px 44px 30px 36px; border-radius: 40px;
+    background: rgba(30,25,19,0.92);
+    border: 2px solid rgba(245,239,230,0.12);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  .pill svg { width: 56px; height: 56px; color: var(--orange); flex: none; }
+  .pill small { display: block; font-size: 24px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--orange); }
+  .pill strong { display: block; margin-top: 6px; font-size: 40px; font-weight: 500; color: var(--ink); }
+
+  /* Privacy slide: plain numbers instead of a phone. */
+  .stats { margin-top: 170px; display: grid; grid-template-columns: repeat(2, 470px); gap: 40px; }
+  .stat {
+    height: 430px; border-radius: 56px;
+    background: rgba(30,25,19,0.75); border: 2px solid rgba(245,239,230,0.08);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  }
+  .stat b {
+    font-family: var(--font-serif); font-style: italic; font-weight: 300;
+    font-size: 210px; line-height: 1; color: var(--orange);
+  }
+  .stat b.small { font-size: 150px; }
+  .stat span { font-size: 36px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .note { margin-top: 110px; max-width: 980px; text-align: center; font-size: 44px; line-height: 1.5; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+
+<section class="slide" data-n="1">
+  <div class="eyebrow">Listening</div>
+  <h1>A place to<br>let it <em>out.</em></h1>
+  <div class="phone"><img src="screens/empty.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="2">
+  <div class="eyebrow">Anywhere</div>
+  <h1>Works even when<br>you're <em>offline.</em></h1>
+  <div class="pill">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+    <div><small>Connection</small><strong>No internet needed</strong></div>
+  </div>
+  <div class="phone"><img src="screens/chat.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="3">
+  <div class="eyebrow">Memory</div>
+  <h1>No need to<br><em>repeat yourself.</em></h1>
+  <div class="phone"><img src="screens/memory.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="4">
+  <div class="eyebrow">Voice</div>
+  <h1>Or just <em>talk.</em></h1>
+  <div class="phone"><img src="screens/voice.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="5">
+  <div class="eyebrow">Your way</div>
+  <h1>Talks the way<br><em>you need.</em></h1>
+  <div class="phone"><img src="screens/personalization.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="6">
+  <div class="eyebrow">Light or dark</div>
+  <h1>Warm by day,<br><em>soft at night.</em></h1>
+  <div class="pair">
+    <div class="phone light"><img src="screens/chat-light.png" alt=""></div>
+    <div class="phone dark"><img src="screens/chat.png" alt=""></div>
+  </div>
+</section>
+
+<section class="slide" data-n="7">
+  <div class="eyebrow">Private</div>
+  <h1>Only <em>you</em><br>can open it.</h1>
+  <div class="phone"><img src="screens/lock.png" alt=""></div>
+</section>
+
+<section class="slide" data-n="8">
+  <div class="eyebrow" style="margin-top: 330px">Private by design</div>
+  <h1>Your words stay<br><em>on your phone.</em></h1>
+  <div class="stats">
+    <div class="stat"><b>0</b><span>Accounts</span></div>
+    <div class="stat"><b>0</b><span>Ads</span></div>
+    <div class="stat"><b>0</b><span>Tracking</span></div>
+    <div class="stat"><b class="small">100%</b><span>On your iPhone</span></div>
+  </div>
+  <p class="note">What you write is saved on your iPhone and answered by AI that runs on your iPhone. It isn't sent to us or anyone else.</p>
+</section>
+
+<script>
+  var n = (location.hash || "#1").slice(1);
+  var s = document.querySelector('.slide[data-n="' + n + '"]');
+  if (s) s.classList.add("on");
+</script>
+</body>
+</html>
