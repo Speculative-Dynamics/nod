@@ -99,7 +99,13 @@ final class NodRealEngineTests: XCTestCase {
         sendAndWait("my manager Priya keeps messaging me late at night")
         sendAndWait("I answer every time, I don't know how not to")
         sendAndWait("I think I need to sleep more")
-        // 12 messages: the oldest batch gets a chapter note.
+        sendAndWait("the coffee machine at work broke today")
+        sendAndWait("I tried a new lunch place, it was fine")
+        sendAndWait("the train was late again this morning")
+        sendAndWait("my plants are finally growing")
+        sendAndWait("I watched half a movie and fell asleep")
+        // Apple Intelligence keeps 20 messages verbatim; the 11th user
+        // message compresses the oldest 12 into a chapter note.
         app.buttons["What Nod remembers"].tap()
         XCTAssertTrue(element(containing: "In use now").waitForExistence(timeout: 120), "a note was written")
         app.buttons["Done"].firstMatch.tap()

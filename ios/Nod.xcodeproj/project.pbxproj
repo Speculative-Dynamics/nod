@@ -59,6 +59,7 @@
 		DAB81F141638B9D53E0731CF /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = BAF077EC583BE2B34243657F /* Tokenizers */; };
 		E3DDA822B23BD5369C74E59A /* MessageDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = C327F0BBE1FD3F6B8D9BAEEC /* MessageDatabase.swift */; };
 		F5A6DE494F786A55459B30F4 /* DownloadEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 964ADD3303489CFCB3C4EF5D /* DownloadEvent.swift */; };
+		F8CAD673FEE3641292046E27 /* NodRealEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C1AAA4294367F07B97A134 /* NodRealEngineTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +111,7 @@
 		9A447DA180FB51E565544074 /* NodMascot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodMascot.swift; sourceTree = "<group>"; };
 		9C9DB671722889402A439677 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A7B129F4799D29E72530A088 /* InferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceEngine.swift; sourceTree = "<group>"; };
+		A9C1AAA4294367F07B97A134 /* NodRealEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodRealEngineTests.swift; sourceTree = "<group>"; };
 		B437A31166B7585CBBCDCE6F /* NodUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodUITests.swift; sourceTree = "<group>"; };
 		B4A37C05BFA242FCFBFC522A /* MiniNodFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniNodFace.swift; sourceTree = "<group>"; };
 		B788B735CAF004ECDD882A20 /* prompts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = prompts; path = ../prompts; sourceTree = SOURCE_ROOT; };
@@ -271,6 +273,7 @@
 		ED0F4035EE9F4CE62310DC30 /* NodUITests */ = {
 			isa = PBXGroup;
 			children = (
+				A9C1AAA4294367F07B97A134 /* NodRealEngineTests.swift */,
 				B437A31166B7585CBBCDCE6F /* NodUITests.swift */,
 			);
 			path = NodUITests;
@@ -384,6 +387,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8CAD673FEE3641292046E27 /* NodRealEngineTests.swift in Sources */,
 				B5BDD009F349096DE32E3C17 /* NodUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
