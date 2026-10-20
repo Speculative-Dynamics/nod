@@ -128,7 +128,12 @@
       // transition AND the first chapter (Listening) ramping in. Phase N =
       // crossfade from chapter N-1 to chapter N.
       const TOTAL_CHAPTERS = 7;
-      const PIN_SPAN = 8400; // px of scroll (~9.3vh) — 1200px per chapter
+      // Scroll distance per chapter, as a share of the viewport height.
+      // Short enough that a couple of wheel notches or one trackpad swipe
+      // moves to the next chapter.
+      const STEP_VH = 0.75;
+      const pinSpan = () =>
+        Math.round(window.innerHeight * STEP_VH * TOTAL_CHAPTERS);
 
       // Initial state
       gsap.set(heroPhoneBezel, { opacity: 0 });
@@ -137,7 +142,7 @@
       gsap.set(heroProps, { opacity: 0 });
 
       // Compute the clip-path inset that matches the phone-stage rect.
-      // Recomputed on resize so the morph always lands accurately.
+      // Recomputed on refresh so the morph always lands accurately.
       const computeTargets = () => {
         const rect = heroPhoneStage.getBoundingClientRect();
         const hostRect = heroStage.getBoundingClientRect();
@@ -153,33 +158,81 @@
       };
 
       let target = computeTargets();
-      window.addEventListener("resize", () => {
-        target = computeTargets();
-      });
 
       // Reset clip-path to "no clip" initially
       heroVideoWrap.style.clipPath = "inset(0px 0px 0px 0px round 0px)";
 
-      // Tent weight function — returns 0..1 based on how close `cp` is to
-      // `peak`. Used for cross-fading chapters, screens, and props.
-      const tentWeight = (cp, peak) => Math.max(0, 1 - Math.abs(cp - peak));
+      // Plateau weight: 1 while `cp` is within `hold` of `peak`, then
+      // fades to 0 over `fade`. The hold means each chapter sits still and
+      // fully visible across a band of scroll, so landing a little early
+      // or late still shows a clean state instead of a half cross-fade.
+      // Text fades out completely before the next chapter fades in
+      // (hold + fade = 0.5); screens and props overlap so the phone
+      // never flashes empty.
+      const plateau = (cp, peak, hold, fade) => {
+        const d = Math.abs(cp - peak);
+        if (d <= hold) return 1;
+        return Math.max(0, 1 - (d - hold) / fade);
+      };
+      const textWeight = (cp, peak) => plateau(cp, peak, 0.22, 0.28);
+      const screenWeight = (cp, peak) => plateau(cp, peak, 0.22, 0.56);
 
-      ScrollTrigger.create({
+      // Chapter dots: show where you are and jump straight to any chapter.
+      // Built here so they only exist where the pinned stage runs.
+      const chapterNames = Array.from(heroChapters).map((chapter) => {
+        const eyebrow = chapter.querySelector(".cinema__eyebrow");
+        const text = eyebrow ? eyebrow.textContent : "";
+        return text.split("·").pop().trim();
+      });
+      const dotsNav = document.createElement("nav");
+      dotsNav.className = "hero__dots";
+      dotsNav.setAttribute("aria-label", "Chapters");
+      const dots = chapterNames.map((name, i) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "hero__dot";
+        dot.setAttribute("aria-label", name || `Chapter ${i + 1}`);
+        dot.title = name;
+        dot.addEventListener("click", () => goToChapter(i));
+        dotsNav.appendChild(dot);
+        return dot;
+      });
+      heroStage.appendChild(dotsNav);
+
+      let activeDot = -1;
+      const setActiveDot = (i) => {
+        if (i === activeDot) return;
+        activeDot = i;
+        dots.forEach((dot, j) => {
+          dot.classList.toggle("is-active", j === i);
+          if (j === i) dot.setAttribute("aria-current", "step");
+          else dot.removeAttribute("aria-current");
+        });
+      };
+
+      const stageTrigger = ScrollTrigger.create({
         trigger: heroStage,
         start: "top top",
-        end: `+=${PIN_SPAN}`,
+        end: () => `+=${pinSpan()}`,
         pin: true,
         pinSpacing: true,
-        scrub: 1,
-        // Snap to each chapter peak + the initial hero state. 8 snap
-        // points total (p = 0, 1/7, 2/7, ..., 1). After the user stops
-        // scrolling, the stage gently lands on the nearest peak so each
-        // chapter is held fully visible, not floated past.
+        invalidateOnRefresh: true,
+        onRefresh: () => {
+          target = computeTargets();
+        },
+        // Snap to the hero state and each chapter peak (p = 0, 1/7, ...,
+        // 1). Directional, so a small nudge moves on to the next chapter
+        // rather than sliding back to the one you were leaving.
         snap: {
-          snapTo: 1 / TOTAL_CHAPTERS,
-          duration: { min: 0.25, max: 0.6 },
-          ease: "power2.inOut",
-          delay: 0.05,
+          snapTo: Array.from(
+            { length: TOTAL_CHAPTERS + 1 },
+            (_, i) => i / TOTAL_CHAPTERS
+          ),
+          directional: true,
+          duration: { min: 0.2, max: 0.45 },
+          ease: "power2.out",
+          delay: 0.12,
+          inertia: false,
         },
         onUpdate: (self) => {
           const p = self.progress;
@@ -208,6 +261,9 @@
           const introOut = Math.min(1, phase0 * 2);
           heroIntro.style.opacity = String(1 - introOut);
           heroIntro.style.transform = `translateY(${-40 * introOut}px)`;
+          // Keep the faded-out intro (and its App Store button) from
+          // catching clicks meant for the chapters behind it.
+          heroIntro.style.pointerEvents = introOut > 0.5 ? "none" : "";
 
           if (heroScrollHint) {
             heroScrollHint.style.opacity = String(Math.max(0, 1 - phase0 * 3));
@@ -222,7 +278,7 @@
           //    as "video → empty screen" cleanly, not a half-visible cross-fade.
           heroScreens.forEach((screen, i) => {
             const peak = i + 1;
-            let w = tentWeight(cp, peak);
+            let w = screenWeight(cp, peak);
             if (i === 0 && phase0 < 0.8) {
               w = 0; // hidden during the morph
             } else if (i === 0 && phase0 < 1) {
@@ -231,13 +287,14 @@
             screen.style.opacity = String(w);
           });
 
-          // 6) Chapter text: peaks at cp = (i + 1), cross-fades across
+          // 6) Chapter text: holds around cp = (i + 1), hands off cleanly
           heroChapters.forEach((chapter, i) => {
             const peak = i + 1;
-            const w = tentWeight(cp, peak);
+            const w = textWeight(cp, peak);
             chapter.style.opacity = String(w);
-            // Subtle vertical drift so inactive chapters don't feel frozen
-            const drift = (cp - peak) * 16; // px
+            // Subtle vertical drift while fading, still at the hold
+            const d = cp - peak;
+            const drift = Math.sign(d) * Math.max(0, Math.abs(d) - 0.22) * 40;
             chapter.style.transform = `translateY(calc(-50% + ${drift}px))`;
           });
 
@@ -247,11 +304,45 @@
           heroProps.forEach((prop) => {
             const chapterIdx = Number(prop.dataset.chapter);
             const peak = chapterIdx + 1;
-            const w = tentWeight(cp, peak);
+            const w = textWeight(cp, peak);
             prop.style.opacity = String(w);
           });
+
+          // 8) Dots: appear once the phone has settled, track the chapter
+          dotsNav.classList.toggle("is-visible", cp > 0.6 && p < 1);
+          setActiveDot(
+            Math.min(TOTAL_CHAPTERS - 1, Math.max(0, Math.round(cp) - 1))
+          );
         },
       });
+
+      // Scroll position where chapter i is fully shown.
+      const chapterScrollY = (i) =>
+        stageTrigger.start +
+        ((i + 1) / TOTAL_CHAPTERS) * (stageTrigger.end - stageTrigger.start);
+
+      function goToChapter(i, behavior = "smooth") {
+        window.scrollTo({ top: chapterScrollY(i), behavior });
+      }
+
+      // Deep links (#memory, #voice, ...) land on that chapter's peak
+      // instead of wherever its stacked element happens to sit.
+      const chapterIndexForHash = () => {
+        const id = decodeURIComponent(window.location.hash.slice(1));
+        if (!id) return -1;
+        return Array.from(heroChapters).findIndex((c) => c.id === id);
+      };
+      const jumpToHash = () => {
+        const i = chapterIndexForHash();
+        if (i >= 0) goToChapter(i, "auto");
+      };
+      window.addEventListener("hashchange", jumpToHash);
+      const onLoaded = () => {
+        ScrollTrigger.refresh();
+        jumpToHash();
+      };
+      if (document.readyState === "complete") onLoaded();
+      else window.addEventListener("load", onLoaded, { once: true });
     } else if (heroStage) {
       // Mobile / short viewport: skip the pin transition entirely.
       // The mobile layout is driven by CSS — each chapter renders

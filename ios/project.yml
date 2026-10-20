@@ -103,7 +103,7 @@ targets:
         ENABLE_DEBUG_DYLIB: NO
         # Marketing version: shown to users in App Store + Settings.
         # Bump on every public release. 1.0.0 shipped to the App Store on
-        # 2026-04-27 (apps.apple.com/in/app/just-nod/id6762388689).
+        # 2026-04-27 (apps.apple.com/app/just-nod/id6762388689).
         # Bump to 1.0.1 (or higher) ONLY when shipping a user-visible
         # change — keep this in sync with what's actually live.
         MARKETING_VERSION: "1.0.0"

@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://usenod.app"><strong>usenod.app</strong></a> &nbsp;·&nbsp;
-  <a href="https://apps.apple.com/in/app/just-nod/id6762388689"><strong>App Store</strong></a> &nbsp;·&nbsp;
+  <a href="https://apps.apple.com/app/just-nod/id6762388689"><strong>App Store</strong></a> &nbsp;·&nbsp;
   <a href="LICENSE">MIT License</a>
 </p>
 
@@ -102,7 +102,7 @@ switch to an open-weights engine (Qwen 3.5 via MLX) in settings,
 Nod downloads the selected model once (1.75–3 GB, Wi-Fi only by default).
 Otherwise, nothing is downloaded; nothing leaves the device.
 
-Available on the App Store as **[Just Nod](https://apps.apple.com/in/app/just-nod/id6762388689)**.
+Available on the App Store as **[Just Nod](https://apps.apple.com/app/just-nod/id6762388689)**.
 
 ## Repository layout
 
