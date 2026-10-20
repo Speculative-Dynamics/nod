@@ -10,7 +10,8 @@ before anyone else does.
 
 **Please do not open a public GitHub issue for security problems.**
 
-Email [security@usenod.app](mailto:security@usenod.app) with:
+Email [hello@usenod.app](mailto:hello@usenod.app) with the subject
+"Security" and:
 
 - A short description of the issue.
 - Steps to reproduce, or a proof-of-concept.
