@@ -11,6 +11,13 @@ per TestFlight upload.
 
 ## [Unreleased]
 
+## [2.0.0] — Build 23 — 2026-10-20
+
+### A softer look
+- **New design, light and dark.** Rounded type, soft surfaces and one shared layout for every notice, across chat, settings, memory, onboarding, the splash and the Face ID lock screen. Dark mode uses true black and neutral grays.
+- **Failed replies** show as a clear error row with Try again, instead of a reply bubble. Start fresh and Forget are red, and Start fresh says how much it will delete.
+- **Large text** works throughout: buttons scale, onboarding keeps its main action on screen, and notices wrap instead of clipping.
+
 ### Reply quality
 - **Apple Intelligence conversations rebuilt per turn.** Each reply now starts a fresh session from the stored conversation, with earlier messages as real chat turns and trimmed to fit the model's context window. Fixes long chats eventually failing, the model losing the thread when remembered people changed, and replies after Start fresh or regenerate seeing stale turns.
 - **Real streaming on Apple Intelligence.** Replies appear as they're written, and Stop actually stops generation. The response-length setting now applies to Apple Intelligence too.
@@ -43,7 +50,21 @@ per TestFlight upload.
 - **Fixed: summaries inventing details.** The old summary prompt's example (a partner "J", a job search, a fintech interview) leaked into real users' summaries. Existing summaries become your first chapter note; old entity data is deleted from disk.
 - Measured on the new memory evals: 7/7 recall cases (corrections, paraphrases, small details, not volunteering) at ~24 model calls per 22-message conversation, versus ~46 before.
 
+### Fixes
+- Voice input no longer cuts off after the first phrase, and a denied microphone shows a message with Open Settings instead of a button that does nothing.
+- With Require Face ID on, the App Switcher no longer shows your conversation.
+- Stopped and failed replies keep their tags after a relaunch, and failed replies are no longer sent back to the model.
+- Start fresh waits for a reply in progress to stop, so nothing lands in the new conversation.
+- Forgetting a memory note takes effect straight away, not after a relaunch.
+- "Use cellular this time" holds for the whole download.
+- A quick close or iOS ending Nod in the background is no longer mistaken for a crash that switches your model.
+- Users with history on iPhones without Apple Intelligence see their chat, not the setup screen.
+- The "Anything else" note follows the iCloud backup setting instead of always being backed up.
+
 ### Engineering
+- End-to-end UI tests (`ios/NodUITests/`, 40 tests) drive the real app with a scripted engine and debug launch arguments for hard-to-reach states; real-engine tests run on an iPhone. See `ios/TESTING.md`.
+- New App Store listing images and a generator (`ios/scripts/listing-images/`).
+- CI builds with Xcode 27 and installs the Metal Toolchain.
 - `ios/evals/memory/` and `--suite memory`: recall, past-message search and grounding cases.
 - `ios/evals/`: 33 scripted conversations and a Mac runner (`ios/evals/runner/run.sh`) that compiles the app's shared listening code and reports flagged replies.
 - The app now launches in the iOS Simulator (MLX setup is skipped there).

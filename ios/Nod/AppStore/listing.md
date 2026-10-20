@@ -161,6 +161,26 @@ Result: **4+** — broadest possible audience.
 
 ---
 
+## What's New in This Version (4,000 char max)
+
+Version 2.0.0 (build 23).
+
+```
+A fresh look, a better memory, and calmer replies.
+
+• New design: softer and easier on the eyes, in light and dark.
+• Remembers what matters: Nod looks back through your own earlier words to recall names and details, and keeps short notes you can read or forget in What Nod remembers.
+• Better replies: more natural, fewer repeated questions, and they appear as they're written. Stop really stops.
+• Your way: choose how long replies are, and whether Nod listens, reflects back or offers perspective.
+• Simpler setup: on iPhones without Apple Intelligence, one tap gets Nod ready, with a smaller, better download.
+• If something you write sounds like you might be in danger, Nod shows a free local helpline.
+• Lots of fixes: voice input no longer cuts off, Face ID now hides your chat in the App Switcher, and more.
+
+Still private. Everything stays on your iPhone.
+```
+
+---
+
 ## App Review Information (notes to Apple's reviewer)
 
 ```
@@ -186,7 +206,7 @@ KEY POINTS FOR REVIEW:
 ## Final pre-submission checklist
 
 - [x] App Store category set in Info.plist (Productivity)
-- [x] Version bumped to 1.0.0 (build 22) in `ios/project.yml`
+- [x] Version bumped to 2.0.0 (build 23) in `ios/project.yml`
 - [x] Support page created at `website/support/`
 - [x] Mental-health / wellness language stripped from listing
 - [x] App Group `group.app.usenod.nod` registered in developer portal
