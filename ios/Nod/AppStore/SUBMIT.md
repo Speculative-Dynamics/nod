@@ -111,6 +111,17 @@ To regenerate them (new UI, new copy), see
 
 Sizes App Store Connect doesn't get are scaled from the ones you upload.
 
+### Header and search results (iOS 27 App Store)
+
+From `ios/Nod/AppStore/header/` (PNG only; JPEG is rejected with
+"File has an invalid extension"):
+
+- **Product page header:** `header-3840x1646.png`
+- **Search results:** `search-1920x1280.png`
+- **Or one image for both:** `header-search-5244x2950.png`
+
+Check the framing in App Store Connect's preview before submitting.
+
 ### Promotional Text (170 char)
 
 ```

@@ -17,6 +17,13 @@ swift ios/scripts/listing-images/render.swift ios/Nod/AppStore/screenshots
 The template is laid out 1290 CSS px wide; other sizes get a page tall
 enough for their aspect ratio and are scaled to fit.
 
+## Header and search results images
+
+`header.swift` makes the product page header (3840×1646, 21:9) and
+search results (1920×1280, 3:2) images in `ios/Nod/AppStore/header/`
+from the hero painting. App Store Connect takes only PNG for these.
+The exact commands are at the top of the script.
+
 Output is opaque RGB PNG (App Store Connect rejects images with an alpha
 channel). Each slide is `template.html#N`; open the file in a browser
 with a hash to preview one.
