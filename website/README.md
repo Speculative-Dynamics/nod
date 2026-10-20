@@ -23,7 +23,7 @@ Hosting can be any static host. The current domain target is
 - Keep `sitemap.xml`, canonical links, Open Graph image URLs, and `CNAME`
   aligned to `https://usenod.app`.
 - Validate `manifest.webmanifest` and `script.js` before publishing.
-- App Store listing: <https://apps.apple.com/in/app/just-nod/id6762388689>
+- App Store listing: <https://apps.apple.com/app/just-nod/id6762388689>
   (update the link in `index.html` if the storefront URL ever changes).
 
 ## License

@@ -81,7 +81,7 @@
                     >
                     <h1>Privacy Policy</h1>
                     <p class="meta">
-                        Last updated: 19 October 2026 · Effective immediately.
+                        Last updated: 20 October 2026 · Effective immediately.
                     </p>
                 </div>
             </header>
@@ -127,89 +127,129 @@
 
                     <h3>The Nod iOS app</h3>
                     <p>
-                        Every part of the Nod experience — the text you type,
-                        the voice input you dictate, the model responses, the
-                        memory notes, the conversation history — is
-                        processed locally on your device. Conversation backup
-                        to your own iCloud account is optional and off by
-                        default. Specifically:
+                        Everything you do in Nod — what you type or say, Nod's
+                        replies, its memory notes, what you tell it about
+                        yourself, and your settings — is processed and stored
+                        on your iPhone. Specifically:
                     </p>
                     <ul>
                         <li>
-                            The <strong>default listening model</strong> is
-                            Apple's on-device LLM —
-                            <code>FoundationModels</code>, part of Apple
-                            Intelligence. It runs on the same chip that the app
-                            is installed on and does not make network requests.
-                            Your prompts never leave the phone.
+                            <strong>Replies.</strong> On iPhones with Apple
+                            Intelligence, Nod uses Apple's on-device model
+                            (<code>FoundationModels</code>). On other iPhones,
+                            or if you pick one in advanced settings, it uses an
+                            open model that runs on the phone instead: Qwen 3.5
+                            2B, or Qwen 3.5 4B on iPhones with 8&nbsp;GB of
+                            memory. Your messages are never sent to a server to
+                            generate a reply.
                         </li>
                         <li>
-                            On iPhones without Apple Intelligence, or if you
-                            choose one in advanced settings, Nod uses an
-                            open-weights model instead — Qwen 3.5 4B or Qwen 3.5
-                            2B, served via MLX Swift. These also run on-device.
-                            Using one triggers a one-time weights download (see
-                            below); after that, inference stays on the phone.
+                            <strong>Voice input.</strong> When you tap the
+                            microphone, Apple's on-device speech recognition
+                            turns your voice into text on your iPhone. Nod asks
+                            for microphone and speech recognition permission
+                            the first time. Audio is not stored or sent to us.
                         </li>
                         <li>
-                            The <strong>memory</strong> feature uses the
-                            on-device model to write short notes about earlier
-                            stretches of your conversation, and searches your
-                            own earlier messages on the device to recall
-                            details. Notes are stored locally and shown in the
-                            "What Nod remembers" view. You can forget individual
-                            notes or everything.
+                            <strong>Memory.</strong> Nod writes short notes
+                            about earlier parts of your conversation and looks
+                            back through your own earlier messages on the
+                            device to recall details. Notes are shown in
+                            <em>What Nod remembers</em>, where you can forget
+                            any of them.
                         </li>
                         <li>
-                            Your <strong>conversation history</strong> is stored
-                            in a local SQLite database on your device, encrypted
-                            at rest by iOS. We never see it. You can leave it
-                            local-only or opt into iCloud backup.
+                            <strong>What you tell Nod about yourself</strong>
+                            (the <em>Anything else</em> note) and your reply
+                            preferences are stored on your iPhone and read by
+                            the on-device model with each message.
                         </li>
                         <li>
-                            Tapping <strong>"Start fresh"</strong> permanently
-                            deletes your local conversation and memory notes on
-                            that device. This is irreversible.
+                            <strong>Your conversation</strong> is stored in a
+                            database on your iPhone, protected by iOS data
+                            encryption. If you turn on <em>Require Face
+                            ID</em>, Nod asks for Face ID before showing it,
+                            and hides it in the App Switcher.
+                        </li>
+                        <li>
+                            <strong>iCloud backup</strong> is off by default.
+                            If you turn on <em>Back up conversation and
+                            memory</em>, your messages, memory notes and what
+                            you've told Nod about yourself are included in
+                            your own iCloud backup, handled by Apple under your
+                            Apple Account settings. We can't access it.
+                        </li>
+                        <li>
+                            <strong>Start fresh</strong> permanently deletes
+                            your conversation and memory notes on that device.
+                            This can't be undone. Your <em>Anything else</em>
+                            note stays until you clear it. Deleting the app
+                            removes everything.
+                        </li>
+                        <li>
+                            <strong>Helplines.</strong> If something you write
+                            suggests you might be in danger, Nod shows a
+                            helpline for your region. This check happens on
+                            your iPhone; nothing is reported to anyone.
                         </li>
                     </ul>
-                    <p>
-                        The app ships with the model prompts bundled inside the
-                        binary. Nothing about your use is transmitted to
-                        Speculative Dynamics or to any third party for
-                        processing your conversation. If you enable iCloud
-                        backup, conversation data is handled by Apple's iCloud
-                        backup system under your Apple account settings.
-                    </p>
 
-                    <h3>Optional network activity</h3>
+                    <h3>When the app uses the network</h3>
                     <p>
-                        On the default Apple Intelligence engine, the app does
-                        not download anything and makes no network requests
-                        related to your conversation.
+                        Nod never sends your conversation anywhere. It only
+                        uses the network in these cases:
                     </p>
-                    <p>
-                        If Nod uses an open-weights model (Qwen 3.5 4B or 2B),
-                        on a device without Apple Intelligence or by your
-                        choice in settings, Nod downloads the selected
-                        model's weights (~2–3 GB) one time from our hosted
-                        model files on Cloudflare R2 via Apple's Background
-                        Assets framework. Downloads default to Wi-Fi only; you
-                        can opt into cellular. After the weights are on your
-                        device, the app functions fully offline. We do not
-                        receive any conversation content as part of this
-                        download.
-                    </p>
+                    <ul>
+                        <li>
+                            <strong>Downloading an AI model.</strong> If Nod
+                            uses a Qwen model, it downloads the model files
+                            (about 1.7&ndash;3&nbsp;GB) once, from our model
+                            storage on Cloudflare R2. Like any download, this
+                            shares your IP address and basic request details
+                            with Cloudflare. It contains nothing about you or
+                            your conversation. Downloads wait for Wi-Fi unless
+                            you turn on <em>Download over cellular</em>. After
+                            that, Nod works fully offline. You can delete a
+                            downloaded model in advanced settings.
+                        </li>
+                        <li>
+                            <strong>Apple's own downloads.</strong> iOS may
+                            download Apple Intelligence or speech recognition
+                            files the first time they're needed. Apple handles
+                            these under its own privacy policy.
+                        </li>
+                        <li>
+                            <strong>Things you choose to open.</strong>
+                            <em>Send feedback</em> opens your Mail app with a
+                            draft to us that includes the Nod version, iOS
+                            version and iPhone model; nothing is sent unless
+                            you send it. Helpline <em>Call</em> and
+                            <em>Text</em> buttons open your Phone or Messages
+                            app, and <em>Find a helpline</em> opens
+                            findahelpline.com in your browser.
+                        </li>
+                    </ul>
 
-                    <h3>The marketing website (usenod.app)</h3>
+                    <h3>The website (usenod.app)</h3>
                     <p>
-                        This website is served as static files. It has no forms,
-                        no login, and no analytics. Your visit is recorded only
-                        in the standard access logs of our static hosting
-                        provider (IP address, user agent, requested URL,
-                        timestamp) — used solely to ensure the site is reachable
-                        and to debug outages. These logs are not tied to any
-                        identity, are retained for no longer than 30 days, and
-                        are not shared or sold.
+                        This website is a set of static pages with no forms,
+                        no sign-in, no cookies and no analytics. Like any
+                        website, the services that deliver it see standard
+                        request details (your IP address, browser, the page
+                        requested and the time):
+                    </p>
+                    <ul>
+                        <li>our static hosting provider, which serves the pages;</li>
+                        <li>
+                            Google Fonts (fonts.googleapis.com and
+                            fonts.gstatic.com), which serves the typefaces;
+                        </li>
+                        <li>jsDelivr (cdn.jsdelivr.net), which serves the animation library.</li>
+                    </ul>
+                    <p>
+                        We use none of this to identify, profile or track you,
+                        and we don't share or sell it. Each provider handles
+                        these details under its own privacy policy.
                     </p>
 
                     <h2>What we don't do</h2>
@@ -219,8 +259,8 @@
                             We don't collect or process your message content.
                         </li>
                         <li>
-                            We don't use analytics, telemetry, or tracking
-                            pixels.
+                            We don't use analytics, telemetry, crash reporting
+                            services or tracking pixels.
                         </li>
                         <li>
                             We don't embed third-party SDKs in the app for ads,
