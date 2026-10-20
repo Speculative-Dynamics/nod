@@ -4,7 +4,7 @@ Concrete step-by-step. Everything is already prepared:
 
 - Archive: `~/Library/Developer/Xcode/Archives/2026-04-25/Nod 1.0.0 (22).xcarchive`
 - Listing copy: [`listing.md`](./listing.md)
-- Screenshots: [`screenshots/`](./screenshots/) — 8 PNGs, exact 1290×2796
+- Screenshots: [`screenshots/1206x2622/`](./screenshots/1206x2622/) (required medium slot) and [`screenshots/`](./screenshots/) (1290×2796, optional large slot), 8 PNGs each
 - Privacy / Support / Terms URLs: live on usenod.app
 
 The whole submission takes ~30–45 minutes once you sit down with it.
@@ -89,9 +89,13 @@ Left sidebar → **Pricing and Availability**:
 
 Left sidebar → under **iOS App** → **1.0 Prepare for Submission**.
 
-### Screenshots (6.7" iPhone — required)
+### Screenshots
 
-Drag all 8 PNGs from `ios/Nod/AppStore/screenshots/` into the upload area, in this order:
+App Store Connect requires the **iPhone with Dynamic Island (medium
+display)** slot (iPhone 17 Pro size, 1206×2622). Drag all 8 PNGs from
+`ios/Nod/AppStore/screenshots/1206x2622/` into that slot. Optionally add
+the 1290×2796 set from `ios/Nod/AppStore/screenshots/` to the large
+display slot. Same order for both:
 
 1. `01-listening.png`
 2. `02-offline.png`
@@ -105,7 +109,7 @@ Drag all 8 PNGs from `ios/Nod/AppStore/screenshots/` into the upload area, in th
 To regenerate them (new UI, new copy), see
 [`ios/scripts/listing-images/`](../../scripts/listing-images/).
 
-App Store Connect auto-uses 6.7" screenshots for all newer iPhone sizes. You don't need to upload separate 6.5" or 5.5" sets unless you want to.
+Sizes App Store Connect doesn't get are scaled from the ones you upload.
 
 ### Promotional Text (170 char)
 
@@ -275,7 +279,7 @@ If rejected, the rejection note will be in the **App Review** tab. Common first-
 | Build doesn't appear in Organizer | `open ~/Library/Developer/Xcode/Archives/2026-04-25/` and double-click the archive |
 | Upload fails with signing error | In Xcode preferences → Accounts → Download Manual Profiles |
 | App Store Connect can't find the build after 30 min | Check email — Apple sometimes sends "ITMS-9000" rejections directly |
-| Screenshots rejected for wrong dimensions | They're already exact 1290×2796 — should not happen |
+| Screenshots rejected for wrong dimensions ("File dimensions are invalid") | Wrong slot: the medium slot takes the 1206×2622 set, the large slot the 1290×2796 set |
 | Reviewer asks for demo account | Reply: "No account required. Open the app and type any message." |
 | Reviewer asks how to test offline | Reply: "Enable Airplane Mode before opening the app for the first time." |
 

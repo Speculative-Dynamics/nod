@@ -1,9 +1,14 @@
 // render.swift
 // Renders the App Store listing images from template.html with the
-// system WebKit (no browser install needed) at exactly 1290×2796, the
-// 6.7" iPhone size App Store Connect uses for every newer iPhone.
+// system WebKit (no browser install needed).
 //
-//   swift ios/scripts/listing-images/render.swift <output-dir>
+//   swift ios/scripts/listing-images/render.swift <output-dir> [WIDTHxHEIGHT]
+//
+// The default size is 1290×2796 (App Store Connect's large iPhone slot).
+// The required slot is now the medium one, iPhone 17 Pro size:
+// pass 1206x2622. The template is always laid out 1290 CSS px wide;
+// other sizes get a page tall enough for their aspect ratio and are
+// scaled to fit, so every size shows the same slide.
 //
 // Each slide is template.html#N. Fonts load from Google Fonts, so this
 // needs a network connection. Source screens live in ./screens (real
@@ -12,8 +17,12 @@
 import AppKit
 import WebKit
 
-let width = 1290
-let height = 2796
+let size = CommandLine.arguments.dropFirst(2).first?
+    .split(separator: "x").compactMap { Int($0) } ?? []
+let width = size.count == 2 ? size[0] : 1290      // output pixels
+let height = size.count == 2 ? size[1] : 2796
+let layoutWidth = 1290                              // template's CSS width
+let layoutHeight = Int((Double(height) * Double(layoutWidth) / Double(width)).rounded())
 let slides: [(Int, String)] = [
     (1, "01-listening"), (2, "02-offline"), (3, "03-memory"), (4, "04-voice"),
     (5, "05-your-way"), (6, "06-light-dark"), (7, "07-private"), (8, "08-privacy"),
@@ -32,9 +41,9 @@ final class Renderer: NSObject, WKNavigationDelegate {
     var current: (Int, String)?
 
     override init() {
-        let frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let frame = NSRect(x: 0, y: 0, width: layoutWidth, height: layoutHeight)
         webView = WKWebView(frame: frame, configuration: WKWebViewConfiguration())
-        window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: width, height: height),
+        window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: layoutWidth, height: layoutHeight),
                           styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
         window.contentView = webView
@@ -59,6 +68,9 @@ final class Renderer: NSObject, WKNavigationDelegate {
             _ = try? await webView.callAsyncJavaScript(
                 "await document.fonts.ready; await Promise.all([...document.images].map(i => i.decode().catch(() => {}))); return true;",
                 contentWorld: .page)
+            // Stretch the page to this size's aspect ratio.
+            _ = try? await webView.evaluateJavaScript(
+                "document.documentElement.style.height = document.body.style.height = '\(layoutHeight)px'")
             try? await Task.sleep(for: .milliseconds(400))
             await snapshot()
             next()
@@ -67,14 +79,14 @@ final class Renderer: NSObject, WKNavigationDelegate {
 
     func snapshot() async {
         let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: width, height: height)
+        config.rect = CGRect(x: 0, y: 0, width: layoutWidth, height: layoutHeight)
         config.snapshotWidth = NSNumber(value: width)
         guard let image = try? await webView.takeSnapshot(configuration: config),
               let (_, name) = current else {
             print("snapshot failed for slide \(current?.0 ?? -1)")
             return
         }
-        // Draw into an exact-size, opaque RGB context: 1290×2796 pixels
+        // Draw into an exact-size, opaque RGB context: width×height pixels
         // whatever the screen's backing scale, and no alpha channel
         // (App Store Connect rejects screenshots that have one).
         // AppKit can't draw into an alpha-less bitmap, so use CG.
