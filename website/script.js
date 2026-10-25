@@ -1,6 +1,6 @@
 /* =====================================================================
    Nod — marketing site motion
-   GSAP + ScrollTrigger for hero line reveal, showcase entrances,
+   GSAP + ScrollTrigger for the pinned hero stage, showcase entrances,
    staggered children, parallax. Respects prefers-reduced-motion.
    Falls back gracefully if GSAP fails to load.
    ===================================================================== */
@@ -45,22 +45,10 @@
   document.documentElement.classList.add("js-ready");
 
   /* ------------------------------------------------------------------
-   * 3. Split hero title into lines for GSAP stagger.
-   *    Splits on <br> and wraps each line in a mask so we can slide
-   *    each line up from below with overflow clipping.
+   * 3. The hero intro (title lines, subline, App Store button) is plain
+   *    CSS now, with the line masks in the markup, so it starts on first
+   *    paint instead of waiting for GSAP. See "HERO INTRO" in extra.css.
    * ------------------------------------------------------------------ */
-  (() => {
-    const title = document.querySelector(".hero__title");
-    if (!title) return;
-    const html = title.innerHTML;
-    const lines = html.split(/<br\s*\/?>/i).map((l) => l.trim());
-    title.innerHTML = lines
-      .map(
-        (line) =>
-          `<span class="line-mask"><span class="line-inner">${line}</span></span>`
-      )
-      .join("");
-  })();
 
   /* ------------------------------------------------------------------
    * 4. Wait for GSAP, then wire up all animations.
@@ -80,27 +68,8 @@
     if (prefersReduced) {
       // Respect user preference: snap everything to final state, no animation.
       gsap.set("[data-reveal] > .container > *", { opacity: 1, y: 0 });
-      gsap.set(".hero__title .line-inner", { y: 0, opacity: 1 });
-      gsap.set(".hero__sub, .hero__cta", { opacity: 1, y: 0 });
       return;
     }
-
-    /* --- Hero line reveal on page load ----------------------------- */
-    gsap.set(".hero__title .line-inner", { yPercent: 110, opacity: 0 });
-    gsap.set(".hero__sub", { opacity: 0, y: 16 });
-    gsap.set(".hero__cta", { opacity: 0, y: 16 });
-
-    const heroTl = gsap.timeline({ defaults: { ease: "power3.out" } });
-    heroTl
-      .to(".hero__title .line-inner", {
-        yPercent: 0,
-        opacity: 1,
-        duration: 1.1,
-        stagger: 0.12,
-        delay: 0.15,
-      })
-      .to(".hero__sub", { opacity: 1, y: 0, duration: 0.8 }, "-=0.6")
-      .to(".hero__cta", { opacity: 1, y: 0, duration: 0.7 }, "-=0.5");
 
     /* --- HERO STAGE: pinned scroll transition --------------------------
        The fullscreen hero video morphs via clip-path down to the phone's
@@ -414,14 +383,6 @@
       { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
     );
     els.forEach((el) => io.observe(el));
-    // Hero: just show the title/sub/cta
-    const heroLines = document.querySelectorAll(
-      ".hero__title .line-inner"
-    );
-    heroLines.forEach((l) => (l.style.transform = "none"));
-    document
-      .querySelectorAll(".hero__title, .hero__sub, .hero__cta")
-      .forEach((el) => (el.style.opacity = "1"));
   };
 
   /* ------------------------------------------------------------------

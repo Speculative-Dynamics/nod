@@ -97,22 +97,19 @@
         />
         <link rel="manifest" href="/manifest.webmanifest" />
 
-        <!-- Performance hints -->
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <!-- Performance hint. On desktop the hero still is the first big
+             paint, and the inline script that sets it as the video poster
+             hides it from the preload scanner, so fetch it up front. Not on
+             phones: there the text is the main content, and an early 60 KB
+             image only slows the stylesheets down. Fonts aren't preloaded
+             for the same reason; font-display: swap shows text without
+             waiting for them. -->
         <link
             rel="preload"
-            as="video"
-            href="/assets/hero/desktop.mp4"
-            type="video/mp4"
+            as="image"
+            href="/assets/hero/desktop.avif"
+            type="image/avif"
             media="(min-aspect-ratio: 1/1)"
-        />
-        <link
-            rel="preload"
-            as="video"
-            href="/assets/hero/mobile.mp4"
-            type="video/mp4"
-            media="(max-aspect-ratio: 1/1)"
         />
 
         <!-- Pick the right hero source + poster BEFORE the <video> element
@@ -132,17 +129,11 @@
                         ? "/assets/hero/mobile.mp4"
                         : "/assets/hero/desktop.mp4",
                     poster: isMobile
-                        ? "/assets/hero/mobile.png"
-                        : "/assets/hero/desktop.png",
+                        ? "/assets/hero/mobile.avif"
+                        : "/assets/hero/desktop.avif",
                 };
             })();
         </script>
-
-        <!-- Fonts -->
-        <link
-            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-            rel="stylesheet"
-        />
 
         <link rel="stylesheet" href="/styles.css" />
         <link rel="stylesheet" href="/extra.css" />
@@ -238,7 +229,24 @@
                         var a = window.__heroAssets;
                         if (!a) return;
                         v.poster = a.poster;
-                        v.src = a.src;
+                        // Reduced-motion users never see the video (CSS
+                        // hides it), so don't download it for them.
+                        if (
+                            window.matchMedia(
+                                "(prefers-reduced-motion: reduce)"
+                            ).matches
+                        )
+                            return;
+                        var start = function () {
+                            v.src = a.src;
+                            var p = v.play();
+                            if (p && p.catch) p.catch(function () {});
+                        };
+                        if (document.readyState === "complete") start();
+                        else
+                            window.addEventListener("load", start, {
+                                once: true,
+                            });
                     })();
                 </script>
                 <!-- Gradient wash for text legibility -->
@@ -251,13 +259,13 @@
             <div class="hero__phone-stage" aria-hidden="true">
                 <div class="hero__phone-bezel">
                     <div class="hero__screens">
-                        <img class="hero__screen" data-chapter="0" src="/assets/screens/empty.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="1" src="/assets/screens/chat.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="2" src="/assets/screens/personalization.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="3" src="/assets/screens/memory.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="4" src="/assets/screens/voice.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="5" src="/assets/screens/crisis.jpg" alt="" width="804" height="1748" />
-                        <img class="hero__screen" data-chapter="6" src="/assets/screens/lock.jpg" alt="" width="804" height="1748" />
+                        <picture><source srcset="/assets/screens/empty.avif" type="image/avif" /><img class="hero__screen" data-chapter="0" src="/assets/screens/empty.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/chat.avif" type="image/avif" /><img class="hero__screen" data-chapter="1" src="/assets/screens/chat.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/personalization.avif" type="image/avif" /><img class="hero__screen" data-chapter="2" src="/assets/screens/personalization.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/memory.avif" type="image/avif" /><img class="hero__screen" data-chapter="3" src="/assets/screens/memory.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/voice.avif" type="image/avif" /><img class="hero__screen" data-chapter="4" src="/assets/screens/voice.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/crisis.avif" type="image/avif" /><img class="hero__screen" data-chapter="5" src="/assets/screens/crisis.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
+                        <picture><source srcset="/assets/screens/lock.avif" type="image/avif" /><img class="hero__screen" data-chapter="6" src="/assets/screens/lock.jpg" alt="" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                     </div>
                 </div>
             </div>
@@ -353,24 +361,22 @@
             <!-- Initial hero copy: fades out as you scroll -->
             <div class="hero__content">
                 <h1 class="hero__title">
-                    For when you just<br />
-                    need to be <em>heard.</em>
+                    <span class="line-mask"><span class="line-inner">For when you just</span></span>
+                    <span class="line-mask"><span class="line-inner">need to be <em>heard.</em></span></span>
                 </h1>
                 <p class="hero__sub">
                     A quiet place to say what's on your mind. Nod listens,
                     replies gently, and keeps it all on your iPhone.
                 </p>
                 <!-- Hero CTA: above-the-fold App Store link so first-time
-                     visitors don't need to scroll to install. The .hero__cta
-                     class is already wired into the GSAP timeline (fades in
-                     after .hero__sub). -->
+                     visitors don't need to scroll to install. -->
                 <div class="hero__cta">
                     <a
                         class="appstore-btn appstore-btn--hero"
                         href="https://apps.apple.com/app/just-nod/id6762388689"
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label="Download Just Nod on the App Store"
+                        aria-label="Download on the App Store: Just Nod"
                     >
                         <svg
                             viewBox="0 0 40 40"
@@ -410,7 +416,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/empty.jpg" alt="Nod's start screen with suggestions to begin" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/empty.avif" type="image/avif" /><img src="/assets/screens/empty.jpg" alt="Nod's start screen with suggestions to begin" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -430,7 +436,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/chat.jpg" alt="A conversation with Nod" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/chat.avif" type="image/avif" /><img src="/assets/screens/chat.jpg" alt="A conversation with Nod" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -450,7 +456,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/personalization.jpg" alt="Nod's settings for reply length and approach" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/personalization.avif" type="image/avif" /><img src="/assets/screens/personalization.jpg" alt="Nod's settings for reply length and approach" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -470,7 +476,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/memory.jpg" alt="The notes Nod keeps, each with a date" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/memory.avif" type="image/avif" /><img src="/assets/screens/memory.jpg" alt="The notes Nod keeps, each with a date" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -490,7 +496,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame screen-frame--voice">
-                            <img src="/assets/screens/voice.jpg" alt="Nod listening while you speak" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/voice.avif" type="image/avif" /><img src="/assets/screens/voice.jpg" alt="Nod listening while you speak" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -510,7 +516,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/crisis.jpg" alt="Nod showing a helpline beneath a difficult message" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/crisis.avif" type="image/avif" /><img src="/assets/screens/crisis.jpg" alt="Nod showing a helpline beneath a difficult message" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -530,7 +536,7 @@
                     </div>
                     <div class="hero__chapter-phone" aria-hidden="true">
                         <div class="screen-frame">
-                            <img src="/assets/screens/lock.jpg" alt="Nod's lock screen" width="804" height="1748" loading="lazy" decoding="async" />
+                            <picture><source srcset="/assets/screens/lock.avif" type="image/avif" /><img src="/assets/screens/lock.jpg" alt="Nod's lock screen" width="804" height="1748" loading="lazy" decoding="async" /></picture>
                         </div>
                     </div>
                 </div>
@@ -688,7 +694,9 @@
             >
                 <div class="download__scene" aria-hidden="true">
                     <picture>
+                        <source media="(max-width: 700px)" srcset="/assets/hero/mobile.avif" type="image/avif" />
                         <source media="(max-width: 700px)" srcset="/assets/hero/mobile.png" />
+                        <source srcset="/assets/hero/desktop.avif" type="image/avif" />
                         <img src="/assets/hero/desktop.png" alt="" width="1920" height="1080" loading="lazy" decoding="async" />
                     </picture>
                 </div>
@@ -711,7 +719,7 @@
                             href="https://apps.apple.com/app/just-nod/id6762388689"
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label="Download Just Nod on the App Store"
+                            aria-label="Download on the App Store: Just Nod"
                         >
                             <svg
                                 viewBox="0 0 40 40"
@@ -751,9 +759,13 @@
                     <div class="footer__row">
                         <div class="footer__brand">
                             <img
-                                src="/assets/icon.png"
+                                src="/assets/icon-192.png"
                                 alt="Nod"
                                 class="footer__icon"
+                                width="36"
+                                height="36"
+                                loading="lazy"
+                                decoding="async"
                             />
                             <p class="footer__tag">
                                 For when you just need to be heard.
@@ -781,8 +793,8 @@
         <!-- /.paper-sheet -->
 
         <!-- Animation library: GSAP + ScrollTrigger (pinned sections, line reveals, parallax) -->
-        <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
-        <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+        <script src="/assets/vendor/gsap.min.js" defer></script>
+        <script src="/assets/vendor/ScrollTrigger.min.js" defer></script>
         <script src="/script.js" defer></script>
     </body>
 </html>
