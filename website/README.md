@@ -18,6 +18,21 @@ The homepage is a single-page marketing site, with separate static legal pages:
 Hosting can be any static host. The current domain target is
 [usenod.app](https://usenod.app).
 
+## Assets
+
+Everything is served from this directory, with no third-party requests:
+
+- `assets/fonts/`: Fraunces, Inter and JetBrains Mono (latin and latin-ext
+  subsets, woff2) with their OFL licences. The `@font-face` rules are at the
+  top of `styles.css`.
+- `assets/vendor/`: GSAP and ScrollTrigger 3.12.5.
+- Images ship as AVIF with the original PNG/JPEG as fallback. After changing
+  a screenshot or the hero painting, regenerate its AVIF with macOS's `sips`:
+
+  ```bash
+  sips -s format avif -s formatOptions 70 assets/screens/chat.jpg --out assets/screens/chat.avif
+  ```
+
 ## Deployment checklist
 
 - Keep `sitemap.xml`, canonical links, Open Graph image URLs, and `CNAME`

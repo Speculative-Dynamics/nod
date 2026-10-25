@@ -151,10 +151,41 @@
     display: inline-block;
     will-change: transform;
 }
-/* Without JS, lines show normally (no hiding) */
-html:not(.js-ready) .hero__title .line-inner {
-    transform: none !important;
-    opacity: 1 !important;
+
+/* =====================================================================
+   HERO INTRO
+   Title lines rise out of their masks. Plain CSS so it starts on first
+   paint: when this waited for GSAP, the hero text stayed invisible
+   until the scripts arrived, which on a phone took seconds. Timing and
+   easing (power3.out) match the old GSAP timeline.
+
+   The subline and the App Store button are shown straight away, not
+   faded in. Chrome never records text that a CSS animation fades up
+   from opacity 0 as the page's main content (Largest Contentful
+   Paint), so fading them made PageSpeed report no LCP at all.
+   ===================================================================== */
+@keyframes hero-line-in {
+    from {
+        transform: translateY(110%);
+        opacity: 0;
+    }
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+.hero__title .line-inner {
+    animation: hero-line-in 1.1s cubic-bezier(0.215, 0.61, 0.355, 1) 0.15s both;
+}
+.hero__title .line-mask:nth-child(2) .line-inner {
+    animation-delay: 0.27s;
+}
+/* The global reduced-motion rule shortens durations but not delays, so
+   drop the intro outright rather than leave the text hidden for a beat. */
+@media (prefers-reduced-motion: reduce) {
+    .hero__title .line-inner {
+        animation: none;
+    }
 }
 
 /* =====================================================================
@@ -181,6 +212,9 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     pointer-events: none;
     background:
         url("/assets/hero/desktop.png") center center / cover no-repeat;
+    /* AVIF where supported; browsers without image-set type() keep the PNG above. */
+    background:
+        image-set(url("/assets/hero/desktop.avif") type("image/avif"), url("/assets/hero/desktop.png") type("image/png")) center center / cover no-repeat;
     /* Desaturated: a colour wash of the sunset read as brown on black. */
     opacity: 0.14;
     filter: blur(80px) saturate(0) brightness(0.55);
@@ -192,6 +226,9 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     .site-atmosphere {
         background:
             url("/assets/hero/mobile.png") center center / cover no-repeat;
+        /* AVIF where supported; browsers without image-set type() keep the PNG above. */
+        background:
+            image-set(url("/assets/hero/mobile.avif") type("image/avif"), url("/assets/hero/mobile.png") type("image/png")) center center / cover no-repeat;
     }
 }
 /* The hero has its own full-opacity backdrop — the page wash sits behind
@@ -227,6 +264,10 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     background:
         linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
         url("/assets/hero/desktop.png") center center / cover no-repeat;
+    /* AVIF where supported; browsers without image-set type() keep the PNG above. */
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
+        image-set(url("/assets/hero/desktop.avif") type("image/avif"), url("/assets/hero/desktop.png") type("image/png")) center center / cover no-repeat;
     z-index: 0;
     filter: brightness(0.9) saturate(1.08);
     will-change: opacity, filter;
@@ -237,6 +278,10 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
         background:
             linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
             url("/assets/hero/mobile.png") center center / cover no-repeat;
+        /* AVIF where supported; browsers without image-set type() keep the PNG above. */
+        background:
+            linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.5) 100%),
+            image-set(url("/assets/hero/mobile.avif") type("image/avif"), url("/assets/hero/mobile.png") type("image/png")) center center / cover no-repeat;
     }
 }
 
@@ -730,7 +775,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 }
 
 .cinema__headline {
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Fraunces", "Fraunces Fallback", Georgia, serif;
     font-weight: 300;
     font-size: clamp(3rem, 6.5vw, 5.75rem);
     line-height: 0.96;
@@ -774,7 +819,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     margin: 2rem 0 0;
     padding: 1.5rem 0 0;
     border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Fraunces", "Fraunces Fallback", Georgia, serif;
     font-style: italic;
     font-size: 1.15rem;
     line-height: 1.5;
@@ -1188,7 +1233,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     justify-content: center;
 }
 .proof__headline {
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Fraunces", "Fraunces Fallback", Georgia, serif;
     font-weight: 300;
     font-size: clamp(3.25rem, 7vw, 6rem);
     line-height: 0.96;
@@ -1226,7 +1271,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     text-align: center;
 }
 .proof__stat-num {
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Fraunces", "Fraunces Fallback", Georgia, serif;
     font-weight: 300;
     font-size: clamp(4rem, 9vw, 7rem);
     line-height: 1;
@@ -1306,7 +1351,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
 }
 .proof__spec-row dd {
     margin: 0;
-    font-family: "Inter", -apple-system, sans-serif;
+    font-family: "Inter", "Inter Fallback", -apple-system, sans-serif;
     font-size: 0.95rem;
     line-height: 1.45;
     color: var(--ink-soft, #d1d1d6);
@@ -1329,7 +1374,7 @@ html.js-ready [data-reveal]:not(.is-in) > .container > :not(.showcase):not(.scre
     margin: 0 auto;
     padding: 3rem 0 0;
     border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Fraunces", "Fraunces Fallback", Georgia, serif;
     font-style: italic;
     font-weight: 300;
     font-size: clamp(1.5rem, 2.8vw, 2.25rem);
