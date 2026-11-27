@@ -106,11 +106,11 @@ targets:
         # 2026-04-27 (apps.apple.com/app/just-nod/id6762388689); 2.0.0
         # (build 23) was uploaded on 2026-10-20. Keep this in sync with
         # what's actually live or in review.
-        MARKETING_VERSION: "2.0.0"
+        MARKETING_VERSION: "2.1.0"
         # Build number: must increase monotonically across every TestFlight
         # / App Store upload (Apple rejects re-uploads at the same number).
         # Bump it for every new binary you upload.
-        CURRENT_PROJECT_VERSION: "23"
+        CURRENT_PROJECT_VERSION: "24"
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: GRDB

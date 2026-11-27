@@ -23,6 +23,9 @@
 //   -nodLocked YES
 //       Show the Face ID lock screen and keep it up (the Simulator
 //       has no passcode, so it would otherwise unlock at once).
+//   -nodSheet memory | settings
+//       Open the memory or settings sheet on launch (for screenshots;
+//       `simctl` can't tap).
 //
 // Compiled out of release builds.
 
@@ -50,6 +53,8 @@ enum DebugUIState {
     static var forceLocked: Bool { argument("-nodLocked") == "YES" }
 
     static var forceRecording: Bool { argument("-nodRecording") == "YES" }
+
+    static var openSheet: String? { argument("-nodSheet") }
 
     static var fakeEngineMode: String? { argument("-nodFakeEngine") }
 
@@ -102,6 +107,7 @@ enum DebugUIState {
     static let forceNoMLX = false
     static let forceLocked = false
     static let forceRecording = false
+    static let openSheet: String? = nil
     static let fakeEngineMode: String? = nil
     static let skipSplash = false
     static let simulateCrashedLastLaunch = false

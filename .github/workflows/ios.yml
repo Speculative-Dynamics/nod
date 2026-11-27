@@ -42,12 +42,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Pinned to the Xcode the app is developed with (27.0, iOS 27 SDK;
-      # deployment target stays iOS 26). Bump deliberately.
-      - name: Select Xcode 27.0
+      # Pinned to the Xcode the app is developed with (27.2, iOS 27.2 SDK;
+      # deployment target stays iOS 26). Bump deliberately. Don't go
+      # below 27.1: apps built with older SDKs don't count as
+      # optimized for iPhone Duo.
+      - name: Select Xcode 27.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '27.0'
+          xcode-version: '27.2'
 
       - name: Show build environment
         run: |

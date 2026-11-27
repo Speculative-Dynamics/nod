@@ -299,6 +299,7 @@ struct ChatView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 chatHeader
+                    .softColumn()
 
                 // One-shot banner when the breaker flipped us to Apple
                 // Intelligence — either because iOS issued a memory
@@ -309,6 +310,7 @@ struct ChatView: View {
                     fallbackBanner
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
+                        .softColumn()
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
@@ -328,6 +330,7 @@ struct ChatView: View {
                     })
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
+                        .softColumn()
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
@@ -379,11 +382,13 @@ struct ChatView: View {
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
+                    .softColumn()
                 }
 
                 inputBar
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
+                    .softColumn()
             }
             .background(Soft.background)
             .fontDesign(.rounded)
@@ -524,6 +529,12 @@ struct ChatView: View {
                 }
 
                 await store.hydrate()
+
+                switch DebugUIState.openSheet {
+                case "memory": showingMemory = true
+                case "settings": showingSidebar = true
+                default: break
+                }
 
                 try? await Task.sleep(for: .seconds(15))
                 LaunchCrashBreaker.shared.markLaunchSettled()
@@ -697,6 +708,7 @@ struct ChatView: View {
                                 // triggers a relayout). Per-row padding
                                 // sidesteps that interaction entirely.
                                 .padding(.horizontal, 12)
+                                .softColumn()
                         case .message(let msg):
                             let isLastAssistant = msg.role == .assistant
                                 && store.messages.last?.id == msg.id
@@ -721,10 +733,12 @@ struct ChatView: View {
                             .padding(.top, Self.topPadding(for: msg,
                                                            prevRow: prevRow))
                             .padding(.horizontal, 12)  // per-row, see note above
+                            .softColumn()
                         case .crisisSupport:
                             CrisisSupportCard()
                                 .padding(.top, 10)
                                 .padding(.horizontal, 12)
+                                .softColumn()
                         }
                     }
                 }
@@ -2282,6 +2296,7 @@ private struct AFMUnavailableOnboarding: View {
             }
             .padding(.horizontal, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .softColumn()
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -2292,7 +2307,7 @@ private struct AFMUnavailableOnboarding: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
-                .frame(maxWidth: .infinity)
+                .softColumn()
                 .background(Soft.background)
         }
     }

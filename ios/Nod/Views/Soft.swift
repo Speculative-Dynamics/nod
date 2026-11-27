@@ -44,9 +44,22 @@ enum Soft {
                                bottomTrailingRadius: 20, topTrailingRadius: 20,
                                style: .continuous)
     }
+
+    /// Widest the chat column gets. Every iPhone is narrower, so this
+    /// only bites on wide screens like an unfolded iPhone Duo, where
+    /// full-width bubbles would make lines too long to read.
+    static let columnMaxWidth: CGFloat = 620
 }
 
 extension View {
+    /// Centres the view in a column at most `Soft.columnMaxWidth` wide.
+    /// Applied per row (not to the scroll view) so the list still
+    /// scrolls from anywhere on a wide screen.
+    func softColumn() -> some View {
+        frame(maxWidth: Soft.columnMaxWidth)
+            .frame(maxWidth: .infinity)
+    }
+
     /// The light shadow that lifts Soft surfaces off the background in
     /// light mode. In dark mode a hairline border does that job instead.
     func softLift<S: Shape>(_ colorScheme: ColorScheme, in shape: S) -> some View {
