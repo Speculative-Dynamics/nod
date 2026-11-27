@@ -42,6 +42,25 @@ dark mode except `chat-light.png`). To refresh them after a UI change:
   arguments (see `ios/Nod/Views/DebugUIState.swift`): `-nodRecording YES`
   for the voice screen and `-nodLocked YES` for the lock screen.
 
+## iPhone Duo
+
+The "Made for iPhone Duo" badge appears on the product page once
+iPhone Duo screenshots are uploaded, and from April 2027 every
+submission needs them. They are plain Simulator captures (no template),
+since the template's frames are iPhone-shaped:
+
+- `screenshots/duo-inner-2853x2007/`: the unfolded inner display.
+- `screenshots/duo-outer-1398x2034/`: the folded outer display.
+
+To refresh them, seed the database as above, then capture with
+`xcrun simctl io <device> screenshot --display=<n> <file>.png`. The Duo
+Simulator has two displays: `simctl io <device> enumerate` lists them
+(LCD-1 is inner, LCD is outer). Fold and unfold it in Xcode's Device
+Hub; `simctl` can't. Debug launch arguments open the sheets
+(`-nodSheet memory`, `-nodSheet settings`). Simulator PNGs have an
+alpha channel, which App Store Connect rejects, so redraw them opaque
+before uploading.
+
 ## Copy
 
 Headlines match usenod.app and stay within the listing's positioning

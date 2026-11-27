@@ -163,7 +163,17 @@ Result: **4+** — broadest possible audience.
 
 ## What's New in This Version (4,000 char max)
 
-Version 2.0.0 (build 23).
+Version 2.1.0 (build 24).
+
+```
+Made for iPhone Duo.
+
+• Unfolded, Nod keeps your conversation in a comfortable column instead of stretching it across the whole screen.
+
+Still private. Everything stays on your iPhone.
+```
+
+Version 2.0.0 (build 23):
 
 ```
 A fresh look, a better memory, and calmer replies.
@@ -206,10 +216,11 @@ KEY POINTS FOR REVIEW:
 ## Final pre-submission checklist
 
 - [x] App Store category set in Info.plist (Productivity)
-- [x] Version bumped to 2.0.0 (build 23) in `ios/project.yml`
+- [x] Version bumped to 2.1.0 (build 24) in `ios/project.yml`
 - [x] Support page created at `website/support/`
 - [x] Mental-health / wellness language stripped from listing
 - [x] App Group `group.app.usenod.nod` registered in developer portal
 - [ ] All 8 screenshots uploaded at 1290×2796 (regenerate with `ios/scripts/listing-images/`)
+- [ ] iPhone Duo screenshots uploaded from `screenshots/duo-inner-2853x2007/` and `screenshots/duo-outer-1398x2034/` (this is what shows the Made for iPhone Duo badge)
 - [ ] Listing copy entered in App Store Connect (use sections above)
 - [ ] Re-generate Xcode project after `project.yml` change: `cd ios && xcodegen generate`

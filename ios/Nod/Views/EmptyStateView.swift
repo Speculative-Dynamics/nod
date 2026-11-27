@@ -60,6 +60,7 @@ struct EmptyStateView: View {
             }
             .padding(.horizontal, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .softColumn()
             .containerRelativeFrame(.vertical, alignment: .center)
         }
         .scrollBounceBehavior(.basedOnSize)
